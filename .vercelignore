@@ -1,0 +1,7 @@
+vertex.json
+.env*
+server/data
+node_modules
+.git
+firebase-admin*.json
+*-service-account.json
