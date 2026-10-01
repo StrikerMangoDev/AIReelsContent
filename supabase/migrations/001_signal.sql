@@ -25,7 +25,7 @@ begin
   case operation
   when 'ping' then return 'true';
   when 'acquire_lease' then
-    insert into signal_leases values(args->>'name',args->>'owner',now()+make_interval(secs=coalesce((args->>'ttlMs')::integer,600000)/1000.0))
+    insert into signal_leases values(args->>'name',args->>'owner',now()+make_interval(secs => coalesce((args->>'ttlMs')::integer,600000)/1000.0))
     on conflict(name) do update set owner=excluded.owner,expires_at=excluded.expires_at where signal_leases.expires_at<now();
     get diagnostics affected=row_count; return to_jsonb(affected>0);
   when 'renew_lease' then
