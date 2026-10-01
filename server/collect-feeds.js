@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
-import { repository } from './bootstrap.js'
+import { repository } from './storage/index.js'
 import { sources } from './config/sources.js'
 import { readSource } from './ingestion/feeds.js'
 import { attributeOrganizations } from './config/organizations.js'
@@ -16,8 +16,9 @@ function categoryFor(item) {
 export async function collectFeeds() {
   const owner = randomUUID()
   if (!await repository.acquireLease('ingestion', owner)) return { status: 'busy' }
-  const run = await repository.startRun()
+  let run
   try {
+    run = await repository.startRun()
     const results = await Promise.allSettled(sources.map(source => readSource(source, { maxAgeHours: 72 })))
     const candidates = [...new Map(results.flatMap(result => result.status === 'fulfilled' ? result.value : []).map(item => [item.id, item])).values()]
     if (!candidates.length) throw new Error('No usable publisher articles')
@@ -39,8 +40,17 @@ export async function collectFeeds() {
     const result = { status: failedSources.length ? 'degraded' : 'success', saved, candidates: candidates.length, located, images, failedSources, method: 'publisher-feeds', vertexCalls: 0 }
     await repository.finishRun(run, result.status, result)
     return result
-  } catch (error) { await repository.finishRun(run, 'failed', { errorCode: 'FEED_COLLECTION_FAILED' }); throw error }
-  finally { await repository.releaseLease('ingestion', owner) }
+  } catch (error) {
+    if (run) {
+      try { await repository.finishRun(run, 'failed', { errorCode: 'FEED_COLLECTION_FAILED' }) }
+      catch { /* Preserve the original failure for safe cron diagnostics. */ }
+    }
+    throw error
+  }
+  finally {
+    try { await repository.releaseLease('ingestion', owner) }
+    catch (error) { console.error(JSON.stringify({ event: 'lease_release_failed', operation: 'release_lease', code: /^[A-Z0-9]{5}$/.test(error.cause?.code || '') ? error.cause.code : null })) }
+  }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try { console.log(JSON.stringify(await collectFeeds())) }

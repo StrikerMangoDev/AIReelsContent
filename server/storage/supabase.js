@@ -5,7 +5,11 @@ export function createSupabaseRepository(config) {
   const client = createClient(config.SUPABASE_URL, config.SUPABASE_SECRET_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   async function call(op, args = {}) {
     const { data, error } = await client.rpc('signal_repository', { operation: op, args })
-    if (error) throw new Error(`Storage operation failed: ${op}`, { cause: error })
+    if (error) {
+      const failure = new Error(`Storage operation failed: ${op}`, { cause: error })
+      failure.operation = op
+      throw failure
+    }
     return data
   }
   return {
