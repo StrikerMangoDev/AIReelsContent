@@ -16,6 +16,7 @@ const schema = z.object({
   MAX_ARTICLE_AGE_HOURS: z.coerce.number().int().min(1).max(720).default(72),
   MAX_ARTICLES_PER_RUN: z.coerce.number().int().min(1).max(40).default(40),
   MAX_MODEL_CALLS_PER_DAY: z.coerce.number().int().min(1).max(2).default(2),
+  STUDIO_DAILY_GENERATIONS: z.coerce.number().int().min(1).max(100).default(10),
   ENABLE_SCHEDULER: z.enum(['true', 'false']).default('false'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   STORAGE_PROVIDER: z.enum(['sqlite', 'supabase']).default('sqlite'),

@@ -6,11 +6,15 @@ export function roleForIdentity(identity) {
   return identity.email_verified === true && (identity.admin === true || admins.includes(String(identity.email).toLowerCase())) ? 'admin' : 'user'
 }
 
+export function firebaseCredentials(config, read = readFileSync) {
+  return JSON.parse(config.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON || (config.FIREBASE_ADMIN_CREDENTIALS ? read(config.FIREBASE_ADMIN_CREDENTIALS, 'utf8') : config.GOOGLE_SERVICE_ACCOUNT_JSON || read(config.GOOGLE_APPLICATION_CREDENTIALS, 'utf8')))
+}
+
 export async function verifyIdentity(token) {
   if (!env.FIREBASE_PROJECT_ID) throw new Error('AUTH_NOT_CONFIGURED')
   const [{ cert, initializeApp, getApps }, { getAuth }] = await Promise.all([import('firebase-admin/app'), import('firebase-admin/auth')])
   if (!getApps().length) {
-    const credentials = JSON.parse(env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON || readFileSync(env.FIREBASE_ADMIN_CREDENTIALS || env.GOOGLE_APPLICATION_CREDENTIALS, 'utf8'))
+    const credentials = firebaseCredentials(env)
     initializeApp({ credential: cert(credentials), projectId: env.FIREBASE_PROJECT_ID })
   }
   return getAuth().verifyIdToken(token, true)

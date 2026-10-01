@@ -1,5 +1,19 @@
 # Production setup
 
+## Content studio release
+
+Apply `supabase/migrations/003_studio.sql` after migrations 001/002 before deploying the studio. It adds server-only owner-scoped records, revision history, and atomic generation reservations. The database function is available only to `service_role`; browser clients must use the authenticated API. Migration 003 was applied successfully to the connected AI_Information project on 2026-10-01.
+
+The studio uses personal Firebase-UID workspaces. Shared team membership, automatic social publishing, platform trend connectors, and scheduled ingestion of custom library sources are not implemented. Source-library approval records the user's editorial selection, not independent fact verification. Exact quotation and citation checks do not prove semantic truth; human editorial review remains required. Public website publishing requires a verified administrator. Source refresh flags earlier publications when their stored evidence changes.
+
+`STUDIO_DAILY_GENERATIONS` defaults to 10 attempts per owner per rolling 24 hours, separately from background ingestion. Media has a separate 10-request owner limit. Repeated request IDs never start another paid request. Generation runs within the request (120-second timeout for media, 90 seconds for text); interrupted jobs can require a manual retry. Video jobs retain provider operation IDs and support explicit status refresh. No background queue or automatic retry is implied.
+
+For media, set `STUDIO_IMAGE_MODEL`, `STUDIO_AUDIO_MODEL`, and/or `STUDIO_VIDEO_MODEL` to supported Vertex Imagen, speech, and Veo model IDs in your project. Set corresponding `STUDIO_IMAGE_ESTIMATE_USD`, `STUDIO_AUDIO_ESTIMATE_USD`, and/or `STUDIO_VIDEO_ESTIMATE_USD` using current provider pricing; these are operator estimates, not a billing guarantee. Configure `STUDIO_MEDIA_LOCATION` if the model requires a regional endpoint and optionally `STUDIO_VOICE` (default Kore). Video requests create one 8-second portrait clip and require inline video output from the provider; this is not a full reel compositor.
+
+Production assets require `STUDIO_MEDIA_BUCKET` naming an existing private Supabase Storage bucket. Keep it private and restrict file size to 32 MB. The backend service key handles uploads; authenticated owner checks protect downloads. Local SQLite development stores files in ignored `server/data/media`. Provider capabilities stay disabled without model/cost/storage configuration; there are no mock success results.
+
+Release checks: run Node 24 `npm test`, `npm run lint`, `npm run build`; verify `/api/studio/config`, `/api/studio/media/config`, `/api/studio/publications`, authenticated package/library/history requests, source denial cases, and real generation with an authorized account. Test adapters verify contracts but do not establish live provider availability.
+
 Status: local implementation is ready to configure. Cloud credentials, SQL execution and deployed endpoint verification are still required. No cloud setup is implied by the presence of these files.
 
 The install command must be `npm ci --include=dev`, including lifecycle scripts. `postinstall` applies the checked-in `jwks-rsa@4.1.0` compatibility patch: its CommonJS bridge uses dynamic imports for ESM-only jose v6. This avoids the observed Vercel ERR_REQUIRE_ESM without downgrading jose or disabling token verification. The regression test runs with require(esm) disabled and resolves an actual RSA public key. Do not use --ignore-scripts. Remove the patch only when an upstream/runtime fix has been tested on Vercel.

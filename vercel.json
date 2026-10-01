@@ -5,6 +5,6 @@
   "framework": "vite",
   "installCommand": "npm ci --include=dev",
   "functions": { "api/**/*.js": { "maxDuration": 300, "includeFiles": "server/prompts/**" } },
-  "rewrites": [{ "source": "/((?!api/|assets/).*)", "destination": "/index.html" }],
+  "rewrites": [{ "source": "/api/studio/:path+", "destination": "/api/studio?__studioPath=:path" }, { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }],
   "crons": [{ "path": "/api/cron", "schedule": "0 1 * * *" }]
 }

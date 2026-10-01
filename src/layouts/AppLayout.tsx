@@ -35,7 +35,7 @@ export function AppLayout() {
       <header className="glass-header">
         <div className="glass-header__shine" aria-hidden="true" /><Logo />
         <nav className="glass-header__nav" aria-label="Main navigation">
-          <NavLink to="/">Latest</NavLink><a href="#regional">World monitor</a><a href="#sources">Sources</a>
+          <NavLink to="/">Latest</NavLink><NavLink to="/studio">Content studio</NavLink><NavLink to="/insights">Insights</NavLink><a href="/#regional">World monitor</a><a href="/#sources">Sources</a>
         </nav>
         <div className="glass-header__actions">
           <button className="header-search" aria-label={searchOpen ? 'Close search' : 'Search news'} aria-expanded={searchOpen} onClick={() => setSearchOpen(!searchOpen)}>{searchOpen ? <X size={18} /> : <Search size={18} />}</button>
@@ -45,7 +45,7 @@ export function AppLayout() {
           <button className="header-menu" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
         </div>
       </header>
-      {menuOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Mobile navigation">{[['Latest', '#stories'], ['World monitor', '#regional'], ['Sources', '#sources']].map(([label, href]) => <a href={href} key={href} onClick={() => setMenuOpen(false)}>{label}</a>)}<button className="mobile-search" onClick={() => { setMenuOpen(false); setSearchOpen(true) }}>Search news <Search size={15} /></button></nav>}
+      {menuOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Mobile navigation"><NavLink to="/studio" onClick={() => setMenuOpen(false)}>Content studio</NavLink>{[['Latest', '/#stories'], ['World monitor', '/#regional'], ['Sources', '/#sources']].map(([label, href]) => <a href={href} key={href} onClick={() => setMenuOpen(false)}>{label}</a>)}<button className="mobile-search" onClick={() => { setMenuOpen(false); setSearchOpen(true) }}>Search news <Search size={15} /></button></nav>}
       {searchOpen && <div className="search-dock"><Search size={18} /><input autoFocus aria-label="Search headlines" placeholder="Search headlines, subjects, sources…" value={searchParams.get('q') ?? ''} onChange={(event) => updateSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false) }} /><button onClick={() => { updateSearch(''); setSearchOpen(false) }} aria-label="Clear and close search"><X size={16} /></button></div>}
       <div className="ambient ambient--one" aria-hidden="true" /><div className="ambient ambient--two" aria-hidden="true" />
       <main id="main-content" className="app-main"><div className="page-content"><Outlet /></div></main>

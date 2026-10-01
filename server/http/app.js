@@ -8,12 +8,14 @@ import { listNews, worldActivity, feedTopics } from '../services/news.js'
 import { env } from '../config/env.js'
 import { createAuthMiddleware, requireAdmin } from '../auth/firebase.js'
 import { eventSchema } from '../services/analytics.js'
+import { createMediaRouter } from '../media/router.js'
+import { studioRouter } from '../studio/routes.js'
 
 const querySchema = z.object({ region: z.enum(['Global', ...regions]).optional(), category: z.enum(['All signals', ...categories]).optional(), q: z.string().max(200).optional(), page: z.coerce.number().int().min(1).max(200).default(1), limit: z.coerce.number().int().min(1).max(60).default(24), timezone: z.string().max(100).default('UTC') })
 export function createApp({ repository, sources, verifyIdentity }) {
   const app = express()
   const auth = createAuthMiddleware(verifyIdentity)
-  app.disable('x-powered-by'); app.use(helmet()); app.use(express.json({ limit: '16kb' }))
+  app.disable('x-powered-by'); app.use(helmet()); app.use(express.json({ limit: '128kb' }))
   app.use((_request, response, next) => { response.setHeader('X-Request-Id', randomUUID()); next() })
   app.use('/api', rateLimit({ windowMs: 60000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }))
   app.get('/api/health', async (_request, response) => { await repository.ping(); response.json({ status: 'ok', storage: env.STORAGE_PROVIDER }) })
@@ -52,6 +54,8 @@ export function createApp({ repository, sources, verifyIdentity }) {
     if (!article) return response.status(404).json({ error: 'Article not found' })
     response.redirect(302, article.url)
   })
+  app.use(createMediaRouter({ repository, auth }))
+  app.use('/api/studio', studioRouter({ repository, auth }))
   app.use('/api', (_request, response) => response.status(404).json({ error: 'Endpoint not found' }))
   app.use((error, _request, response, _next) => {
     console.error(JSON.stringify({ event: 'api_request_failed', requestId: response.getHeader('X-Request-Id'), type: error.name, code: error.code || null, storageCode: error.cause?.code || null }))

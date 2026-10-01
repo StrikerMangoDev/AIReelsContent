@@ -1,6 +1,6 @@
 import { ArrowUpRight, RefreshCw, Cpu, FileText, Network } from 'lucide-react'
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { DeferredWorldMap as WorldMap } from '@/components/common/DeferredWorldMap'
 import { useNews } from '@/hooks/useNews'
 import type { Article } from '@/types/news'
@@ -15,11 +15,11 @@ function NewsCard({ article, index }: { article: Article; index: number }) {
   const destination = `/api/articles/${article.id}/source`
   const FallbackIcon = article.category === 'Compute' ? Cpu : article.category === 'Research' ? FileText : Network
   return <article className="editorial-story">
-    <a href={destination} className={`abstract-visual abstract-visual--${visualFor(article.category)}`} aria-label={`Read original article: ${article.title}`}>
+    <Link to={`/articles/${article.id}`} className={`abstract-visual abstract-visual--${visualFor(article.category)}`} aria-label={`Explore update: ${article.title}`}>
       {article.imageUrl && !imageFailed ? <img className="article-image" src={article.imageUrl} alt="" loading={index < 3 ? 'eager' : 'lazy'} decoding="async" referrerPolicy="no-referrer" onError={() => setImageFailed(true)} /> : <div className="article-fallback"><FallbackIcon size={48} strokeWidth={1} /><span>{article.sourceName}</span></div>}<ArrowUpRight size={18} />
-    </a>
+    </Link>
     <div className="editorial-story__meta"><span>{article.category}</span><span>{article.regions.join(' · ') || 'Global'}</span></div>
-    <h3><a href={destination}>{article.title}</a></h3><p>{article.summary}</p>
+    <h3><Link to={`/articles/${article.id}`}>{article.title}</Link></h3><p>{article.summary}</p>
     <div className="article-published"><time dateTime={article.publishedAt}>{publishedLabel(article.publishedAt)}</time></div>
     <div className="editorial-story__footer"><span>{article.sourceName}</span><a href={destination}>Read original <ArrowUpRight size={14} /></a></div>
   </article>

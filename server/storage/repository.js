@@ -19,6 +19,10 @@ export function createRepository(filename) {
     CREATE TABLE IF NOT EXISTS users (uid TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL, last_seen TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, user_id TEXT, type TEXT NOT NULL, path TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS events_date ON events(created_at);
+    CREATE TABLE IF NOT EXISTS studio_records (uid TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(uid,kind,id));
+    CREATE TABLE IF NOT EXISTS studio_revisions (uid TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(uid,kind,id,revision));
+    CREATE TABLE IF NOT EXISTS studio_reservations (uid TEXT NOT NULL, request_id TEXT NOT NULL, attempted_at INTEGER NOT NULL, PRIMARY KEY(uid,request_id));
+    CREATE INDEX IF NOT EXISTS studio_reservations_time ON studio_reservations(uid,attempted_at);
     INSERT OR IGNORE INTO schema_versions VALUES (1);`)
 
   if (!db.prepare('SELECT 1 FROM schema_versions WHERE version=2').get()) {
@@ -35,6 +39,44 @@ export function createRepository(filename) {
 
   const insert = db.prepare("INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE json_extract(articles.payload, '$.summaryBasis')='publisher-excerpt' AND coalesce(json_extract(excluded.payload, '$.summaryBasis'),'curated') != 'publisher-excerpt'")
   return {
+    studioGet(uid, kind, id) {
+      const row = db.prepare('SELECT payload FROM studio_records WHERE uid=? AND kind=? AND id=?').get(uid, kind, id)
+      return row ? JSON.parse(row.payload) : null
+    },
+    studioList(uid, kind) {
+      return db.prepare("SELECT payload FROM studio_records WHERE uid=? AND kind=? ORDER BY json_extract(payload,'$.updatedAt') DESC,id").all(uid, kind).map(row => JSON.parse(row.payload))
+    },
+    studioHistory(uid, kind, id) {
+      return db.prepare('SELECT payload FROM studio_revisions WHERE uid=? AND kind=? AND id=? ORDER BY revision DESC').all(uid, kind, id).map(row => JSON.parse(row.payload))
+    },
+    studioPut(uid, kind, id, payload, expectedRevision) {
+      if (!uid || !kind || !id || !payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid studio record')
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const row = db.prepare('SELECT revision,payload FROM studio_records WHERE uid=? AND kind=? AND id=?').get(uid, kind, id)
+        if (expectedRevision !== undefined && expectedRevision !== (row?.revision ?? 0)) throw Object.assign(new Error('Content changed; reload before saving'), { code: 'STUDIO_CONFLICT' })
+        const now = new Date().toISOString()
+        const result = { ...payload, id, revision: (row?.revision ?? 0) + 1, createdAt: row ? JSON.parse(row.payload).createdAt : now, updatedAt: now }
+        const encoded = JSON.stringify(result)
+        db.prepare('INSERT INTO studio_records VALUES (?,?,?,?,?) ON CONFLICT(uid,kind,id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload').run(uid, kind, id, result.revision, encoded)
+        db.prepare('INSERT INTO studio_revisions VALUES (?,?,?,?,?)').run(uid, kind, id, result.revision, encoded)
+        db.exec('COMMIT')
+        return result
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+    },
+    studioReserve(uid, requestId, limit) {
+      if (!uid || !requestId || !Number.isInteger(limit) || limit < 0) throw new Error('Invalid studio reservation')
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const now = Date.now()
+        const used = Number(db.prepare('SELECT count(*) AS total FROM studio_reservations WHERE uid=? AND attempted_at>?').get(uid, now - 86400000).total)
+        const exists = Boolean(db.prepare('SELECT 1 FROM studio_reservations WHERE uid=? AND request_id=?').get(uid, requestId))
+        if (!exists && used >= limit) throw Object.assign(new Error('Studio rolling 24-hour request limit reached'), { code: 'STUDIO_QUOTA' })
+        if (!exists) db.prepare('INSERT INTO studio_reservations VALUES (?,?,?)').run(uid, requestId, now)
+        db.exec('COMMIT')
+        return { reserved: !exists, used: used + Number(!exists), limit }
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+    },
     close: () => db.close(),
     ping: () => db.prepare('SELECT 1').get(),
     renewLease(name, owner) {
