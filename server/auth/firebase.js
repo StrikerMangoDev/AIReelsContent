@@ -25,7 +25,12 @@ export function createAuthMiddleware(verify = verifyIdentity) {
     const match = /^Bearer (\S+)$/.exec(request.headers.authorization || '')
     if (!match) return response.status(401).json({ error: 'Sign in required' })
     try { const identity = await verify(match[1]); request.identity = { uid: identity.uid, email: identity.email || '', emailVerified: identity.email_verified === true, name: identity.name || '', role: roleForIdentity(identity) }; next() }
-    catch { response.status(401).json({ error: 'Authentication could not be verified' }) }
+    catch (error) {
+      // Log SDK error codes only: messages can contain tokens or credential details.
+      const code = typeof error.code === 'string' && /^(auth\/[a-z-]+|app\/[a-z-]+|ENOENT)$/.test(error.code) ? error.code : 'AUTH_VERIFICATION_FAILED'
+      console.error(JSON.stringify({ event: 'auth_verification_failed', code, requestId: response.getHeader('X-Request-Id') }))
+      response.status(401).json({ error: 'Authentication could not be verified' })
+    }
   }
 }
 export function requireAdmin(request, response, next) {

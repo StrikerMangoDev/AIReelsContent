@@ -5,7 +5,20 @@ import { randomUUID } from 'node:crypto'
 import { createApp } from '../http/app.js'
 import { createRepository } from '../storage/repository.js'
 import { attributeOrganizations } from '../config/organizations.js'
-import { firebaseCredentials } from '../auth/firebase.js'
+import { createAuthMiddleware, firebaseCredentials } from '../auth/firebase.js'
+
+test('failed authentication stays denied and logs only safe diagnostic codes', async t => {
+  const logs = []
+  t.mock.method(console, 'error', value => logs.push(JSON.parse(value)))
+  for (const code of ['auth/insufficient-permission', 'secret-token']) {
+    const response = { getHeader: () => 'request-1', status(value) { this.statusCode = value; return this }, json(value) { this.body = value } }
+    await createAuthMiddleware(async () => { throw Object.assign(new Error('private credential details'), { code }) })({ headers: { authorization: 'Bearer private-token' } }, response, () => assert.fail('Must not authenticate'))
+    assert.equal(response.statusCode, 401)
+    assert.deepEqual(response.body, { error: 'Authentication could not be verified' })
+  }
+  assert.deepEqual(logs.map(log => log.code), ['auth/insufficient-permission', 'AUTH_VERIFICATION_FAILED'])
+  assert.doesNotMatch(JSON.stringify(logs), /private|secret-token/)
+})
 
 test('Firebase uses inline Google credentials without a credential file and preserves explicit Firebase precedence', () => {
   const google = JSON.stringify({ project_id: 'google-project', client_email: 'google@example.com' })
