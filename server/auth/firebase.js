@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { env } from '../config/env.js'
 
+let serviceAccount
+
 export function roleForIdentity(identity) {
   const admins = env.ADMIN_EMAILS.split(',').map(email => email.trim().toLowerCase()).filter(Boolean)
   return identity.email_verified === true && (identity.admin === true || admins.includes(String(identity.email).toLowerCase())) ? 'admin' : 'user'
@@ -15,6 +17,7 @@ export async function verifyIdentity(token) {
   const [{ cert, initializeApp, getApps }, { getAuth }] = await Promise.all([import('firebase-admin/app'), import('firebase-admin/auth')])
   if (!getApps().length) {
     const credentials = firebaseCredentials(env)
+    serviceAccount = credentials.client_email?.endsWith('.gserviceaccount.com') ? credentials.client_email : undefined
     initializeApp({ credential: cert(credentials), projectId: env.FIREBASE_PROJECT_ID })
   }
   return getAuth().verifyIdToken(token, true)
@@ -28,7 +31,7 @@ export function createAuthMiddleware(verify = verifyIdentity) {
     catch (error) {
       // Log SDK error codes only: messages can contain tokens or credential details.
       const code = typeof error.code === 'string' && /^(auth\/[a-z-]+|app\/[a-z-]+|ENOENT)$/.test(error.code) ? error.code : 'AUTH_VERIFICATION_FAILED'
-      console.error(JSON.stringify({ event: 'auth_verification_failed', code, requestId: response.getHeader('X-Request-Id') }))
+      console.error(JSON.stringify({ event: 'auth_verification_failed', code, serviceAccount, requestId: response.getHeader('X-Request-Id') }))
       response.status(401).json({ error: 'Authentication could not be verified' })
     }
   }
