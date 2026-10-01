@@ -12,6 +12,7 @@ const schema = z.object({
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   DATABASE_PATH: z.string().default('./server/data/signal.sqlite'),
   REFRESH_INTERVAL_MINUTES: z.coerce.number().int().min(720).default(720),
+  FEED_REFRESH_INTERVAL_MINUTES: z.coerce.number().int().min(360).default(360),
   MAX_ARTICLE_AGE_HOURS: z.coerce.number().int().min(1).max(720).default(72),
   MAX_ARTICLES_PER_RUN: z.coerce.number().int().min(1).max(40).default(40),
   MAX_MODEL_CALLS_PER_DAY: z.coerce.number().int().min(1).max(2).default(2),

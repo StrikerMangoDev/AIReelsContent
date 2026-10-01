@@ -30,6 +30,32 @@ export function safeImageUrl(value, base) {
   } catch { return null }
 }
 
+export function feedImage(item, base) {
+  const values = []
+  for (const field of [item.media, item.thumbnail, item['media:content'], item['media:thumbnail']]) {
+    for (const entry of Array.isArray(field) ? field : [field]) if (entry?.$?.url) values.push(entry.$.url)
+  }
+  if (item.enclosure?.type?.startsWith('image/')) values.push(item.enclosure.url)
+  const $ = load(item['content:encoded'] || item.content || item.summary || '')
+  $('img').each((_index, image) => { const raw = $(image).attr('src') || $(image).attr('data-src'); if (raw) values.push(raw) })
+  return values.map(value => safeImageUrl(value, base)).find(Boolean) || null
+}
+
+export async function enrichImages(articles, sources, repository, limit = 40) {
+  // Filter BEFORE limiting, so image-less research papers cannot consume the repair budget.
+  const eligible = articles.filter(article => !article.imageUrl && sources.some(source => source.id === article.sourceId && source.tier !== 'research')).slice(0, limit)
+  let cursor = 0
+  let updated = 0
+  await Promise.all(Array.from({ length: Math.min(4, eligible.length) }, async () => {
+    while (cursor < eligible.length) {
+      const article = eligible[cursor++]
+      const image = await articleImage(article, sources)
+      if (image) { await repository.updateImage(article.id, image); updated++ }
+    }
+  }))
+  return { attempted: eligible.length, updated }
+}
+
 export async function articleMetadata(article, sources) {
   const source = sources.find(item => item.id === article.sourceId)
   if (!source || !canonicalUrl(article.url, source.domains) || source.tier === 'research') return null

@@ -1,6 +1,6 @@
 import { env } from './config/env.js'
 import { sources } from './config/sources.js'
-import { repository } from './bootstrap.js'
+import { repository } from './storage/index.js'
 import { createApp } from './http/app.js'
 import { log } from './infrastructure/logger.js'
 

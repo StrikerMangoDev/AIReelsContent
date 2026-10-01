@@ -109,6 +109,13 @@ h2 { font-weight: 500; letter-spacing: -.04em; }
 .header-account { font-size: 12px; padding: 10px 14px; border: 1px solid #ffffff20; border-radius: 99px; white-space: nowrap; }
 .filter-progress { color: #a4ceb6; font-size: 12px; padding-bottom: 16px; }
 .header-signout { background: transparent; }
+.hot-topics { padding-bottom: 48px; border-bottom: 1px solid var(--line); margin-bottom: 32px; }.hot-ranking-note { color: #a4b8aa; font-size: 11px; white-space: nowrap; }.hot-topics .editorial-story { border-color: #b2e6bf20; }@media(max-width:600px) { .hot-ranking-note { display: none; } }
+.feed-results { position: relative; }
+.feed-updating { position: absolute; top: -25px; right: 0; color: #a4ceb6; font-size: 11px; opacity: 0; transition: opacity 150ms ease; pointer-events: none; }
+.feed-updating.is-visible { opacity: 1; }
+.feed-enter { animation: feed-reveal 180ms ease-out both; }
+@keyframes feed-reveal { from { opacity: .65; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media(prefers-reduced-motion:reduce) { .feed-enter { animation: none; }.feed-updating { transition: none; } }
 .deferred-map { width: 100%; min-height: 300px; }
 .map-placeholder { min-height: 300px; display: grid; place-items: center; color: var(--muted); }
 .auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; background: radial-gradient(ellipse at 50% 0%,#20392d55,transparent 65%),#090d0d; }

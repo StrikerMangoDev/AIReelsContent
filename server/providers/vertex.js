@@ -4,7 +4,6 @@ import { env } from '../config/env.js'
 import { categories, regions, validateClassifications } from '../domain/article.js'
 import { retry } from '../infrastructure/retry.js'
 
-const prompt = readFileSync(new URL('../prompts/news-curator.md', import.meta.url), 'utf8')
 const responseJsonSchema = {
   type: 'object', required: ['articles'], properties: {
     articles: { type: 'array', items: { type: 'object', required: ['candidateId', 'relevant', 'summary', 'category', 'regions', 'regionEvidence', 'tags'], properties: {
@@ -15,6 +14,7 @@ const responseJsonSchema = {
 }
 
 export async function classifyWithVertex(candidates, onAttempt = () => {}) {
+  const prompt = readFileSync(new URL('../prompts/news-curator.md', import.meta.url), 'utf8')
   if (!env.GOOGLE_CLOUD_PROJECT) throw new Error('Vertex project not configured')
   const googleAuthOptions = env.GOOGLE_SERVICE_ACCOUNT_JSON ? { credentials: JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON) } : { keyFilename: env.GOOGLE_APPLICATION_CREDENTIALS }
   const client = new GoogleGenAI({ vertexai: true, project: env.GOOGLE_CLOUD_PROJECT, location: env.GOOGLE_CLOUD_LOCATION, googleAuthOptions, httpOptions: { timeout: 60000 } })

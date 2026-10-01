@@ -2,6 +2,8 @@
 
 Status: local implementation is ready to configure. Cloud credentials, SQL execution and deployed endpoint verification are still required. No cloud setup is implied by the presence of these files.
 
+The install command must be `npm ci --include=dev`, including lifecycle scripts. `postinstall` applies the checked-in `jwks-rsa@4.1.0` compatibility patch: its CommonJS bridge uses dynamic imports for ESM-only jose v6. This avoids the observed Vercel ERR_REQUIRE_ESM without downgrading jose or disabling token verification. The regression test runs with require(esm) disabled and resolves an actual RSA public key. Do not use --ignore-scripts. Remove the patch only when an upstream/runtime fix has been tested on Vercel.
+
 ## Supabase / MangoTree
 
 1. Apply `supabase/migrations/001_signal.sql` in the intended project. This has not been executed remotely or integration-tested against that project.
@@ -30,7 +32,7 @@ Import `yeshaswi3060/live-ai-updates-`, choose Node 24 and use the included `ver
 - `CRON_SECRET` (cryptographically random, at least 32 characters)
 - `NODE_ENV=production`, `ENABLE_SCHEDULER=false`
 
-The included cron runs once daily at 01:00 UTC / 06:30 India time. It collects broad publisher feeds then curates one bounded batch. If the Vercel plan supports twice-daily cron, optionally change the schedule to `0 1,13 * * *`. Persistent storage atomically caps actual model attempts at two per rolling 24 hours, including failures. Page reloads only query storage. Vercel functions must support the configured 300-second duration; adjust to the account's documented limits before deploying. Do not use an in-process scheduler in serverless functions.
+The included Vercel cron remains daily at 01:00 UTC to support the confirmed Hobby plan. For six-hour publisher refreshes, configure an authorized external scheduler at 01:00, 07:00, 13:00 and 19:00 UTC (06:30, 12:30, 18:30 and 00:30 India time), or run a persistent worker with ENABLE_SCHEDULER=true and FEED_REFRESH_INTERVAL_MINUTES=360. Avoid duplicate daily/external invocations. Only the 01:00 and 13:00 UTC endpoint invocations also request Gemini curation. Persistent storage atomically caps actual model attempts at two per rolling 24 hours, including failures. Page reloads only query storage. Do not upgrade billing without approval. Vercel functions must support the configured 300-second duration; adjust to the account's documented limits before deploying. Do not use an in-process scheduler in serverless functions. The six-hour schedule is not live until an external scheduler or worker is configured.
 
 News collection covers configured publisher feeds, not the entire internet. Publisher excerpts and Gemini summaries are distinct; per-run Gemini candidates are capped at 40. Geography can represent explicitly named organization association, not a physical event location. Uncertain geography remains unlocated.
 

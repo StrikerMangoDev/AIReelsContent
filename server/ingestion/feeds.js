@@ -1,7 +1,7 @@
 import Parser from 'rss-parser'
 import { canonicalUrl, articleId, plainText } from '../domain/article.js'
 import { retry } from '../infrastructure/retry.js'
-import { safeImageUrl } from './images.js'
+import { feedImage } from './images.js'
 
 const parser = new Parser({ customFields: { item: [['media:content', 'media'], ['media:thumbnail', 'thumbnail']] } })
 const MAX_FEED_BYTES = 3 * 1024 * 1024
@@ -36,7 +36,6 @@ export async function readSource(source, { maxAgeHours, now = Date.now() }) {
     const published = Date.parse(item.isoDate || item.pubDate || '')
     const title = plainText(item.title).slice(0, 300)
     if (!url || !title || !Number.isFinite(published) || published > now + 300000 || published < now - maxAgeHours * 3600000) return []
-    const image = item.media?.$?.url || item.thumbnail?.$?.url || (item.enclosure?.type?.startsWith('image/') ? item.enclosure.url : null)
-    return [{ id: articleId(url), url, title, excerpt: plainText(item.contentSnippet || item.summary || item.content || item['content:encoded']).slice(0, 3000), publishedAt: new Date(published).toISOString(), sourceId: source.id, sourceName: source.name, sourceTier: source.tier, imageUrl: image ? safeImageUrl(image, url) : null }]
+    return [{ id: articleId(url), url, title, excerpt: plainText(item.contentSnippet || item.summary || item.content || item['content:encoded']).slice(0, 3000), publishedAt: new Date(published).toISOString(), sourceId: source.id, sourceName: source.name, sourceTier: source.tier, imageUrl: feedImage(item, url) }]
   })
 }

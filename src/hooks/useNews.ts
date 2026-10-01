@@ -14,17 +14,37 @@ export function useNews(region: string, category: string, query: string, page: n
     const controller = new AbortController()
     const params = new URLSearchParams({ region, category, q: query, page: String(page), limit: '24', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
     const key = params.toString()
-    const timer = window.setTimeout(() => {
+    const prefetch = (news: NewsResponse) => {
+      for (const neighbor of [page + 1, page - 1]) {
+        if (neighbor < 1 || (neighbor - 1) * news.limit >= news.total) continue
+        const adjacent = new URLSearchParams(params)
+        adjacent.set('page', String(neighbor))
+        const adjacentKey = adjacent.toString()
+        if ((cache.get(adjacentKey)?.expires ?? 0) > Date.now()) continue
+        void newsApi.news(adjacent, controller.signal).then(result => {
+          if (controller.signal.aborted) return
+          if (cache.size >= 30) cache.delete(cache.keys().next().value!)
+          cache.set(adjacentKey, { data: result, expires: Date.now() + 60000 })
+        }).catch(() => { /* Prefetch must never interrupt reading. */ })
+      }
+    }
+    const load = () => {
       const cached = cache.get(key)
-      if (cached && cached.expires > Date.now()) { setData(cached.data); setLoading(false); setError(''); return }
+      if (cached && cached.expires > Date.now()) { setData(cached.data); setLoading(false); setError(''); prefetch(cached.data); return }
       setLoading(true)
       void newsApi.news(params, controller.signal).then(news => {
+        if (controller.signal.aborted) return
         if (cache.size >= 30) cache.delete(cache.keys().next().value!)
         cache.set(key, { data: news, expires: Date.now() + 60000 })
         setData(news); setError('')
+        prefetch(news)
       }).catch((cause: unknown) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Unable to load the feed.') })
         .finally(() => { if (!controller.signal.aborted) setLoading(false) })
-    }, query ? 250 : 0)
+    }
+    // Cached navigation is applied immediately; only typed searches are debounced.
+    const debounce = Boolean(query) && (cache.get(key)?.expires ?? 0) <= Date.now()
+    const timer = debounce ? window.setTimeout(load, 250) : undefined
+    if (!debounce) load()
     return () => { controller.abort(); window.clearTimeout(timer) }
   }, [region, category, query, page, refresh])
   useEffect(() => {

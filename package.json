@@ -3,9 +3,16 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "engines": { "node": "24.x" },
-  "overrides": { "@grpc/grpc-js": "^1.14.5", "uuid": "^11.1.1" },
+  "engines": {
+    "node": "24.x"
+  },
+  "overrides": {
+    "jwks-rsa": "4.1.0",
+    "@grpc/grpc-js": "^1.14.5",
+    "uuid": "^11.1.1"
+  },
   "scripts": {
+    "postinstall": "patch-package --error-on-fail",
     "dev": "concurrently -k -n api,web \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite",
     "dev:api": "node --watch server/index.js",
@@ -55,6 +62,7 @@
     "eslint-plugin-react-hooks": "latest",
     "eslint-plugin-react-refresh": "latest",
     "globals": "latest",
+    "patch-package": "^8.0.1",
     "typescript": "latest",
     "typescript-eslint": "latest",
     "vite": "latest"

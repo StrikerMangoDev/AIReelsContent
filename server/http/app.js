@@ -37,7 +37,7 @@ export function createApp({ repository, sources, verifyIdentity }) {
     if (!query.success) return response.status(400).json({ error: 'Invalid news filters' })
     try { new Intl.DateTimeFormat('en', { timeZone: query.data.timezone }) } catch { return response.status(400).json({ error: 'Invalid timezone' }) }
     response.setHeader('Cache-Control', 'no-cache')
-    const [news, topics, lastRun, successful] = await Promise.all([listNews(repository, query.data), feedTopics(repository, query.data.timezone), repository.lastRun(), repository.lastSuccessfulRun()])
+    const [news, topics, lastRun, successful] = await Promise.all([listNews(repository, query.data), feedTopics(repository, query.data.timezone, query.data), repository.lastRun(), repository.lastSuccessfulRun()])
     response.json({ ...news, ...topics, lastRun, updatedAt: successful?.finishedAt || null })
   })
   app.get('/api/activity', async (request, response) => {
@@ -53,6 +53,9 @@ export function createApp({ repository, sources, verifyIdentity }) {
     response.redirect(302, article.url)
   })
   app.use('/api', (_request, response) => response.status(404).json({ error: 'Endpoint not found' }))
-  app.use((error, _request, response, _next) => { response.status(error.status === 413 ? 413 : 500).json({ error: error.status === 413 ? 'Request too large' : 'Unexpected server error', requestId: response.getHeader('X-Request-Id') }) })
+  app.use((error, _request, response, _next) => {
+    console.error(JSON.stringify({ event: 'api_request_failed', requestId: response.getHeader('X-Request-Id'), type: error.name, code: error.code || null, storageCode: error.cause?.code || null }))
+    response.status(error.status === 413 ? 413 : 500).json({ error: error.status === 413 ? 'Request too large' : 'Unexpected server error', requestId: response.getHeader('X-Request-Id') })
+  })
   return app
 }
