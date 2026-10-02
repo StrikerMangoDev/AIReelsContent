@@ -26,6 +26,8 @@ test('review rejects invented quotes and unknown claim citations', () => {
   assert.ok(reviewContent(bad, evidence).issues.length >= 2)
   const badHook = structuredClone(content); badHook.hooks = ['Untraceable hook [C99]']
   assert.ok(reviewContent(badHook, evidence).issues.some(issue => issue.includes('unknown')))
+  const staleScenes = structuredClone(content); staleScenes.script = 'The publisher announced a model with limited availability [C1].'
+  assert.ok(reviewContent(staleScenes, evidence).issues.some(issue => issue.includes('Scene narration')))
 })
 
 test('studio persists generation, rejects stale edits and isolates owners', async () => {

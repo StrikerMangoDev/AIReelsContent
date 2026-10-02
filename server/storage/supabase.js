@@ -15,6 +15,8 @@ export function createSupabaseRepository(config) {
     return data
   }
   return {
+    studioDueNiches: () => call('due', {}, 'signal_research_due'),
+    studioResearchPage: (uid, before = '', beforeId = '') => call('page', { uid, before, beforeId }, 'signal_research_page'),
     studioGet: (uid, kind, id) => call('get', { uid, kind, id }, 'signal_studio'),
     studioList: (uid, kind) => call('list', { uid, kind }, 'signal_studio'),
     studioHistory: (uid, kind, id) => call('history', { uid, kind, id }, 'signal_studio'),

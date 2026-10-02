@@ -39,9 +39,15 @@ export function createRepository(filename) {
 
   const insert = db.prepare("INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE json_extract(articles.payload, '$.summaryBasis')='publisher-excerpt' AND coalesce(json_extract(excluded.payload, '$.summaryBasis'),'curated') != 'publisher-excerpt'")
   return {
+    studioDueNiches() {
+      return db.prepare("SELECT n.uid,n.id FROM studio_records n LEFT JOIN studio_records s ON s.uid=n.uid AND s.kind='research_schedule' AND s.id=n.id WHERE n.kind='niche' AND json_extract(n.payload,'$.autoRefresh')=1 AND (s.id IS NULL OR json_extract(s.payload,'$.attemptedAt') < ?) ORDER BY coalesce(json_extract(s.payload,'$.attemptedAt'),'') ASC,n.id LIMIT 1").all(new Date(Date.now() - 86400000).toISOString())
+    },
     studioGet(uid, kind, id) {
       const row = db.prepare('SELECT payload FROM studio_records WHERE uid=? AND kind=? AND id=?').get(uid, kind, id)
       return row ? JSON.parse(row.payload) : null
+    },
+    studioResearchPage(uid, before = '', beforeId = '') {
+      return db.prepare("SELECT id,json_extract(payload,'$.nicheId') AS nicheId,json_extract(payload,'$.researchedAt') AS researchedAt,json_extract(payload,'$.createdAt') AS createdAt FROM studio_records WHERE uid=? AND kind='research' AND (?='' OR json_extract(payload,'$.createdAt')<? OR (json_extract(payload,'$.createdAt')=? AND id<?)) ORDER BY json_extract(payload,'$.createdAt') DESC,id DESC LIMIT 21").all(uid, before, before, before, beforeId)
     },
     studioList(uid, kind) {
       return db.prepare("SELECT payload FROM studio_records WHERE uid=? AND kind=? ORDER BY json_extract(payload,'$.updatedAt') DESC,id").all(uid, kind).map(row => JSON.parse(row.payload))

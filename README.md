@@ -1,6 +1,8 @@
 # Signal AI
 
-Public AI and technology intelligence feed. React/TypeScript frontend, Node.js API, local SQLite or production Supabase persistence, Firebase authentication, and a separate Vertex Gemini ingestion worker.
+Research and content desk for any niche, with a public AI/technology feed. Prompt-led web research produces major updates, sourced audience observations and platform-specific production briefs for LinkedIn, Instagram and YouTube. React/TypeScript frontend, Node.js API, SQLite or Supabase, Firebase and Vertex Gemini.
+
+See [the product workflow, agent contracts, setup and limitations](docs/CONTENT_PRODUCT.md). The research desk is `/`, the existing AI feed is `/dashboard`, and saved content is `/studio`.
 
 See [production setup](DEPLOYMENT.md) for cloud configuration, migration, secrets and deployment checks. Live cloud authentication and Supabase integration still require the real project configuration.
 
@@ -23,7 +25,7 @@ npm run lint
 npm run build
 ```
 
-Article cards redirect directly to original publishers. Country/topic/search filters use the API; map activity counts unique monitored articles published today in the viewer's timezone. No login or admin panel is included.
+Article cards open a source summary with a creation action; original-source links redirect to publishers. Country/topic/search filters use the API; map activity counts unique monitored articles. Private research/content workspaces require configured Firebase authentication. Website publication is administrator-only.
 
 See [engine architecture and operations](docs/ENGINE.md) for folder ownership, prompt behavior, source configuration, cost controls, API/deployment boundaries, and migration guidance.
 

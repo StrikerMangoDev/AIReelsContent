@@ -18,6 +18,7 @@
     "dev:api": "node --watch server/index.js",
     "start:api": "node server/index.js",
     "worker": "node server/worker.js",
+    "research:worker": "node server/research-worker.js",
     "ingest": "node server/worker.js --once",
     "images:refresh": "node server/refresh-images.js",
     "feeds:collect": "node server/collect-feeds.js",

@@ -36,7 +36,7 @@ export function videoResult(operation) {
   return { bytes: Buffer.from(video.videoBytes, 'base64'), mime: 'video/mp4' }
 }
 
-export async function generateMedia(kind, prompt) {
+export async function generateMedia(kind, prompt, options = {}) {
   const ai = client()
   const model = process.env[`STUDIO_${kind.toUpperCase()}_MODEL`]
   if (kind === 'video') return videoResult(await ai.models.generateVideos({ model, prompt, config: { numberOfVideos: 1, durationSeconds: 8, aspectRatio: '9:16', resolution: '720p', generateAudio: true } }))
@@ -46,7 +46,9 @@ export async function generateMedia(kind, prompt) {
     if (!image?.imageBytes) throw new Error('Image provider returned no image')
     return { bytes: Buffer.from(image.imageBytes, 'base64'), mime: 'image/png' }
   }
-  const result = await ai.models.generateContent({ model, contents: prompt, config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: process.env.STUDIO_VOICE || 'Kore' } } } } })
+  const voiceName = options.voice === 'Male' ? 'Charon' : options.voice === 'Female' ? 'Kore' : process.env.STUDIO_VOICE || 'Kore'
+  const contents = `Read only the narration below. Language: ${options.language || 'as written'}. Delivery: ${options.delivery || 'clear and conversational'}. Do not read these directions aloud.\n\n${prompt}`
+  const result = await ai.models.generateContent({ model, contents, config: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } } })
   const audio = result.candidates?.[0]?.content?.parts?.find(part => part.inlineData?.mimeType?.startsWith('audio/'))?.inlineData
   if (!audio?.data) throw new Error('Speech provider returned no audio')
   if (audio.mimeType === 'audio/wav') return { bytes: Buffer.from(audio.data, 'base64'), mime: 'audio/wav' }

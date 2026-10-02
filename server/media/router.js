@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto'
 import { mediaConfig, generateMedia, refreshVideo } from './provider.js'
 import { saveMediaFile, readMediaFile, signedMediaUrl } from './files.js'
 
-const schema = z.object({ kind: z.enum(['image', 'audio', 'video']), prompt: z.string().trim().min(10).max(4000), requestId: z.string().uuid(), confirmCost: z.literal(true) }).strict()
+const schema = z.object({ kind: z.enum(['image', 'audio', 'video']), prompt: z.string().trim().min(10).max(12000), requestId: z.string().uuid(), confirmCost: z.literal(true), voice: z.enum(['Female', 'Male']).optional(), language: z.enum(['English', 'Hindi', 'Hinglish']).optional(), delivery: z.string().trim().max(300).optional() }).strict()
 const publicAsset = ({ operation: _operation, ...asset }) => asset
 const assetId = (uid, requestId) => {
   const hash = createHash('sha256').update(`${uid}:${requestId}`).digest('hex')
@@ -35,7 +35,7 @@ export function createMediaRouter({ repository, auth, generate = generateMedia, 
     const id = assetId(uid, input.requestId)
     const previous = await repository.studioGet(uid, 'asset', id)
     if (previous) {
-      if (previous.packageId !== pack.id || previous.kind !== input.kind || previous.prompt !== input.prompt) return res.status(409).json({ error: 'Request identifier already used for different media.' })
+      if (previous.packageId !== pack.id || previous.kind !== input.kind || previous.prompt !== input.prompt || previous.voice !== input.voice || previous.language !== input.language || previous.delivery !== input.delivery) return res.status(409).json({ error: 'Request identifier already used for different media.' })
       return res.json(publicAsset(previous))
     }
     const capability = config()[input.kind]
@@ -43,9 +43,9 @@ export function createMediaRouter({ repository, auth, generate = generateMedia, 
     // Separate quota bucket: media usage never consumes content-writing allowance.
     const reservation = await repository.studioReserve(`${uid}:media`, input.requestId, 10)
     if (!reservation.reserved) return res.status(409).json({ error: 'This request was already submitted. Reload assets before retrying.' })
-    const asset = await repository.studioPut(uid, 'asset', id, { packageId: pack.id, packageRevision: pack.revision, kind: input.kind, prompt: input.prompt, estimatedUsd: capability.estimatedUsd, status: 'running', error: null }, 0)
+    const asset = await repository.studioPut(uid, 'asset', id, { requestId: input.requestId, packageId: pack.id, packageRevision: pack.revision, kind: input.kind, prompt: input.prompt, ...(input.voice ? { voice: input.voice } : {}), ...(input.language ? { language: input.language } : {}), ...(input.delivery ? { delivery: input.delivery } : {}), estimatedUsd: capability.estimatedUsd, status: 'running', error: null }, 0)
     try {
-      res.status(201).json(publicAsset(await finish(uid, asset, await generate(input.kind, input.prompt))))
+      res.status(201).json(publicAsset(await finish(uid, asset, await generate(input.kind, input.prompt, { voice: input.voice, language: input.language, delivery: input.delivery }))))
     } catch {
       const failed = await repository.studioPut(uid, 'asset', id, { ...asset, status: 'failed', error: 'Media generation or storage failed. Provider usage may still have been charged; retry creates a new request.' }, asset.revision)
       res.status(502).json(publicAsset(failed))

@@ -30,6 +30,14 @@ async function contract(repo) {
   assert.equal(attempts.find(value => value.status === 'rejected').reason.code, 'STUDIO_QUOTA')
   const duplicate = await Promise.all(['same', 'same'].map(id => Promise.resolve().then(() => repo.studioReserve('duplicate', id, 2))))
   assert.deepEqual(duplicate.map(value => value.reserved).sort(), [false, true])
+  for (let i = 0; i < 23; i++) await repo.studioPut('alice', 'research', `report-${i}`, { nicheId: 'daily', researchedAt: new Date().toISOString(), evidence: ['large source text'] }, 0)
+  const page = await repo.studioResearchPage('alice')
+  assert.equal(page.length, 21); assert.equal(page[0].evidence, undefined)
+  const cursor = page[19]
+  const older = await repo.studioResearchPage('alice', cursor.createdAt, cursor.id)
+  assert.equal(older.length, 3)
+  assert.equal(new Set([...page.slice(0, 20), ...older].map(item => item.id)).size, 23)
+  assert.deepEqual(await repo.studioResearchPage('bob'), [])
 }
 
 test('SQLite studio preserves owner isolation, history, optimistic updates and quota idempotency', async () => {
@@ -44,6 +52,8 @@ test('PostgreSQL studio migration is repeatable and matches SQLite contract with
     const sql = await readFile(new URL('../../supabase/migrations/003_studio.sql', import.meta.url), 'utf8')
     await db.exec(sql)
     await db.exec(sql)
+    const researchSql = await readFile(new URL('../../supabase/migrations/004_niche_research.sql', import.meta.url), 'utf8')
+    await db.exec(researchSql); await db.exec(researchSql)
     async function call(operation, args) {
       try { return (await db.query('select public.signal_studio($1,$2::jsonb) as value', [operation, JSON.stringify(args)])).rows[0].value }
       catch (error) { if (error.code === 'P0002') error.code = 'STUDIO_CONFLICT'; if (error.code === 'P0003') error.code = 'STUDIO_QUOTA'; throw error }
@@ -55,12 +65,20 @@ test('PostgreSQL studio migration is repeatable and matches SQLite contract with
       studioHistory: (uid, kind, id) => call('history', { uid, kind, id }),
       studioPut: (uid, kind, id, payload, expectedRevision) => call('put', { uid, kind, id, payload, expectedRevision }),
       studioReserve: (uid, requestId, limit) => call('reserve', { uid, requestId, limit }),
+      studioResearchPage: async (uid, before = '', beforeId = '') => (await db.query("select signal_research_page('page',$1::jsonb) as value", [JSON.stringify({ uid, before, beforeId })])).rows[0].value,
     })
+    await call('put', { uid: 'alice', kind: 'niche', id: 'daily', payload: { autoRefresh: true } })
+    await call('put', { uid: 'bob', kind: 'niche', id: 'manual', payload: { autoRefresh: false } })
+    assert.deepEqual((await db.query("select signal_research_due('due') as value")).rows[0].value, [{ uid: 'alice', id: 'daily' }])
+    await call('put', { uid: 'alice', kind: 'research_schedule', id: 'daily', payload: { attemptedAt: new Date().toISOString() } })
+    assert.deepEqual((await db.query("select signal_research_due('due') as value")).rows[0].value, [])
     await db.exec('reset role')
     await db.exec("update signal_studio_reservations set attempted_at=now()-interval '25 hours' where uid='alice'")
     assert.equal((await call('reserve', { uid: 'alice', requestId: 'request', limit: 1 })).reserved, false)
     assert.equal((await call('reserve', { uid: 'alice', requestId: 'new', limit: 1 })).reserved, true)
     await db.exec('set role anon')
+    await assert.rejects(db.query("select signal_research_due('due')"), /permission denied/)
+    await assert.rejects(db.query("select signal_research_page('page')"), /permission denied/)
     await assert.rejects(call('get', { uid: 'alice', kind: 'package', id: 'same' }), /permission denied/)
     await assert.rejects(db.query('select * from public.signal_studio_records'), /permission denied/)
   } finally { await db.close() }

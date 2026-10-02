@@ -9,9 +9,9 @@ import { randomUUID } from 'node:crypto'
 test('media generation is owner-scoped, idempotent and persists files without leaking provider operation', async () => {
   const repository = createRepository(':memory:')
   const app = express(); app.use(express.json())
-  let calls = 0; const files = new Map()
+  let calls = 0; let options; const files = new Map()
   const auth = (req, res, next) => { if (!req.headers.authorization) return res.sendStatus(401); req.identity = { uid: req.headers.authorization }; next() }
-  app.use(createMediaRouter({ repository, auth, config: () => ({ image: { enabled: true, estimatedUsd: 0.1 } }), generate: async () => { calls++; return { bytes: Buffer.from('image'), mime: 'image/png' } }, saveFile: async (id, bytes) => files.set(id, bytes), readFile: async id => files.get(id) }))
+  app.use(createMediaRouter({ repository, auth, config: () => ({ image: { enabled: true, estimatedUsd: 0.1 }, audio: { enabled: true, estimatedUsd: 0.1 } }), generate: async (_kind, _prompt, supplied) => { options = supplied; calls++; return { bytes: Buffer.from('image'), mime: 'image/png' } }, saveFile: async (id, bytes) => files.set(id, bytes), readFile: async id => files.get(id) }))
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve))
   const url = `http://127.0.0.1:${server.address().port}`
   const request = (path, uid = 'owner', body) => fetch(`${url}/api/studio${path}`, { method: body ? 'POST' : 'GET', headers: { Authorization: uid, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) })
@@ -22,10 +22,16 @@ test('media generation is owner-scoped, idempotent and persists files without le
     assert.equal((await request('/packages/draft/assets', 'owner', { ...input, confirmCost: false })).status, 400)
     const first = await request('/packages/draft/assets', 'owner', input); assert.equal(first.status, 201)
     const asset = await first.json(); assert.equal(asset.status, 'completed')
+    assert.equal(asset.requestId, input.requestId)
+    assert.equal((await (await request('/packages/draft/assets')).json()).assets[0].requestId, input.requestId)
     assert.equal((await request('/packages/draft/assets', 'owner', input)).status, 200); assert.equal(calls, 1)
     assert.equal((await request(`/assets/${asset.id}/file`, 'other')).status, 404)
     assert.equal(await (await request(`/assets/${asset.id}/file`)).text(), 'image')
     assert.equal((await request('/packages/draft/assets', 'owner', { ...input, prompt: 'A different prompt for this request' })).status, 409)
+    const speech = { ...input, kind: 'audio', requestId: randomUUID(), voice: 'Male', language: 'Hinglish', delivery: 'Calm' }
+    assert.equal((await request('/packages/draft/assets', 'owner', speech)).status, 201)
+    assert.deepEqual(options, { voice: 'Male', language: 'Hinglish', delivery: 'Calm' })
+    assert.equal((await request('/packages/draft/assets', 'owner', { ...speech, voice: 'Female' })).status, 409)
   } finally { await new Promise(resolve => server.close(resolve)); repository.close() }
 })
 
