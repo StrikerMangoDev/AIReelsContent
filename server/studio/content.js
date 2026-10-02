@@ -45,6 +45,7 @@ export async function generateContent(evidence, settings) {
     responseMimeType: 'application/json', responseJsonSchema: z.toJSONSchema(contentSchema), temperature: 0.2, maxOutputTokens: 12000,
   } })
   const content = contentSchema.parse(JSON.parse(response.text || '{}'))
-  if (reviewContent(content, evidence).issues.length) throw new Error('Generated content failed evidence validation; existing draft was preserved')
+  const review = reviewContent(content, evidence)
+  if (review.issues.length) throw Object.assign(new Error('Generated content failed evidence validation; existing draft was preserved'), { code: 'EVIDENCE_VALIDATION', issueCount: review.issues.length })
   return content
 }

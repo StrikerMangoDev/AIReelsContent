@@ -123,7 +123,8 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
       const review = reviewContent(content, current.evidence)
       if (review.issues.length) throw new Error('Evidence validation failed')
       res.json(await repository.studioPut(uid, 'package', current.id, { ...running, content, review, status: 'completed', editorialStatus: 'needs_review' }, running.revision))
-    } catch {
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'studio_generation_failed', type: error instanceof z.ZodError ? 'schema' : error instanceof SyntaxError ? 'json' : 'provider_or_evidence', code: error.code === 'EVIDENCE_VALIDATION' ? error.code : null, status: Number.isInteger(error.status) ? error.status : null, issueCount: error.issueCount || null }))
       const failed = await repository.studioPut(uid, 'package', current.id, { ...running, status: 'failed', error: 'Generation failed or returned unsupported content. Existing content was preserved. Retry with a new request.' }, running.revision)
       res.status(502).json({ ...failed, error: failed.error })
     }
