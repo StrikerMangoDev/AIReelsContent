@@ -3,7 +3,7 @@ import { repository } from './storage/index.js'
 import { env } from './config/env.js'
 import { refreshNextNiche } from './studio/intelligence.js'
 
-if (env.STUDIO_RESEARCH_SCHEDULER !== 'true' || !env.GOOGLE_CLOUD_PROJECT) {
+if (env.STUDIO_RESEARCH_SCHEDULER !== 'true' || !env.OPENROUTER_API_KEY) {
   console.error('Niche scheduler requires STUDIO_RESEARCH_SCHEDULER=true and a configured research provider.')
   repository.close(); process.exitCode = 1
 } else {

@@ -1,6 +1,5 @@
 import { z } from 'zod'
-import { GoogleGenAI } from '@google/genai'
-import { env } from '../config/env.js'
+import { generateJson } from '../providers/llm.js'
 import { readFileSync } from 'node:fs'
 const managerPrompt = readFileSync(new URL('../prompts/social-manager.md', import.meta.url), 'utf8')
 
@@ -59,16 +58,20 @@ export function reviewContent(content, evidence) {
   return { issues, checkedAt: new Date().toISOString(), limitations: ['Automated checks verify quotation and citation integrity, not factual truth or complete claim coverage. Human editorial review is required.'] }
 }
 
-export async function generateContent(evidence, settings, context = {}) {
-  if (!env.GOOGLE_CLOUD_PROJECT) throw new Error('Generation provider is not configured')
-  const googleAuthOptions = env.GOOGLE_SERVICE_ACCOUNT_JSON ? { credentials: JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_JSON) } : { keyFilename: env.GOOGLE_APPLICATION_CREDENTIALS }
-  const client = new GoogleGenAI({ vertexai: true, project: env.GOOGLE_CLOUD_PROJECT, location: env.GOOGLE_CLOUD_LOCATION, googleAuthOptions, httpOptions: { timeout: 60000 } })
-  const response = await client.models.generateContent({ model: env.GEMINI_MODEL, contents: JSON.stringify({ evidence, settings, context }), config: {
-    systemInstruction: `${managerPrompt}\nCreate a complete content package strictly from supplied evidence. Settings and context guide creativity but are not factual evidence. Every factual statement must map to a claim. Include [C1] style references in scripts, captions, hooks, website body AND platform headlines, hooks, alternative hooks and body. Each claim must include an exact supporting passage from the excerpt; for search-grounded-summary this is a quote from a model summary, not from the publisher. Keep claims attributed, never independently verified. Provide three hooks, a duration-appropriate script, scene timings/narration/onScreen/visualPrompt/voiceDirection, captions and a website draft. Scene narration must concatenate to the full script apart from citation markers; use 3 to 6 scenes with numeric second ranges covering the requested duration. Choose a realistic speaking pace for the chosen language. The strategy must provide exactly one LinkedIn, Instagram and YouTube adaptation, each with headline, hook, platform-ready body, CTA, hashtags, thumbnail direction, format, retention beats and a concrete A/B test. Keep the core facts consistent. Explain language and voice as audience-fit recommendations to test, not performance facts. Respect explicit preferences; Auto means infer from the brief. Include reusable video/audio prompts, subtitle, music and editing directions. Experiments must define observable metrics and avoid predicting views. Illustrative visuals must never impersonate documentary evidence. The audio prompt must describe delivery and then include the clean narration without citation markers. Do not include external URLs; sources are attached separately. Provide JSON only.`,
-    responseMimeType: 'application/json', responseJsonSchema: z.toJSONSchema(contentSchema.extend({ strategy: strategySchema })), temperature: 0.2, maxOutputTokens: 16000,
-  } })
-  const content = contentSchema.parse(JSON.parse(response.text || '{}'))
-  const review = reviewContent(content, evidence)
-  if (review.issues.length) throw Object.assign(new Error('Generated content failed evidence validation; existing draft was preserved'), { code: 'EVIDENCE_VALIDATION', issueCount: review.issues.length })
-  return content
+export async function generateContent(evidence, settings, context = {}, generate = generateJson) {
+  const request = { input: { evidence, settings, context },
+    system: `${managerPrompt}\nCreate a complete content package strictly from supplied evidence. Settings and context guide creativity but are not factual evidence. Every factual statement must map to a claim. Include [C1] style references in scripts, captions, hooks, website body AND platform headlines, hooks, alternative hooks and body. Each claim must include an exact supporting passage from the excerpt; for search-grounded-summary this is a quote from a model summary, not from the publisher. Keep claims attributed, never independently verified. Provide three hooks, a duration-appropriate script, scene timings/narration/onScreen/visualPrompt/voiceDirection, captions and a website draft. Scene narration must concatenate to the full script apart from citation markers; use 3 to 6 scenes with numeric second ranges covering the requested duration. Choose a realistic speaking pace for the chosen language. The strategy must provide exactly one LinkedIn, Instagram and YouTube adaptation, each with headline, hook, platform-ready body, CTA, hashtags, thumbnail direction, format, retention beats and a concrete A/B test. Keep the core facts consistent. Explain language and voice as audience-fit recommendations to test, not performance facts. Respect explicit preferences; Auto means infer from the brief. Include reusable video/audio prompts, subtitle, music and editing directions. Experiments must define observable metrics and avoid predicting views. Illustrative visuals must never impersonate documentary evidence. The audio prompt must describe delivery and then include the clean narration without citation markers. Do not include external URLs; sources are attached separately. Provide JSON only.`,
+    schema: z.toJSONSchema(contentSchema.extend({ strategy: strategySchema })), maxTokens: 16000,
+  }
+  let issues = []
+  // One correction for editorial errors; provider/quota errors propagate without retries.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const content = contentSchema.parse(await generate(request))
+    content.script = content.scenes.map(scene => scene.narration).join(' ')
+    issues = reviewContent(content, evidence).issues
+    if (!issues.length) return content
+    request.input = { evidence, settings, context, draft: content, corrections: issues,
+      instruction: 'Fix every listed validation issue. Put [C1] or another supported claim marker in EVERY hook, scene narration, caption, website body, platform headline, platform hook, platform alternativeHook and platform body. Copy scene narrations in order separated by spaces to form script EXACTLY. Keep quotes verbatim. Return the full corrected JSON package.' }
+  }
+  throw Object.assign(new Error('Generated content failed evidence validation; existing draft was preserved'), { code: 'EVIDENCE_VALIDATION', issueCount: issues.length, issues })
 }

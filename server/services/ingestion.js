@@ -10,7 +10,7 @@ export function createIngestion({ repository, sources, readSource, classify, con
     if (running || !await repository.acquireLease('ingestion', owner)) return { status: 'busy' }
     running = true
     const runId = await repository.startRun()
-    const report = { discovered: 0, selected: 0, saved: 0, sources: [], model: config.GEMINI_MODEL }
+    const report = { discovered: 0, selected: 0, saved: 0, sources: [], model: config.LLM_MODEL }
     try {
       const results = await Promise.allSettled(sources.map(source => readSource(source, { maxAgeHours: config.MAX_ARTICLE_AGE_HOURS })))
       const candidates = new Map()

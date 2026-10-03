@@ -29,7 +29,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
   }
   router.use('/library', createLibraryRouter({ repository, auth, fetchSource }))
   router.use('/intelligence', intelligenceRouter({ repository, auth }))
-  router.get('/config', (_req, res) => res.json({ industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: Boolean(env.GOOGLE_CLOUD_PROJECT), media: false, publishing: true, researchScheduling: env.STUDIO_RESEARCH_SCHEDULER === 'true' }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS }))
+  router.get('/config', (_req, res) => res.json({ industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: Boolean(env.OPENROUTER_API_KEY), media: false, publishing: true, researchScheduling: env.STUDIO_RESEARCH_SCHEDULER === 'true' }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS }))
   router.get('/publications', async (_req, res) => res.json({ publications: await Promise.all((await repository.studioList('public', 'publication')).map(publicationStatus)) }))
   router.get('/publications/:publicationId', async (req, res) => {
     const publication = await repository.studioGet('public', 'publication', req.params.publicationId)
@@ -122,7 +122,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
   router.post('/packages/:id/generate', async (req, res) => {
     const input = z.object({ requestId, instruction: z.string().trim().max(2000).optional() }).strict().parse(req.body); const current = req.package; const uid = req.identity.uid
     await requireCurrentLibrary(uid, current)
-    if (!env.GOOGLE_CLOUD_PROJECT && generate === generateContent) throw fail(503, 'Content generation is not configured yet')
+    if (!env.OPENROUTER_API_KEY && generate === generateContent) throw fail(503, 'Content generation is not configured yet')
     if (!current.evidence.some(item => item.excerpt.length >= 100)) throw fail(422, 'Insufficient source evidence. Create a package from the original article URL.')
     if (current.status === 'generating' && Date.now() - Date.parse(current.updatedAt) < 120000) throw fail(409, 'Generation already in progress')
     const reservation = await repository.studioReserve(uid, `${current.id}:${input.requestId}`, env.STUDIO_DAILY_GENERATIONS)
