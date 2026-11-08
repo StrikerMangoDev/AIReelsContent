@@ -58,3 +58,4 @@
 .studio-media-preview { background: #0b1510; padding: 20px; border-radius: 12px; }
 @media (max-width: 960px) { .intelligence-layout { grid-template-columns: 1fr; } .brief-panel .brief-input { min-height: 120px; } }
 @media (max-width: 600px) { .reaction-columns { grid-template-columns: 1fr; gap: 10px; } .intelligence-empty, .platform-preview { padding: 22px; } .intelligence-modes { gap: 14px; } .intelligence-hero { padding-top: 0; } }
+.studio-alert{overflow-wrap:anywhere}
