@@ -1,0 +1,594 @@
+@font-face{font-family:'Plus Jakarta Sans';src:url('/fonts/plus-jakarta-sans.woff2?v=2') format('woff2');font-weight:400 800;font-style:normal;font-display:swap}
+@font-face{font-family:'Source Sans 3';src:url('/fonts/source-sans-3.woff2?v=2') format('woff2');font-weight:400 700;font-style:normal;font-display:swap}
+:root{--brand-primary:#2344c7;--brand-hover:#1935a3;--brand-soft:#edf1ff;--brand-ink:#142c38;--brand-sea:#d7eee8;--brand-canvas:#f6f8fa;--brand-muted:#566176;--brand-line:#dce2eb;--brand-control:#7f8aa0;font-family:'Source Sans 3',Arial,sans-serif}
+body{background:var(--brand-canvas);color:var(--brand-ink)}
+h1,h2,h3,.logo{font-family:'Plus Jakarta Sans',Arial,sans-serif}
+.logo{display:inline-block;min-width:112px;font-size:26px;font-weight:700;line-height:1.2;letter-spacing:-.035em;color:var(--brand-ink)}
+.logo .logo__accent{display:block;margin:4px 0 0;font:600 15px/1.3 'Source Sans 3',Arial,sans-serif;letter-spacing:.02em;color:var(--brand-primary)}
+.workspace-shell{font-size:16px;--accent:var(--brand-primary);--muted:var(--brand-muted);--line:var(--brand-line);background:var(--brand-canvas);color:var(--brand-ink)}
+.workspace-shell h1,.workspace-shell h2,.workspace-shell h3{letter-spacing:-.02em;text-wrap:pretty}
+.workspace-shell .studio-heading h1,.workspace-shell .idea-library-heading h1,.workspace-shell .discovery-hero h1{font-size:32px;line-height:1.2;letter-spacing:-.02em;font-weight:700}
+.workspace-shell .studio-heading h2,.workspace-shell .studio-panel>h2{font-size:22px;line-height:1.3;font-weight:600}
+.workspace-shell .workspace-sidebar{background:var(--brand-ink);color:#fff;border:0;width:240px;padding:28px 16px 16px;--line:#ffffff2b}
+.workspace-shell .workspace-sidebar .logo{color:#fff;font-size:26px}
+.workspace-shell .workspace-sidebar .logo__accent{color:var(--brand-sea);font-size:15px}
+.workspace-shell .workspace-brand{padding:0 12px 24px}
+.workspace-shell .workspace-switcher{background:#1c3744;border-color:#ffffff2b;border-radius:8px;color:#fff;padding:12px}
+.workspace-shell .workspace-switcher strong{font-size:15px}
+.workspace-shell .workspace-switcher small,.workspace-shell .workspace-switcher span>span{color:var(--brand-sea);font-size:14px}
+.workspace-shell .workspace-create{background:var(--brand-primary);color:#fff;border:1px solid #a8bbff;border-radius:8px;font-size:15px;min-height:44px}
+.workspace-shell .workspace-create:hover{background:var(--brand-hover);color:#fff}
+.workspace-shell .workspace-nav-label{color:var(--brand-sea);font-size:14px;letter-spacing:0;font-weight:600;padding:24px 12px 8px}
+.workspace-shell .workspace-nav a{color:#fff;border-radius:8px;border-left:3px solid transparent;padding:12px 9px;min-height:64px}
+.workspace-shell .workspace-nav strong{font-size:15px;line-height:1.4}
+.workspace-shell .workspace-nav small{color:var(--brand-sea);font-size:14px;line-height:1.4}
+.workspace-shell .workspace-nav a:hover,.workspace-shell .workspace-nav a.active{background:#254653;color:#fff}
+.workspace-shell .workspace-nav a.active{border-left-color:#a8bbff}
+.workspace-shell .workspace-nav a.active small{color:var(--brand-sea)}
+.workspace-shell .workspace-secondary :is(summary,a){color:var(--brand-sea);font-size:14px;line-height:1.5}
+.workspace-shell .workspace-secondary :is(a.active,a:hover,summary:hover){background:#254653;color:#fff}
+.workspace-shell .workspace-account strong{font-size:14px;color:#fff}
+.workspace-shell .workspace-account div>span,.workspace-shell .workspace-account button,.workspace-shell .workspace-account>a{font-size:14px;color:var(--brand-sea)}
+.workspace-shell .workspace-avatar{background:#254653;color:#fff}
+.workspace-shell .workspace-body{margin-left:240px}
+.workspace-shell .workspace-topbar{background:#fff;height:64px;padding-inline:32px;border-color:var(--brand-line)}
+.workspace-shell .workspace-topbar>span,.workspace-shell .workspace-topbar>a{font-size:14px;color:var(--brand-muted)}
+.workspace-shell .workspace-main{max-width:1360px;padding:32px 32px 72px}
+.workspace-shell :is(button,input,select,textarea){accent-color:var(--brand-primary)}
+.workspace-shell :is(button,.studio-button,.idea-action){font-size:15px;border-radius:8px}
+.workspace-shell :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px;border-color:var(--brand-control)}
+.workspace-shell :is(button,a,input,select,textarea,summary):focus-visible,.auth-screen :is(button,a,input):focus-visible{outline:3px solid var(--brand-primary);outline-offset:3px}
+.workspace-shell .workspace-sidebar :is(button,a,summary):focus-visible{outline-color:#a8bbff}
+.workspace-shell .category-tile{border-radius:12px;box-shadow:none;transition:border-color .15s}
+.workspace-shell .category-tile:hover{transform:none;border-color:var(--brand-primary);box-shadow:none}
+.workspace-shell .category-cover{aspect-ratio:16/9}
+.workspace-shell .category-tile h2{font-size:18px;line-height:1.4;font-weight:600}
+.workspace-shell .category-tile p{font-size:16px;line-height:1.6}
+.workspace-shell :is(.category-count,.category-tile-footer,.category-image-credit,.library-tools>span){font-size:14px}
+.workspace-shell .category-count{color:var(--brand-primary)}
+.workspace-shell .library-search{border-color:var(--brand-control);border-radius:8px}
+.workspace-shell .studio-panel{border-radius:12px;box-shadow:none}
+.workspace-shell .studio-eyebrow{font-size:14px;text-transform:none;letter-spacing:0;font-weight:600}
+.workspace-shell .studio-field-read{font-size:18px;line-height:1.65}
+.auth-screen{font-family:'Source Sans 3',Arial,sans-serif;font-size:16px;background:var(--brand-canvas);color:var(--brand-ink)}
+.auth-screen .auth-panel{border-radius:12px;box-shadow:none;border-color:var(--brand-line);max-width:480px;padding:40px}
+.auth-screen .logo{font-size:28px;color:var(--brand-ink);margin-bottom:36px}
+.auth-screen .logo .logo__accent{color:var(--brand-primary);font-size:15px}
+.auth-screen h1{font-size:32px;line-height:1.2;letter-spacing:-.02em}
+.auth-screen .auth-submit{border-radius:8px;background:var(--brand-primary);border-color:var(--brand-primary);font-size:16px;min-height:44px}
+.auth-screen .auth-submit:hover:not(:disabled){background:var(--brand-hover)}
+.auth-screen input{font-size:16px;border-color:var(--brand-control)}
+.auth-screen :is(.auth-switch a,.auth-forgot){color:var(--brand-primary)}
+.app-loading{font-family:'Source Sans 3',Arial,sans-serif;background:var(--brand-canvas);color:var(--brand-ink)}
+.workspace-shell .studio-composer{max-width:1360px;margin-top:0}
+.workspace-shell .studio-composer .studio-editorial-header{margin:0 0 16px}
+.workspace-shell .studio-composer .studio-editorial-header .idea-breadcrumbs{display:none}
+.workspace-shell .studio-composer .studio-title-lockup{display:flex;align-items:flex-start;gap:16px}
+.workspace-shell .studio-composer .studio-main-title{font-size:32px;line-height:1.25;letter-spacing:-.02em;margin:0;flex:1}
+.workspace-shell .studio-composer .studio-editorial-badge{font-size:14px;padding:4px 10px;background:var(--brand-soft);border-radius:20px;white-space:nowrap}
+.workspace-shell .studio-composer .studio-editorial-badge[data-status=approved]{color:#187548;background:#ecfdf3}
+.workspace-shell .studio-composer .studio-research-strip{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:12px 0}
+.workspace-shell .studio-composer .studio-research-pill{background:transparent;border:0;color:#0f766e;padding:8px 0;font-size:14px}
+.workspace-shell .studio-composer .studio-research-alt{font-size:14px}
+.workspace-shell .studio-composer .studio-editorial-actions{display:flex;gap:16px;align-items:center;flex-wrap:wrap;min-height:44px;font-size:14px}
+.workspace-shell .studio-composer .studio-editorial-actions .studio-action-back{margin-right:auto}
+.workspace-shell .studio-composer .studio-editorial-actions button{padding:8px 12px;min-height:44px}
+@media(max-width:760px){.workspace-shell .studio-composer .studio-main-title{font-size:26px}.workspace-shell .studio-composer .studio-title-lockup{flex-wrap:wrap}.workspace-shell .studio-composer .studio-title-lockup h1{flex-basis:100%}}
+.workspace-shell .studio-composer>.studio-heading{max-width:1040px;margin:0 0 12px}
+.workspace-shell .studio-composer>.studio-heading h1{font-size:32px;line-height:1.25;margin:0;font-weight:700;letter-spacing:-.02em}
+.workspace-shell .studio-composer>.studio-toolbar{margin:0 0 8px;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none;min-height:44px;gap:12px;justify-content:space-between}
+.workspace-shell .studio-composer .studio-toolbar-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.workspace-shell .studio-composer .studio-toolbar-actions .studio-badge{font-size:14px;text-transform:none;letter-spacing:0;padding:3px 10px}
+.workspace-shell .studio-composer .studio-badge[data-status=approved]{background:#ecfdf3;color:#187548;border-color:#b7dec9}
+.workspace-shell .studio-composer .studio-toolbar-actions .studio-planner-btn{min-height:44px;padding:8px 12px}
+.workspace-shell .studio-composer .studio-planner-link,.workspace-shell .studio-composer .studio-back-link{font-size:14px}
+.workspace-shell .studio-composer .composer-research-actions{display:flex;align-items:center;flex-wrap:wrap;gap:16px;margin:0 0 12px}
+.workspace-shell .studio-composer .composer-research-actions button{background:transparent;border:0;padding:8px 0;color:#0f766e;min-height:44px;font-size:14px}
+.workspace-shell .studio-composer .composer-research-actions a{font-size:14px}
+.workspace-shell .studio-composer .studio-selected-idea{padding:20px;margin:12px 0;background:#f0fdfa;border-color:#badbd4;border-left:0}
+.workspace-shell .studio-composer .studio-selected-idea h2{font-size:20px;margin:0 0 12px}
+/* Navigation rules unified below */
+.workspace-shell .studio-composer .studio-compose-grid{grid-template-columns:minmax(0,1fr) minmax(300px,380px);gap:24px}
+.workspace-shell .studio-composer .studio-editor-column{border:1px solid var(--brand-line);border-radius:12px;margin:0;padding:0;overflow:hidden;box-shadow:none}
+.workspace-shell .studio-composer .composer-editor-heading{padding:20px 24px 12px;align-items:center}
+.workspace-shell .studio-composer .composer-editor-heading h2{font-size:22px;margin:0}
+.workspace-shell .studio-composer .composer-channel{background:transparent;color:var(--brand-muted);border:0;font-size:14px;padding:0}
+.workspace-shell .studio-composer .draft-text-editor{padding:0 24px}
+.workspace-shell .studio-composer .composer-content-nav{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;padding-bottom:16px;border-bottom:1px solid var(--brand-line)}
+.workspace-shell .studio-composer .composer-content-nav button{display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;min-height:44px;padding:8px 14px;border:1px solid transparent;border-radius:8px;background:transparent;font-size:15px;box-shadow:none}
+.workspace-shell .studio-composer .composer-content-nav button[aria-pressed=true]{background:var(--brand-soft);border-color:#b5c3f3;color:var(--brand-primary);box-shadow:none}
+.workspace-shell .studio-composer .composer-content-nav button span{display:none}
+.workspace-shell .content-workflow.studio-composer .editor-block{padding:0;border:0;background:transparent;box-shadow:none}
+.workspace-shell .studio-composer .editor-block h3{font-size:20px;line-height:1.4;margin:0 0 12px}
+.workspace-shell .studio-composer .editor-block h3 span{display:none}
+.workspace-shell .studio-composer .composer-read-card{border:0;border-bottom:1px solid var(--brand-line);border-radius:0;padding:16px 0;margin:0;background:transparent;box-shadow:none}
+.workspace-shell .studio-composer .composer-field-heading{gap:12px;align-items:center}
+.workspace-shell .studio-composer .composer-field-title-group{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}
+.workspace-shell .studio-composer .composer-field-title-group strong{font-size:15px;color:var(--brand-muted);font-weight:600}
+.workspace-shell .studio-composer .composer-field-heading>strong{font-size:15px;color:var(--brand-muted);font-weight:600}
+.workspace-shell .studio-composer .composer-field-actions{gap:8px}
+.workspace-shell .studio-composer .composer-field-actions button{font-size:14px;min-height:44px;min-width:44px;padding:8px;color:var(--brand-primary);background:transparent;border:0}
+.workspace-shell .studio-composer .composer-readable-copy{font-size:18px;line-height:1.65;margin:8px 0 12px;color:var(--brand-ink)}
+.workspace-shell .studio-composer .composer-field-footer{margin-top:0;justify-content:flex-start;gap:12px;flex-wrap:wrap}
+.workspace-shell .studio-composer .composer-field-footer button{font-size:14px;color:#0f766e;background:transparent;border:0;padding:8px 0;min-height:44px}
+.workspace-shell .studio-composer .composer-field-count{font-size:14px;margin:0;color:var(--brand-muted)}
+.workspace-shell .studio-composer .composer-source-list{background:#f0fdfa;padding:16px;border-radius:8px}
+.workspace-shell .studio-composer .studio-save-row{padding:16px 24px;margin-top:0;gap:12px;background:#fff}
+.workspace-shell .studio-composer .studio-preview-column{position:sticky;top:16px;align-self:start}
+.workspace-shell .studio-composer .instagram-preview{max-width:380px}
+@media(max-width:1000px){.workspace-shell .studio-composer .studio-compose-grid{grid-template-columns:minmax(0,1fr)}.workspace-shell .studio-composer .studio-preview-column{position:static}.workspace-shell .studio-composer .composer-navigation{align-items:stretch;flex-direction:column;gap:8px}.workspace-shell .studio-composer .composer-tools{margin:0;justify-content:flex-start}.workspace-shell .studio-composer .composer-tools select{width:100%;max-width:none}}
+@media(max-width:760px){.workspace-shell .studio-composer>.studio-heading h1{font-size:26px}.workspace-shell .studio-composer .studio-toolbar-actions{gap:8px}.workspace-shell .studio-composer .composer-editor-heading{padding:16px}.workspace-shell .studio-composer .draft-text-editor{padding:0 16px}.workspace-shell .studio-composer .composer-content-nav{gap:4px;margin-bottom:16px;padding-bottom:12px}.workspace-shell .studio-composer .composer-content-nav button{padding:8px 12px}.workspace-shell .studio-composer .composer-readable-copy{font-size:17px}.workspace-shell .studio-composer .studio-save-row{padding:16px}.workspace-shell .studio-composer .composer-navigation .studio-section-nav button{font-size:14px;padding:8px}.workspace-shell .studio-composer .studio-preview-column{width:100%}}
+.workspace-shell .simple-find{max-width:780px}
+.workspace-shell .simple-find .discovery-hero{padding:0;margin-bottom:24px}
+.workspace-shell .simple-find .discovery-hero h1{margin:0 0 12px;font-size:32px;line-height:1.2;letter-spacing:-.02em}
+.workspace-shell .simple-find .discovery-hero p{margin:0;max-width:560px;font-size:16px;line-height:1.6}
+.workspace-shell .simple-find-layout{display:block;max-width:none}
+.workspace-shell .simple-find .simple-idea-form{padding:28px;gap:16px}
+.workspace-shell .simple-find #simple-topic{font-size:18px;min-height:52px;border-radius:8px;padding:12px 14px}
+.workspace-shell .simple-find #topic-hint{font-size:14px;margin-top:-8px;color:var(--brand-muted)}
+.workspace-shell .simple-find .idea-examples button{min-height:44px;padding:8px 14px;border-color:var(--brand-line);font-size:15px;border-radius:8px}
+.workspace-shell .simple-find .idea-examples button:hover{border-color:var(--brand-primary);background:var(--brand-soft);color:var(--brand-primary)}
+.workspace-shell .simple-find .idea-writing-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px}
+.workspace-shell .simple-find .idea-help{background:var(--brand-soft);color:var(--brand-primary);border-color:var(--brand-line);margin:0;font-size:15px}
+.workspace-shell .simple-find .idea-text-button{padding:8px 0;margin:0;color:var(--brand-primary);font-size:15px}
+.workspace-shell .simple-find .idea-help-note{font-size:14px;color:var(--brand-muted);margin:-8px 0 0}
+.workspace-shell .simple-find .primary-action{margin-top:4px;font-size:16px;min-height:48px}
+.workspace-shell .simple-find .idea-settings-block{border-top:1px solid var(--brand-line);margin-top:8px;padding-top:20px}
+.workspace-shell .simple-find .idea-scope-summary{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:0;border:0;background:none;margin:0}
+.workspace-shell .simple-find .idea-scope-summary strong{font-size:15px;font-weight:600}
+.workspace-shell .simple-find .idea-scope-summary p{margin:4px 0 0;font-size:14px;color:var(--brand-muted)}
+.workspace-shell .simple-find .idea-scope-summary button{flex-shrink:0;min-height:44px;padding:8px 12px;border-color:var(--brand-line)}
+.workspace-shell .simple-find .idea-extra-details{border-top:1px solid var(--brand-line);padding-top:12px}
+.workspace-shell .simple-find .idea-extra-details summary{font-size:15px}
+.workspace-shell .simple-find .idea-extra-details summary span{display:inline;font-size:14px;margin-left:8px}
+.workspace-shell .simple-find .idea-decision{background:var(--brand-soft);border-color:#b5c3f3;padding:20px}
+.workspace-shell .simple-find .idea-decision h2{font-size:22px;margin:0 0 12px}
+.workspace-shell .simple-find .idea-progress{display:flex;align-items:center;gap:10px;color:var(--brand-muted)}
+@media(max-width:760px){.workspace-shell .simple-find .discovery-hero h1{font-size:26px}.workspace-shell .simple-find .simple-idea-form{padding:20px 16px}.workspace-shell .simple-find .idea-scope-summary{align-items:flex-start;flex-direction:column;gap:12px}.workspace-shell .simple-find .idea-writing-tools{gap:4px 16px}.workspace-shell .simple-find #simple-topic{font-size:16px}.workspace-shell .simple-find .idea-extra-details summary span{display:block;margin-left:0}}
+.workspace-shell .library-page{max-width:1200px}
+.workspace-shell .library-page .idea-library-heading{padding:0;margin-bottom:24px;align-items:center}
+.workspace-shell .library-page .idea-library-heading h1{margin:0 0 8px}
+.workspace-shell .library-page .idea-library-heading p{margin:0;font-size:16px}
+.workspace-shell .library-page .idea-action{min-height:44px;padding:10px 16px}
+.workspace-shell .library-page .library-tools{padding:0;margin-bottom:24px;gap:16px}
+.workspace-shell .library-page .library-search{max-width:480px}
+.workspace-shell .library-page .library-search:focus-within{outline:3px solid var(--brand-primary);outline-offset:3px}
+.workspace-shell .library-page .category-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:24px;margin:0 0 32px;align-items:start}
+.workspace-shell .library-page .category-card{min-width:0;max-width:400px}
+.workspace-shell .library-page .category-tile{display:block;border-color:var(--brand-line);border-radius:12px;overflow:hidden}
+.workspace-shell .library-page .category-tile:hover{border-color:var(--brand-primary)}
+.workspace-shell .library-page .category-cover{aspect-ratio:16/9;object-fit:cover;background:var(--brand-sea);border-bottom:1px solid var(--brand-line)}
+.workspace-shell .library-page .category-tile-body{padding:20px}
+.workspace-shell .library-page .category-tile h2{font-size:20px;margin:0 0 12px;line-height:1.4;overflow-wrap:anywhere}
+.workspace-shell .library-page .category-tile h2::first-letter{text-transform:uppercase}
+.workspace-shell .library-page .category-meta{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:14px;line-height:1.5}
+.workspace-shell .library-page .category-count{color:var(--brand-ink);font-size:14px;font-weight:600}
+.workspace-shell .library-page .category-updated{color:var(--brand-muted)}
+.workspace-shell .library-page .category-tile-footer{margin-top:20px;padding-top:16px;color:var(--brand-primary);font-size:15px;font-weight:600}
+.workspace-shell .library-page .category-image-credit{font-size:14px;line-height:1.5;margin:8px 4px 0;color:var(--brand-muted)}
+.workspace-shell .library-page .category-image-credit a{color:inherit}
+.workspace-shell .library-page .library-empty{padding:40px 24px;text-align:center;background:#fff;border:1px solid var(--brand-line);border-radius:12px}
+.workspace-shell .library-page .library-empty h2{font-size:22px;margin-bottom:8px}
+.workspace-shell .library-page .library-empty p{color:var(--brand-muted);margin-bottom:20px}
+.workspace-shell .library-page .library-empty button{background:#fff;border:1px solid var(--brand-control);min-height:44px;padding:8px 16px;color:var(--brand-primary)}
+@media(max-width:760px){.workspace-shell .library-page .idea-library-heading{align-items:stretch;gap:20px}.workspace-shell .library-page .library-tools{align-items:stretch;gap:12px;margin-bottom:20px}.workspace-shell .library-page .category-grid{gap:20px}.workspace-shell .library-page .category-card{max-width:none}.workspace-shell .library-page .category-tile-body{padding:16px}}
+@media(max-width:1050px) and (min-width:761px){.workspace-shell .workspace-sidebar{width:224px}.workspace-shell .workspace-body{margin-left:224px}.workspace-shell .workspace-main{padding-inline:24px}}
+@media(max-width:760px){.workspace-shell .workspace-body{margin-left:0}.workspace-shell .workspace-sidebar{width:100%;padding:16px;max-height:calc(100dvh - 76px)}.workspace-shell .workspace-mobile-header{height:76px;padding:12px 16px;background:var(--brand-ink);color:#fff}.workspace-shell .workspace-mobile-header .logo{color:#fff;font-size:22px}.workspace-shell .workspace-mobile-header .logo__accent{color:var(--brand-sea);font-size:14px}.workspace-shell .workspace-mobile-header button{background:#254653;color:#fff;border-color:#7f8aa0}.workspace-shell .workspace-topbar{height:48px;padding-inline:16px}.workspace-shell .workspace-main{padding:24px 16px 64px}.workspace-shell .studio-heading h1,.workspace-shell .idea-library-heading h1,.workspace-shell .discovery-hero h1{font-size:26px}.workspace-shell .category-tile-body{padding:16px}.auth-screen .auth-panel{padding:28px 24px}.auth-screen h1{font-size:26px}}
+
+/* Editorial desk refinements for Category Ideas, Studio, and Planner */
+.workspace-shell .category-page .discovery-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:24px;margin:24px 0}
+.workspace-shell .category-page .discovery-card{background:#fff;border:1px solid var(--brand-line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:14px;box-shadow:none;transition:border-color .15s}
+.workspace-shell .category-page .discovery-card:hover{border-color:var(--brand-primary);box-shadow:none}
+.workspace-shell .idea-verification.is-reported{color:#0f766e;background:var(--brand-sea)}
+.workspace-shell .idea-verification.is-disputed{color:#92400e;background:#fffbeb}
+.workspace-shell .category-page .idea-title-action{font-family:'Plus Jakarta Sans',Arial,sans-serif;font-size:18px;font-weight:600;line-height:1.4;color:var(--brand-ink);text-align:left;padding:0;background:none;border:0}
+.workspace-shell .category-page .idea-title-action:hover{color:var(--brand-primary)}
+.workspace-shell .category-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:24px 0 16px;border-bottom:1px solid var(--brand-line);padding-bottom:14px}
+.workspace-shell .category-view-nav{display:flex;gap:8px}
+.workspace-shell .category-view-nav button{background:none;border:1px solid transparent;border-radius:8px;padding:8px 16px;font-size:14px;font-weight:600;color:var(--brand-muted);min-height:40px}
+.workspace-shell .category-view-nav button[aria-pressed=true]{background:var(--brand-soft);color:var(--brand-primary);border-color:#a8bbff}
+.workspace-shell .category-snapshot{display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:14px;color:var(--brand-muted);margin-bottom:20px}
+.workspace-shell .category-snapshot strong{color:var(--brand-ink);font-weight:600}
+
+/* Unified Editorial Studio Header & Workspace */
+.workspace-shell .studio-editorial-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--brand-line)}
+.workspace-shell .studio-editorial-header-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.workspace-shell .studio-title-lockup{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:2px 0 4px}
+.workspace-shell .studio-main-title{font-family:'Plus Jakarta Sans',Arial,sans-serif;font-size:clamp(22px,2.2vw,30px);font-weight:700;line-height:1.25;color:var(--brand-ink);margin:0}
+.workspace-shell .studio-editorial-badge{display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:4px 10px;border-radius:20px;background:var(--brand-soft);color:var(--brand-primary);border:1px solid #a8bbff;text-transform:uppercase;letter-spacing:0.04em}
+.workspace-shell .studio-editorial-badge[data-status="approved"],.workspace-shell .studio-editorial-badge[data-status="ready"]{background:#ecfdf3;color:#187548;border-color:#a6f4c5}
+.workspace-shell .studio-editorial-badge[data-status="unsaved"]{background:#fffbeb;color:#92400e;border-color:#fef08a}
+
+.workspace-shell .studio-research-strip{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--brand-muted);margin-top:2px}
+.workspace-shell .studio-research-pill{display:inline-flex;align-items:center;gap:6px;background:var(--brand-sea);color:#0f766e;border:1px solid #b2ddd4;border-radius:20px;padding:5px 12px;font-size:13px;font-weight:600;min-height:32px;cursor:pointer;transition:background .15s}
+.workspace-shell .studio-research-pill:hover{background:#c5e6dd}
+.workspace-shell .studio-research-indicator{width:7px;height:7px;border-radius:50%;background:#0f766e;display:inline-block}
+.workspace-shell .studio-research-divider{color:var(--brand-control)}
+.workspace-shell .studio-research-alt{color:var(--brand-muted);font-size:13px;font-weight:500;text-decoration:none}
+.workspace-shell .studio-research-alt:hover{color:var(--brand-primary);text-decoration:underline}
+
+.workspace-shell .studio-editorial-actions{display:flex;align-items:center;gap:10px;flex-shrink:0;margin-top:4px}
+.workspace-shell .studio-action-back{font-size:13px;font-weight:600;color:var(--brand-muted);text-decoration:none;padding:8px 12px;border-radius:8px;transition:color .15s}
+.workspace-shell .studio-action-back:hover{color:var(--brand-primary);background:var(--brand-soft)}
+
+/* Collapsible Research Briefing Drawer */
+.workspace-shell .studio-research-drawer{background:#f0fdfa;border:1px solid #ccfbf1;border-left:4px solid #0f766e;border-radius:10px;padding:20px 24px;margin:0 0 24px;animation:studioDrawerFadeIn .2s ease-out}
+@keyframes studioDrawerFadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.workspace-shell .studio-research-drawer-header h3{font-family:'Plus Jakarta Sans',Arial,sans-serif;font-size:16px;font-weight:700;color:#0f766e;margin:0 0 6px}
+.workspace-shell .studio-research-drawer-header p{font-size:14px;line-height:1.6;color:var(--brand-ink);margin:0 0 12px}
+.workspace-shell .studio-research-angle{font-size:14px;line-height:1.6;color:var(--brand-ink);margin:0 0 14px;padding:10px 14px;background:#fff;border-radius:8px;border:1px solid #d7eee8}
+.workspace-shell .studio-research-sources-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.workspace-shell .studio-research-source-item{background:#fff;border:1px solid #d7eee8;border-radius:8px;padding:12px 14px}
+.workspace-shell .studio-research-source-item a{font-size:13px;font-weight:600;color:#0f766e;text-decoration:none;display:block;margin-bottom:4px}
+.workspace-shell .studio-research-source-item a:hover{text-decoration:underline}
+.workspace-shell .studio-research-source-item p{font-size:12px;line-height:1.5;color:var(--brand-muted);margin:0}
+
+/* Stepper Bar */
+.workspace-shell .composer-navigation{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 24px;padding:0}
+.workspace-shell .composer-tools{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--brand-muted)}
+.workspace-shell .composer-tools select{min-height:40px;padding:6px 12px;border:1px solid var(--brand-control);border-radius:8px;background:#fff;font-size:13px;font-weight:600;color:var(--brand-ink)}
+
+/* Editor Column & Clean Segment Tabs */
+.workspace-shell .studio-editor-column{background:#fff;border:1px solid var(--brand-line);border-radius:14px;padding:0;overflow:hidden;box-shadow:none}
+.workspace-shell .composer-editor-heading{display:flex;align-items:center;justify-content:space-between;padding:18px 24px 14px;border-bottom:1px solid var(--brand-line);background:#fafbfc}
+.workspace-shell .composer-editor-heading h2{font-family:'Plus Jakarta Sans',Arial,sans-serif;font-size:18px;font-weight:700;color:var(--brand-ink);margin:0}
+.workspace-shell .composer-channel{display:inline-block;padding:4px 10px;border-radius:6px;background:var(--brand-soft);color:var(--brand-primary);border:1px solid #a8bbff;font-size:12px;font-weight:700}
+
+.workspace-shell .composer-content-nav{display:flex;gap:8px;padding:14px 24px;border-bottom:1px solid var(--brand-line);background:#fff;overflow-x:auto}
+.workspace-shell .composer-content-nav button{display:flex;flex-direction:column;gap:2px;padding:8px 14px;border-radius:8px;border:1px solid var(--brand-line);background:#fff;color:var(--brand-ink);cursor:pointer;min-width:90px;text-align:left;transition:all .15s}
+.workspace-shell .composer-content-nav button:hover{background:var(--brand-soft);border-color:#a8bbff}
+.workspace-shell .composer-content-nav button[aria-pressed=true]{background:var(--brand-soft);border-color:var(--brand-primary);color:var(--brand-primary);box-shadow:inset 0 -2px 0 var(--brand-primary)}
+.workspace-shell .composer-content-nav button strong{font-size:13px;font-weight:700}
+.workspace-shell .composer-content-nav button span{font-size:11px;color:var(--brand-muted)}
+
+/* Field Cards - Flattened & Clean */
+.workspace-shell .editor-block{border:0;background:transparent;padding:0;margin:0}
+.workspace-shell .editor-block h3{display:none}
+.workspace-shell .composer-field{background:#fff;border:1px solid var(--brand-line);border-radius:10px;padding:18px 20px;margin:16px 24px}
+.workspace-shell .composer-field-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.workspace-shell .composer-field-title-group{display:flex;align-items:center;gap:10px}
+.workspace-shell .composer-field-title-group strong{font-family:'Plus Jakarta Sans',Arial,sans-serif;font-size:15px;font-weight:700;color:var(--brand-ink)}
+.workspace-shell .composer-field-count{font-size:12px;color:var(--brand-muted);font-weight:500}
+.workspace-shell .composer-field-actions{display:flex;align-items:center;gap:8px}
+.workspace-shell .composer-action-btn{font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;border:1px solid var(--brand-control);background:#fff;color:var(--brand-ink);min-height:30px;cursor:pointer}
+.workspace-shell .composer-action-btn:hover:not(:disabled){border-color:var(--brand-primary);color:var(--brand-primary)}
+.workspace-shell .composer-readable-copy{font-size:18px;line-height:1.65;color:var(--brand-ink);margin:0 0 12px;white-space:pre-wrap;font-family:'Source Sans 3',Arial,sans-serif}
+.workspace-shell .composer-field-footer{display:flex;align-items:center;justify-content:flex-end;margin-top:8px}
+.workspace-shell .composer-source-tag{display:inline-flex;align-items:center;gap:6px;background:#f0fdfa;color:#0f766e;border:1px solid #d7eee8;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600;min-height:28px;cursor:pointer}
+.workspace-shell .composer-source-tag:hover{background:#d7eee8}
+.workspace-shell .source-indicator{width:6px;height:6px;border-radius:50%;background:#0f766e;display:inline-block}
+
+/* Preview Frame Enhancements */
+.workspace-shell .instagram-preview{background:#fff;border:1px solid var(--brand-line);border-radius:14px;padding:20px}
+.workspace-shell .instagram-post{border:1px solid #e2e8f0;border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(20,44,56,0.06)}
+.workspace-shell .instagram-media{background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 100%)}
+.workspace-shell .instagram-slide h3{font-family:'Plus Jakarta Sans',Arial,sans-serif;font-weight:700;color:var(--brand-ink)}
+.workspace-shell .instagram-caption{font-family:'Source Sans 3',Arial,sans-serif}
+
+@media(max-width:900px){
+  .workspace-shell .studio-editorial-header{flex-direction:column;gap:16px}
+  .workspace-shell .studio-editorial-actions{width:100%;justify-content:flex-start}
+  .workspace-shell .composer-navigation{flex-direction:column;align-items:stretch;gap:12px}
+  .workspace-shell .composer-field{margin:12px 16px}
+  .workspace-shell .composer-content-nav{padding:12px 16px}
+}
+
+
+
+
+.workspace-shell .composer-readable-copy{font-size:18px;line-height:1.65;color:var(--brand-ink);margin:12px 0 16px}
+.workspace-shell .workflow-primary{background:var(--brand-primary);color:#fff;border:1px solid var(--brand-primary);border-radius:8px;min-height:44px;font-weight:600;padding:10px 20px}
+.workspace-shell .workflow-primary:hover:not(:disabled){background:var(--brand-hover)}
+
+.workspace-shell .studio-back-link{font-size:14px;font-weight:600;color:var(--brand-muted);text-decoration:none}
+.workspace-shell .studio-back-link:hover{color:var(--brand-primary)}
+.workspace-shell .studio-toolbar-actions{display:flex;align-items:center;gap:12px}
+.workspace-shell .studio-planner-btn{font-size:13px;font-weight:600;background:var(--brand-soft);color:var(--brand-primary);border:1px solid #a8bbff;border-radius:8px;padding:8px 14px;min-height:38px}
+.workspace-shell .studio-planner-btn:hover:not(:disabled){background:var(--brand-primary);color:#fff}
+.workspace-shell .studio-planner-link{font-size:13px;font-weight:600;color:var(--brand-muted);text-decoration:none}
+.workspace-shell .studio-planner-link:hover{color:var(--brand-primary)}
+.workspace-shell .studio-continue-btn{font-size:14px;font-weight:600;color:var(--brand-primary);background:none;border:1px solid #a8bbff;border-radius:8px;padding:10px 18px;min-height:44px}
+.workspace-shell .studio-continue-btn:hover{background:var(--brand-soft)}
+
+
+
+/* Planner Columns */
+.workspace-shell .studio-home .studio-home-heading{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:28px}
+.workspace-shell .studio-home .studio-home-heading h1{font-size:32px;line-height:1.25;margin:0 0 10px}
+.workspace-shell .studio-home .studio-home-heading p{color:var(--brand-muted);font-size:16px;margin:0}
+.workspace-shell .studio-home .studio-home-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.workspace-shell .studio-home .studio-home-actions :is(a,button){font-size:16px;min-height:44px;padding:12px 18px;border-radius:8px;white-space:nowrap}
+.workspace-shell .studio-home .studio-home-actions :is(a,button){display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;box-sizing:border-box;font-weight:600;text-decoration:none;transition:background-color .16s,border-color .16s,box-shadow .16s}
+.workspace-shell .studio-home .studio-home-actions svg{flex:none}
+.workspace-shell .studio-home .studio-home-actions .primary-action{background:var(--brand-primary);color:white;border:1px solid var(--brand-primary)}
+.workspace-shell .studio-home .studio-home-actions .primary-action:hover{background:var(--brand-hover);border-color:var(--brand-hover)}
+.workspace-shell .studio-home .studio-article-action{background:white;color:var(--brand-ink);border:1px solid var(--brand-control)}
+.workspace-shell .studio-home .studio-article-action:hover,.workspace-shell .studio-home .studio-article-action[aria-expanded=true]{background:var(--brand-soft);border-color:var(--brand-primary);color:var(--brand-primary)}
+.workspace-shell .studio-home .studio-home-actions :is(a,button):focus-visible{outline:2px solid var(--brand-primary);outline-offset:4px}
+@media(max-width:420px){.workspace-shell .studio-home .studio-home-actions{display:grid;grid-template-columns:1fr;width:100%}.workspace-shell .studio-home .studio-home-actions :is(a,button){width:100%}}
+@media(prefers-reduced-motion:reduce){.workspace-shell .studio-home .studio-home-actions :is(a,button){transition:none}}
+.workspace-shell .studio-home .studio-saved-work{padding:0;border:0;background:transparent;box-shadow:none}
+.workspace-shell .studio-home .studio-library-heading{margin-bottom:16px}
+.workspace-shell .studio-home .studio-package-list{grid-template-columns:1fr;gap:12px}
+.workspace-shell .studio-home .studio-package-list>a{padding:20px 24px;display:grid;grid-template-columns:80px minmax(0,1fr) auto;align-items:center;gap:8px 20px;border-radius:10px;background:white}
+.workspace-shell .studio-home .studio-package-list>a>strong{font-size:18px;line-height:1.45}
+.workspace-shell .studio-home .studio-package-list>a>span:nth-of-type(2){grid-column:2;font-size:14px;color:var(--brand-muted)}
+.workspace-shell .studio-home .studio-package-list>a>.studio-draft-open{grid-column:3;grid-row:1 / 3;margin:0}
+@media(max-width:700px){
+ .workspace-shell .studio-home .studio-home-heading{align-items:stretch;flex-direction:column;gap:18px;margin-bottom:24px}
+ .workspace-shell .studio-home .studio-home-heading h1{font-size:26px}
+ .workspace-shell .studio-home .studio-home-actions{gap:8px}
+ .workspace-shell .studio-home .studio-home-actions :is(a,button){white-space:normal;padding:10px 12px;font-size:15px}
+ .workspace-shell .studio-home .studio-package-list>a{grid-template-columns:1fr;padding:18px;gap:12px}
+ .workspace-shell .studio-home .studio-package-list>a>span:nth-of-type(2),.workspace-shell .studio-home .studio-package-list>a>.studio-draft-open{grid-column:1;grid-row:auto}
+}
+.workspace-shell .studio-composer .composer-creative-brief{margin:24px 0 0;border-top:1px solid var(--brand-line);padding:16px 0}
+.workspace-shell .studio-composer .composer-creative-brief>summary{cursor:pointer;min-height:44px;font-weight:600;color:var(--brand-ink);padding:8px 0}
+.workspace-shell .studio-composer .composer-creative-brief>summary span{display:block;padding:4px 0 0 18px;font-size:14px;font-weight:400;color:var(--brand-muted)}
+.workspace-shell .studio-composer .composer-creative-brief>p{color:var(--brand-muted);font-size:16px;line-height:1.5;max-width:65ch}
+.workspace-shell .studio-composer .composer-creative-brief .composer-notes-picker{display:grid;gap:8px;margin:16px 0}
+/* Keep secondary Studio actions available without competing with the draft. */
+/* Custom Styled Editorial Select Dropdowns */
+.workspace-shell .studio-custom-select-wrapper{position:relative;display:inline-flex;align-items:center;min-width:0}
+.workspace-shell .studio-custom-select, .content-workflow .studio-custom-select{appearance:none;-webkit-appearance:none;-moz-appearance:none;background:#fff;border:1px solid var(--brand-line);border-radius:8px;padding:8px 36px 8px 14px;font-family:'Source Sans 3',Arial,sans-serif;font-size:14px;font-weight:600;color:var(--brand-ink);min-height:40px;line-height:1.4;cursor:pointer;transition:border-color .15s,box-shadow .15s;box-shadow:none;width:auto;margin:0}
+.workspace-shell .studio-custom-select:hover{border-color:var(--brand-control)}
+.workspace-shell .studio-custom-select:focus-visible{outline:3px solid var(--brand-primary);outline-offset:2px;border-color:var(--brand-primary)}
+.workspace-shell .studio-select-chevron{position:absolute;right:12px;pointer-events:none;color:var(--brand-muted);flex-shrink:0}
+
+/* Supporting Tools Dropdown in Composer Navigation */
+.workspace-shell .composer-navigation{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 24px;padding:0}
+.workspace-shell .composer-tools{display:flex;align-items:center;gap:12px;margin-left:auto}
+.workspace-shell .composer-tools-label{font-size:13px;font-weight:600;color:var(--brand-muted);white-space:nowrap}
+
+/* Inline Platform & Creative Brief Selects */
+.workspace-shell .studio-select-inline{display:flex;align-items:center;gap:12px;margin:16px 24px 8px}
+.workspace-shell .studio-select-inline label{font-size:13px;font-weight:600;color:var(--brand-muted);margin:0;white-space:nowrap}
+.workspace-shell .composer-creative-brief .composer-notes-picker{display:flex;align-items:center;gap:14px;margin:16px 0}
+.workspace-shell .composer-creative-brief .composer-notes-picker label{font-size:14px;font-weight:600;color:var(--brand-ink);margin:0;white-space:nowrap}
+
+
+
+
+
+
+
+
+
+
+
+.workspace-shell .planner-board{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin:24px 0}
+.workspace-shell .planner-column{background:#f8f9fc;border:1px solid var(--brand-line);border-radius:12px;padding:18px}
+.workspace-shell .planner-card{background:#fff;border:1px solid var(--brand-line);border-radius:10px;padding:18px;margin-top:14px;box-shadow:none}
+.workspace-shell .planner-card h3{font-size:16px;font-weight:600;line-height:1.4;margin:8px 0 12px}
+.workspace-shell .planner-card .planner-open{background:var(--brand-soft);color:var(--brand-primary);border:1px solid #a8bbff;border-radius:8px;font-size:14px;font-weight:600}
+.workspace-shell .planner-card .planner-open:hover{background:var(--brand-primary);color:#fff}
+
+/* Expanded actions float above the workspace instead of sizing the header. */
+.workspace-shell .studio-composer .studio-editorial-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start}
+.workspace-shell .studio-composer .studio-editorial-actions{min-width:0;flex-wrap:wrap;justify-content:flex-end}
+.workspace-shell .studio-composer .studio-options{position:relative;min-width:0;flex:none}
+.workspace-shell .studio-composer .studio-options>summary{display:flex;align-items:center;justify-content:center;gap:10px;min-height:44px;padding:8px 14px;border:1px solid var(--brand-line);border-radius:8px;background:white;color:var(--brand-ink);cursor:pointer;font-size:15px;font-weight:600;list-style:none}
+.workspace-shell .studio-composer .studio-options>summary::-webkit-details-marker{display:none}
+.workspace-shell .studio-composer .studio-options>summary::after{content:'⌄'}
+.workspace-shell .studio-composer .studio-options>summary:focus-visible{outline:2px solid var(--brand-primary);outline-offset:3px}
+.workspace-shell .studio-composer .studio-options[open]>summary{background:var(--brand-soft);color:var(--brand-primary)}
+.workspace-shell .studio-composer .studio-options-list{position:absolute;right:0;top:calc(100% + 6px);z-index:30;display:grid;width:280px;max-width:calc(100vw - 48px);max-height:min(480px,65vh);overflow:auto;padding:6px;background:white;border:1px solid var(--brand-line);border-radius:10px;box-shadow:0 8px 24px #142c3814}
+.workspace-shell .studio-composer .studio-options-list :is(button,a){display:flex;align-items:center;justify-content:flex-start;box-sizing:border-box;width:100%;min-height:44px;margin:0;padding:10px 12px;border:0;border-radius:6px;background:transparent;color:var(--brand-ink);font-size:15px;text-align:left;text-decoration:none;white-space:normal;box-shadow:none}
+.workspace-shell .studio-composer .studio-options-list :is(button,a):hover{background:var(--brand-soft)}
+.workspace-shell .studio-composer .composer-field-options .studio-options-list{width:200px}
+@media(max-width:1000px){
+ .workspace-shell .studio-composer .studio-editorial-header{grid-template-columns:minmax(0,1fr);gap:12px}
+ .workspace-shell .studio-composer .studio-editorial-actions{width:100%;justify-content:space-between}
+}
+
+
+/* ==========================================================================
+   Unified Studio Navigation, Tools & Dropdowns (The Creator's Editorial Desk)
+   ========================================================================== */
+.workspace-shell .composer-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 24px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--brand-line);
+}
+.workspace-shell .composer-navigation .studio-section-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.workspace-shell .composer-navigation .studio-section-nav button {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 16px;
+  font-family: 'Source Sans 3', Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--brand-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transition: all .15s ease-in-out;
+  box-shadow: none;
+}
+.workspace-shell .composer-navigation .studio-section-nav button:hover:not(:disabled) {
+  color: var(--brand-ink);
+  background: var(--brand-soft);
+}
+.workspace-shell .composer-navigation .studio-section-nav button[aria-pressed=true] {
+  color: var(--brand-primary);
+  background: var(--brand-soft);
+  border-color: #a8bbff;
+  font-weight: 700;
+}
+.workspace-shell .composer-navigation .studio-section-nav button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Tools Group on the Right */
+.workspace-shell .composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.workspace-shell .composer-tools-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-muted);
+  white-space: nowrap;
+  margin: 0;
+  line-height: 1;
+}
+
+/* Custom Editorial Select Dropdowns */
+.workspace-shell .studio-custom-select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.workspace-shell .studio-custom-select,
+.content-workflow .studio-custom-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: #fff;
+  border: 1px solid var(--brand-control);
+  border-radius: 8px;
+  padding: 0 36px 0 14px;
+  font-family: 'Source Sans 3', Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-ink);
+  height: 40px;
+  min-height: 40px;
+  line-height: 38px;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+  box-shadow: none;
+  width: auto;
+  margin: 0;
+}
+.workspace-shell .studio-custom-select:hover {
+  border-color: var(--brand-primary);
+}
+.workspace-shell .studio-custom-select:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+  border-color: var(--brand-primary);
+}
+.workspace-shell .studio-select-chevron {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--brand-muted);
+  flex-shrink: 0;
+}
+
+/* Header Editorial Actions */
+.workspace-shell .studio-editorial-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.workspace-shell .studio-action-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-muted);
+  text-decoration: none;
+  border: 1px solid var(--brand-line);
+  border-radius: 8px;
+  background: #fff;
+  transition: all .15s;
+}
+.workspace-shell .studio-action-back:hover {
+  color: var(--brand-primary);
+  border-color: var(--brand-control);
+  background: var(--brand-soft);
+}
+.workspace-shell .studio-planner-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 1px solid var(--brand-control);
+  background: #fff;
+  color: var(--brand-ink);
+  font-family: 'Source Sans 3', Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  box-shadow: none;
+}
+.workspace-shell .studio-planner-btn:hover:not(:disabled) {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+  background: var(--brand-soft);
+}
+.workspace-shell .studio-planner-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.workspace-shell .studio-planner-link {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  text-decoration: none;
+  padding: 0 8px;
+  height: 38px;
+}
+.workspace-shell .studio-planner-link:hover {
+  text-decoration: underline;
+}
+
+/* Secondary Panel Back Button */
+.workspace-shell .studio-panel-back-row {
+  margin: 0 0 16px;
+}
+.workspace-shell .studio-panel-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  background: var(--brand-soft);
+  border: 1px solid #a8bbff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.workspace-shell .studio-panel-back-btn:hover {
+  background: #dbe4ff;
+}

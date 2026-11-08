@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { studioRequest, type ContentStrategy, type StudioContent } from '@/services/studio-api'
-import { authHeaders } from '@/services/firebase'
+import { studioRequest, studioAuthHeaders, type ContentStrategy, type StudioContent } from '@/services/studio-api'
+
 import { renderReel } from '@/services/reel'
 import { useAuth } from '@/context/auth-state'
 
@@ -10,7 +10,7 @@ type MediaRequest = { kind: Kind; prompt: string; requestId: string; confirmCost
 type MediaConfig = Record<Kind, { enabled: boolean; estimatedUsd: number | null }>
 const clean = (text: string) => text.replace(/\s*\[C\d+\]/g, '').trim()
 
-export function StudioMedia({ packageId, initialPrompt, script, strategy, scenes, disabled = false }: { packageId: string; initialPrompt: string; script: string; strategy?: ContentStrategy; scenes: StudioContent['scenes']; disabled?: boolean }) {
+export function StudioMedia({ packageId, initialPrompt, script, strategy, scenes, disabled = false }: { packageId: string; initialPrompt: string; script: string; strategy?: ContentStrategy; scenes: NonNullable<StudioContent['scenes']>; disabled?: boolean }) {
   const { identity } = useAuth()
   const pendingKey = `signal_media_pending:${identity?.uid}:${packageId}`
   const [pending, setPending] = useState<MediaRequest | null>(() => { try { return JSON.parse(sessionStorage.getItem(pendingKey) || 'null') } catch { return null } })
@@ -69,7 +69,7 @@ export function StudioMedia({ packageId, initialPrompt, script, strategy, scenes
     try { await action() } catch (cause) { setError(cause instanceof Error ? cause.message : 'Media request failed.') } finally { setBusy('') }
   }
   async function assetFile(asset: Asset) {
-    const response = await fetch(`/api/studio/assets/${asset.id}/file`, { headers: await authHeaders() })
+    const response = await fetch(`/api/studio/assets/${asset.id}/file`, { headers: await studioAuthHeaders() })
     if (!response.ok) throw new Error('Could not load the generated asset.')
     return response.blob()
   }

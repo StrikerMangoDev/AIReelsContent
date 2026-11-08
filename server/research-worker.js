@@ -11,7 +11,7 @@ if (env.STUDIO_RESEARCH_SCHEDULER !== 'true' || !env.OPENROUTER_API_KEY) {
   process.once('SIGINT', () => controller.abort()); process.once('SIGTERM', () => controller.abort())
   try {
     do {
-      try { console.log(JSON.stringify({ event: 'niche_refresh', ...await refreshNextNiche(repository) })) }
+      try { console.log(JSON.stringify({ event: 'niche_refresh', ...await refreshNextNiche({ repository }) })) }
       catch { console.error(JSON.stringify({ event: 'niche_refresh', status: 'storage_unavailable' })) }
       if (process.argv.includes('--once') || controller.signal.aborted) break
       await setTimeout(60000, undefined, { signal: controller.signal })

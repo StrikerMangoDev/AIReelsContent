@@ -1,0 +1,48 @@
+.planner-page { max-width:1320px; }
+.planner-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin:24px 0; }
+.planner-toolbar [role=group] { display:flex; gap:6px; margin-right:auto; }
+.planner-toolbar button[aria-pressed=true] { color:var(--brand-primary); background:var(--brand-soft); border-color:#a8bbff; }
+.planner-add { padding:16px 20px; border:1px solid #e4e7ec; background:#fff; border-radius:12px; margin-bottom:24px; }
+.planner-add form { display:flex; align-items:end; gap:12px; }
+.planner-add label { flex:1; margin:0; }
+.planner-board { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; align-items:start; }
+.planner-column { min-width:0; padding:16px; border:1px solid #e4e7ec; border-radius:12px; background:#f8f9fc; }
+.planner-column > header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.planner-column h2 { font-size:19px; margin:0; }
+.planner-column > header > span { padding:3px 9px; background:var(--brand-soft); border-radius:20px; color:var(--brand-hover); font-size:12px; }
+.planner-column > p { font-size:13px; color:var(--brand-muted); }
+.planner-card { padding:16px; margin-top:16px; background:#fff; border:1px solid #e1e5ed; border-radius:10px; }
+.planner-card h3 { font-size:16px; line-height:1.5; overflow-wrap:anywhere; margin:8px 0 12px; }
+.planner-card h3 a { color:#202936; text-decoration:none; }
+.planner-platform { font-size:11px; color:var(--brand-hover); background:var(--brand-soft); padding:4px 7px; border-radius:5px; }
+.planner-card label { font-size:12px; margin:14px 0; }
+.planner-card .studio-muted { font-size:12px; }
+.planner-card-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.planner-card-actions button { font-size:12px; }
+.planner-attention { font-size:13px; color:#854d0e; background:#fff8e5; padding:10px; border-radius:6px; }
+.planner-empty { padding:18px 10px; color:var(--brand-muted); font-size:14px; line-height:1.7; }
+.planner-empty a { display:block; }
+.planner-date-view { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:20px; }
+.planner-date-heading { font-size:14px; margin:20px 0 0; }
+@media(max-width:1000px) { .planner-board { grid-template-columns:1fr; } }
+@media(max-width:650px) { .planner-date-view { grid-template-columns:1fr; } .planner-add form { align-items:stretch; flex-direction:column; } .planner-toolbar { gap:10px; } }
+
+/* Stage colors reinforce the written labels; the sequence stays readable without color. */
+.planner-column h2 { display:flex; align-items:center; gap:8px; }
+.planner-column--saved { border-top:3px solid var(--brand-primary); }
+.planner-column--progress { border-top:3px solid #bc8c3f; }
+.planner-column--ready { border-top:3px solid #388574; }
+.planner-column--progress > header > span { background:#f6ecd8; color:#795314; }
+.planner-column--ready > header > span { background:#e2f2ec; color:#246556; }
+.planner-column--progress h2 svg { color:#956319; }
+.planner-column--ready h2 svg { color:#267564; }
+.planner-card .planner-open,.planner-card button.planner-open { display:flex; align-items:center; justify-content:center; width:100%; min-height:44px; padding:10px 12px; box-sizing:border-box; border:1px solid #a8bbff; border-radius:8px; background:var(--brand-soft); color:var(--brand-primary); font-size:14px; font-weight:600; text-decoration:none; }
+.planner-column--ready .planner-open { background:#edf7f2; color:#246556; border-color:#c7dfd4; }
+.planner-card form { border-top:1px solid #edf0f4; margin-top:16px; padding-top:2px; }
+.planner-card-actions button:last-child { background:transparent; border-color:transparent; color:var(--brand-muted); }
+.planner-page :is(button,a,input,select):focus-visible { outline:3px solid var(--brand-primary); outline-offset:3px; }
+@media(max-width:650px) { .planner-column { padding:14px; } }
+
+.planner-add[hidden] { display:none; }
+.planner-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:24px; border-top:1px solid #e4e7ec; padding-top:16px; }
+.planner-footer p { font-size:12px; color:#596579; margin:0; }

@@ -11,6 +11,7 @@ firebase-admin*.json
 .vercel/
 server/data/
 coverage/
+validation/
 .DS_Store
 .vscode/*
 !.vscode/extensions.json

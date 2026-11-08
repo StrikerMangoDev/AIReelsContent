@@ -9,7 +9,7 @@ function response() {
 const request = { method: 'GET', headers: { authorization: `Bearer ${secret}` } }
 
 test('cron rejects unauthenticated requests before loading ingestion', async () => {
-  const handler = createCronHandler({ secret, loadCollection: () => { throw new Error('must not load') } })
+  const handler = createCronHandler({ secret, enabled: true, loadCollection: () => { throw new Error('must not load') } })
   const res = response()
   await handler({ method: 'GET', headers: {} }, res)
   assert.equal(res.statusCode, 401)
@@ -18,7 +18,7 @@ test('cron rejects unauthenticated requests before loading ingestion', async () 
 test('cron identifies failed storage operation without logging database details or credentials', async () => {
   const logs = []
   const failure = Object.assign(new Error('sensitive row value'), { operation: 'acquire_lease', cause: { code: '42883', message: 'private credential', details: 'private row' } })
-  const handler = createCronHandler({ secret, loadCollection: async () => async () => { throw failure }, log: value => logs.push(value) })
+  const handler = createCronHandler({ secret, enabled: true, loadCollection: async () => async () => { throw failure }, log: value => logs.push(value) })
   const res = response()
   await handler(request, res)
   assert.equal(res.statusCode, 500)
@@ -30,14 +30,14 @@ test('cron identifies failed storage operation without logging database details 
 })
 
 test('publisher-only refresh never loads Vertex and records startup import failures', async () => {
-  const handler = createCronHandler({ secret, now: () => new Date('2026-10-01T07:00:00Z'), loadCollection: async () => async () => ({ status: 'success', saved: 5 }), loadIngestion: () => { throw new Error('must not load Vertex') } })
+  const handler = createCronHandler({ secret, enabled: true, now: () => new Date('2026-10-01T07:00:00Z'), loadCollection: async () => async () => ({ status: 'success', saved: 5 }), loadIngestion: () => { throw new Error('must not load Vertex') } })
   const res = response()
   await handler(request, res)
   assert.equal(res.statusCode, 200)
   assert.equal(res.body.collected.saved, 5)
   assert.equal(res.body.curated.status, 'skipped')
   const logs = []
-  const broken = createCronHandler({ secret, loadCollection: async () => { throw Object.assign(new Error('private path'), { code: 'ERR_MODULE_NOT_FOUND' }) }, log: value => logs.push(value) })
+  const broken = createCronHandler({ secret, enabled: true, loadCollection: async () => { throw Object.assign(new Error('private path'), { code: 'ERR_MODULE_NOT_FOUND' }) }, log: value => logs.push(value) })
   await broken(request, response())
   assert.equal(logs[0].stage, 'load_collection')
   assert.equal(logs[0].code, 'ERR_MODULE_NOT_FOUND')

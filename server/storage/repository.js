@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { budgetError, validateAmount, validateBudgetOwner, validateQuote, nextReservation } from '../budget/policy.js'
 
 export function createRepository(filename) {
   if (filename !== ':memory:') mkdirSync(dirname(resolve(filename)), { recursive: true })
@@ -23,6 +24,10 @@ export function createRepository(filename) {
     CREATE TABLE IF NOT EXISTS studio_revisions (uid TEXT NOT NULL, kind TEXT NOT NULL, id TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(uid,kind,id,revision));
     CREATE TABLE IF NOT EXISTS studio_reservations (uid TEXT NOT NULL, request_id TEXT NOT NULL, attempted_at INTEGER NOT NULL, PRIMARY KEY(uid,request_id));
     CREATE INDEX IF NOT EXISTS studio_reservations_time ON studio_reservations(uid,attempted_at);
+    CREATE TABLE IF NOT EXISTS studio_jobs (uid TEXT NOT NULL, request_id TEXT NOT NULL, attempted_at INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(uid,request_id));
+    CREATE INDEX IF NOT EXISTS studio_jobs_time ON studio_jobs(uid,attempted_at);
+    CREATE TABLE IF NOT EXISTS budget_limits (owner TEXT NOT NULL, currency TEXT NOT NULL, limit_micros INTEGER NOT NULL, PRIMARY KEY(owner,currency));
+    CREATE TABLE IF NOT EXISTS budget_reservations (owner TEXT NOT NULL, request_id TEXT NOT NULL, currency TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(owner,request_id));
     INSERT OR IGNORE INTO schema_versions VALUES (1);`)
 
   if (!db.prepare('SELECT 1 FROM schema_versions WHERE version=2').get()) {
@@ -39,8 +44,127 @@ export function createRepository(filename) {
 
   const insert = db.prepare("INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE json_extract(articles.payload, '$.summaryBasis')='publisher-excerpt' AND coalesce(json_extract(excluded.payload, '$.summaryBasis'),'curated') != 'publisher-excerpt'")
   return {
+    budgetConfigure(currency, owner, globalLimitMicros, ownerLimitMicros) {
+      validateBudgetOwner(owner, currency); validateAmount(globalLimitMicros); validateAmount(ownerLimitMicros)
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const put = db.prepare('INSERT INTO budget_limits VALUES (?,?,?) ON CONFLICT(owner,currency) DO UPDATE SET limit_micros=excluded.limit_micros')
+        put.run('*', currency, globalLimitMicros); put.run(owner, currency, ownerLimitMicros)
+        db.exec('COMMIT')
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+    },
+    budgetGet(owner, requestId) {
+      const row = db.prepare('SELECT payload FROM budget_reservations WHERE owner=? AND request_id=?').get(owner, requestId)
+      return row ? JSON.parse(row.payload) : null
+    },
+    budgetSummary(owner, currency = 'USD') {
+      validateBudgetOwner(owner, currency)
+      const summary = { currency, limitMicros: db.prepare('SELECT limit_micros FROM budget_limits WHERE owner=? AND currency=?').get(owner, currency)?.limit_micros || 0, heldMicros: 0, settledMicros: 0, overageBlocked: false, unreconciledCount: 0 }
+      for (const row of db.prepare('SELECT payload FROM budget_reservations WHERE owner=? AND currency=?').all(owner, currency)) {
+        const value = JSON.parse(row.payload)
+        if (value.status === 'settled') summary.settledMicros += value.actualMicros
+        else if (value.status !== 'cancelled') { summary.heldMicros += value.quote.upperBoundMicros; summary.unreconciledCount++ }
+        summary.overageBlocked ||= Boolean(value.overage)
+      }
+      return summary
+    },
+    budgetReserve(owner, requestId, scopeHash, quote) {
+      validateBudgetOwner(owner, quote?.currency); validateQuote(quote)
+      if (typeof requestId !== 'string' || !requestId || requestId.length > 200 || !/^[a-f0-9]{64}$/.test(scopeHash)) throw budgetError('Invalid monetary request')
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const prior = db.prepare('SELECT payload FROM budget_reservations WHERE owner=? AND request_id=?').get(owner, requestId)
+        if (prior) {
+          const reservation = JSON.parse(prior.payload)
+          if (reservation.scopeHash !== scopeHash || reservation.quote.currency !== quote.currency || reservation.quote.upperBoundMicros !== quote.upperBoundMicros) throw budgetError('Monetary request scope changed')
+          db.exec('COMMIT'); return { reserved: false, reservation }
+        }
+        const rows = db.prepare('SELECT owner,payload FROM budget_reservations WHERE currency=?').all(quote.currency)
+        if (rows.some(row => JSON.parse(row.payload).overage)) throw budgetError('Unreconciled overage blocks further reservations')
+        let globalUsed = 0; let ownerUsed = 0
+        for (const row of rows) {
+          const value = JSON.parse(row.payload)
+          const amount = value.status === 'settled' ? value.actualMicros : value.status === 'cancelled' ? 0 : value.quote.upperBoundMicros
+          globalUsed += amount; if (row.owner === owner) ownerUsed += amount
+        }
+        const cap = key => db.prepare('SELECT limit_micros FROM budget_limits WHERE owner=? AND currency=?').get(key, quote.currency)?.limit_micros || 0
+        if (globalUsed + quote.upperBoundMicros > cap('*') || ownerUsed + quote.upperBoundMicros > cap(owner)) throw budgetError('Global or owner budget exhausted')
+        const now = new Date().toISOString()
+        const reservation = { id: requestId, scopeHash, quote, status: 'reserved', revision: 1, createdAt: now, updatedAt: now, cancellationRequested: false }
+        db.prepare('INSERT INTO budget_reservations VALUES (?,?,?,?)').run(owner, requestId, quote.currency, JSON.stringify(reservation))
+        db.exec('COMMIT'); return { reserved: true, reservation }
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+    },
+    budgetTransition(owner, requestId, expectedRevision, action, actualMicros) {
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const row = db.prepare('SELECT payload FROM budget_reservations WHERE owner=? AND request_id=?').get(owner, requestId)
+        const current = row && JSON.parse(row.payload)
+        if (!current || !Number.isInteger(expectedRevision) || current.revision !== expectedRevision) throw budgetError('Monetary reservation changed or is unavailable')
+        if (action === 'dispatch' && db.prepare("SELECT 1 FROM budget_reservations WHERE currency=? AND json_extract(payload,'$.overage')=1 LIMIT 1").get(current.quote.currency)) throw budgetError('Unreconciled overage blocks dispatch')
+        if (action === 'dispatch') {
+          let total = 0; let owned = 0
+          for (const row of db.prepare('SELECT owner,payload FROM budget_reservations WHERE currency=?').all(current.quote.currency)) {
+            const value = JSON.parse(row.payload)
+            const amount = value.status === 'settled' ? value.actualMicros : value.status === 'cancelled' ? 0 : value.quote.upperBoundMicros
+            total += amount; if (row.owner === owner) owned += amount
+          }
+          const cap = key => db.prepare('SELECT limit_micros FROM budget_limits WHERE owner=? AND currency=?').get(key, current.quote.currency)?.limit_micros || 0
+          if (total > cap('*') || owned > cap(owner)) throw budgetError('Current global or owner budget blocks dispatch')
+        }
+        const reservation = nextReservation(current, action, actualMicros)
+        db.prepare('UPDATE budget_reservations SET payload=? WHERE owner=? AND request_id=?').run(JSON.stringify(reservation), owner, requestId)
+        db.exec('COMMIT'); return reservation
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+    },
+    studioPendingJobs(limit = 20) {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid pending job limit')
+      return db.prepare("SELECT uid,request_id AS id FROM studio_jobs WHERE json_extract(payload,'$.status')='reserved' AND json_extract(payload,'$.ready')=1 ORDER BY attempted_at,uid,request_id LIMIT ?").all(limit)
+    },
+    studioJobGet(uid, requestId) {
+      const row = db.prepare('SELECT payload FROM studio_jobs WHERE uid=? AND request_id=?').get(uid, requestId)
+      return row ? JSON.parse(row.payload) : null
+    },
+    studioJobReserve(uid, requestId, scopeHash, limit, scope = {}) {
+      if (!uid || !requestId || !/^[a-f0-9]{64}$/.test(scopeHash) || !Number.isInteger(limit) || limit < 0 || !scope || typeof scope !== 'object' || Array.isArray(scope)) throw new Error('Invalid job reservation')
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const row = db.prepare('SELECT payload FROM studio_jobs WHERE uid=? AND request_id=?').get(uid, requestId)
+        if (row) {
+          const job = JSON.parse(row.payload)
+          if (job.scopeHash !== scopeHash) throw Object.assign(new Error('Request scope changed'), { code: 'STUDIO_CONFLICT' })
+          db.exec('COMMIT')
+          return { reserved: false, job }
+        }
+        const now = Date.now()
+        // Unresolved attempts retain their reservation even after the rolling window.
+        const assistance = scope.purpose === 'idea-assistance'
+        const used = Number(db.prepare("SELECT count(*) AS total FROM studio_jobs WHERE uid=? AND coalesce(json_extract(payload,'$.scope.purpose')='idea-assistance',0)=? AND (attempted_at>? OR json_extract(payload,'$.status') IN ('reserved','running','dispatch_unknown'))").get(uid, Number(assistance), now - 86400000).total)
+        if (used >= (assistance ? Math.min(limit, 10) : limit)) throw Object.assign(new Error('Job allowance reached'), { code: 'STUDIO_QUOTA' })
+        const timestamp = new Date(now).toISOString()
+        const job = { id: requestId, scopeHash, scope, status: 'reserved', revision: 1, createdAt: timestamp, updatedAt: timestamp }
+        db.prepare('INSERT INTO studio_jobs VALUES (?,?,?,?)').run(uid, requestId, now, JSON.stringify(job))
+        db.exec('COMMIT')
+        return { reserved: true, job }
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+    },
+    studioJobUpdate(uid, requestId, patch, expectedRevision, expectedStatus) {
+      const transitions = { reserved: ['running', 'failed', 'cancelled'], running: ['completed', 'failed', 'dispatch_unknown'], dispatch_unknown: ['completed', 'failed'] }
+      const publishingReady = expectedStatus === 'reserved' && patch?.status === 'reserved' && patch.ready === true && Object.keys(patch).length === 2
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).some(key => !['status', 'result', 'error', 'ready'].includes(key)) || ('ready' in patch && !publishingReady) || !Number.isInteger(expectedRevision) || (!publishingReady && !transitions[expectedStatus]?.includes(patch.status))) throw Object.assign(new Error('Invalid job transition'), { code: 'STUDIO_CONFLICT' })
+      db.exec('BEGIN IMMEDIATE')
+      try {
+        const row = db.prepare('SELECT payload FROM studio_jobs WHERE uid=? AND request_id=?').get(uid, requestId)
+        const current = row && JSON.parse(row.payload)
+        if (!current || current.revision !== expectedRevision || current.status !== expectedStatus) throw Object.assign(new Error('Job state changed'), { code: 'STUDIO_CONFLICT' })
+        const job = { ...current, ...patch, revision: current.revision + 1, updatedAt: new Date().toISOString() }
+        db.prepare('UPDATE studio_jobs SET payload=? WHERE uid=? AND request_id=?').run(JSON.stringify(job), uid, requestId)
+        db.exec('COMMIT')
+        return job
+      } catch (error) { db.exec('ROLLBACK'); throw error }
+    },
     studioDueNiches() {
-      return db.prepare("SELECT n.uid,n.id FROM studio_records n LEFT JOIN studio_records s ON s.uid=n.uid AND s.kind='research_schedule' AND s.id=n.id WHERE n.kind='niche' AND json_extract(n.payload,'$.autoRefresh')=1 AND (s.id IS NULL OR json_extract(s.payload,'$.attemptedAt') < ?) ORDER BY coalesce(json_extract(s.payload,'$.attemptedAt'),'') ASC,n.id LIMIT 1").all(new Date(Date.now() - 86400000).toISOString())
+      return db.prepare("SELECT uid,id FROM studio_records WHERE kind='niche' AND json_extract(payload,'$.autoRefresh')=1 AND json_extract(payload,'$.autoRefreshConsent')=1 ORDER BY id").all()
     },
     studioGet(uid, kind, id) {
       const row = db.prepare('SELECT payload FROM studio_records WHERE uid=? AND kind=? AND id=?').get(uid, kind, id)

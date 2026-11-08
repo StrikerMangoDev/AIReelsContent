@@ -1,0 +1,56 @@
+import { readFileSync } from 'node:fs'
+import { env } from '../config/env.js'
+import { reserveCost, budgetError } from '../budget/policy.js'
+
+export function vertexFallbackAllowed(config = env) {
+  return config.CONTENT_VERTEX_FALLBACK === 'true' && config.VERTEX_FALLBACK_MODEL === 'gemini-3.8-flash' && Boolean(config.VERTEX_FALLBACK_PROJECT && config.VERTEX_FALLBACK_CREDENTIALS) && Date.parse(config.VERTEX_FALLBACK_APPROVED_UNTIL || '') > Date.now() && Date.now() < Date.parse('2027-01-01T00:00:00Z')
+}
+
+export function vertexSchema(schema) {
+  if (Array.isArray(schema)) return schema.map(vertexSchema)
+  if (!schema || typeof schema !== 'object') return schema
+  // Provider grammar limits differ; the complete original schema is still validated by the server.
+  return Object.fromEntries(Object.entries(schema).filter(([key]) => !['$schema', 'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern', 'default'].includes(key)).map(([key, value]) => key === 'const' ? ['enum', [value]] : [key, vertexSchema(value)]))
+}
+
+async function callVertex(request, config) {
+  const credentials = JSON.parse(readFileSync(config.VERTEX_FALLBACK_CREDENTIALS, 'utf8'))
+  if (credentials.project_id !== config.VERTEX_FALLBACK_PROJECT) throw budgetError('Fallback credential project does not match the approved project')
+  const { GoogleGenAI } = await import('@google/genai')
+  // The SDK also sends this as X-Server-Timeout; allow structured generation to finish without automatic retries.
+  const client = new GoogleGenAI({ vertexai: true, project: config.VERTEX_FALLBACK_PROJECT, location: 'global', googleAuthOptions: { credentials }, httpOptions: { timeout: 180000, retryOptions: { attempts: 1 } } })
+  return client.models.generateContent({ model: config.VERTEX_FALLBACK_MODEL, contents: JSON.stringify(request.input), config: { systemInstruction: request.system, responseMimeType: 'application/json', responseJsonSchema: vertexSchema(request.schema), maxOutputTokens: request.maxTokens, thinkingConfig: { thinkingLevel: 'LOW', includeThoughts: false } } })
+}
+
+export async function generateVertexJson(input, { repository, owner, requestId, beforeAttempt, kind = 'generation', config = env, request = callVertex }) {
+  if (!vertexFallbackAllowed(config)) throw budgetError('Vertex fallback is not authorized or its test approval expired')
+  const maxTokens = Math.min(input.maxTokens || 6000, 8000)
+  const bytes = Buffer.byteLength(JSON.stringify(input))
+  if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > 12000 || bytes > 200000) throw budgetError('Fallback request exceeds the bounded test scope')
+  // Verified global introductory rates through 2026-12-31; allow extra output headroom for thinking.
+  const upperBoundMicros = Math.ceil((bytes + 4096) * 0.75 + maxTokens * 2 * 3.75)
+  const { reservation, reserved } = await reserveCost(repository, { owner, requestId, scope: { provider: 'vertex', project: config.VERTEX_FALLBACK_PROJECT, model: config.VERTEX_FALLBACK_MODEL, input }, quote: { currency: 'USD', upperBoundMicros, priceVersion: 'gemini-3.8-flash-global-2026-10-29', priceExpiresAt: new Date(Math.min(Date.parse(config.VERTEX_FALLBACK_APPROVED_UNTIL), Date.parse('2027-01-01T00:00:00Z'))).toISOString(), kind } })
+  if (!reserved) throw budgetError('This fallback attempt already exists; reconcile it before another dispatch')
+  let cost = reservation
+  try {
+    if (beforeAttempt) await beforeAttempt()
+    cost = await repository.budgetTransition(owner, cost.id, cost.revision, 'dispatch')
+    const response = await request({ ...input, maxTokens }, config)
+    const usage = response.usageMetadata
+    const counts = [usage?.promptTokenCount, usage?.candidatesTokenCount, usage?.thoughtsTokenCount ?? 0]
+    if (counts.every(value => Number.isSafeInteger(value) && value >= 0)) {
+      cost = await repository.budgetTransition(owner, cost.id, cost.revision, 'settle', Math.ceil(counts[0] * 0.75 + (counts[1] + counts[2]) * 3.75))
+    } else {
+      cost = await repository.budgetTransition(owner, cost.id, cost.revision, 'unknown')
+    }
+    if (response.candidates?.[0]?.finishReason !== 'STOP' || !response.text?.trim()) throw Object.assign(new Error('Vertex fallback did not return complete content'), { code: 'MODEL_INCOMPLETE' })
+    try { return JSON.parse(response.text) } catch { throw Object.assign(new Error('Vertex fallback returned invalid JSON'), { code: 'MODEL_JSON_INVALID' }) }
+  } catch (error) {
+    // Google documents no token charge for a confirmed HTTP 400 rejection; ambiguous outcomes stay held.
+    if (cost.status === 'dispatched' && error.status === 400) await repository.budgetTransition(owner, cost.id, cost.revision, 'settle', 0)
+    else if (cost.status === 'dispatched') await repository.budgetTransition(owner, cost.id, cost.revision, 'unknown')
+    else if (cost.status === 'reserved') await repository.budgetTransition(owner, cost.id, cost.revision, 'cancel')
+    if (error.code === 'BUDGET_BLOCKED' || ['MODEL_INCOMPLETE', 'MODEL_JSON_INVALID'].includes(error.code)) throw error
+    throw Object.assign(new Error('Vertex fallback request failed; the reserved cost remains protected'), { code: 'VERTEX_REQUEST_FAILED', status: Number.isInteger(error.status) ? error.status : undefined })
+  }
+}

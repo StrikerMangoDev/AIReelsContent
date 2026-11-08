@@ -1,0 +1,37 @@
+.instagram-preview { min-width:0; max-width:480px; width:100%; margin:0 auto; color:#182230; }
+.instagram-preview-heading { display:flex; align-items:center; gap:8px; }
+.instagram-preview-heading h2 { font-size:18px; margin:0; }
+.instagram-preview-heading>span { margin-left:auto; border:1px solid #dce2eb; background:var(--brand-soft); color:var(--brand-primary); font-size:11px; border-radius:20px; padding:4px 10px; }
+.instagram-preview-note { font-size:12px; line-height:1.6; color:#667085; margin:10px 0 16px; }
+.instagram-mode-controls { display:flex; gap:6px; margin:12px 0; }
+.instagram-preview .instagram-mode-controls button { flex:1; min-height:40px; border:1px solid var(--brand-line); border-radius:8px; color:var(--brand-muted); background:#fff; cursor:pointer; font-weight:600; font-size:13px; transition:all .15s; }
+.instagram-preview .instagram-mode-controls button[aria-pressed=true] { background:var(--brand-soft); border-color:#a8bbff; color:var(--brand-primary); }
+.instagram-preview .instagram-mode-controls button:disabled { opacity:.5; cursor:default; }
+.instagram-post { border:1px solid #e1e4ea; background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 6px 24px #18223008; }
+.instagram-post-account { display:flex; align-items:center; gap:10px; padding:16px; }
+.instagram-avatar { display:grid; place-items:center; width:36px; height:36px; flex-shrink:0; border-radius:50%; background:#142c38; color:#fff; font-size:14px; font-weight:700; }
+.instagram-post-account>div { display:grid; gap:3px; }
+.instagram-post-account strong { font-size:13px; }
+.instagram-post-account div>span { font-size:11px; color:#667085; }
+.instagram-media { position:relative; background:linear-gradient(180deg, #f8fafb 0%, #eef2f5 100%); border-block:1px solid var(--brand-line); }
+.instagram-slide { aspect-ratio:1; padding:48px 32px 32px; display:flex; flex-direction:column; justify-content:center; gap:18px; min-width:0; }
+.instagram-placeholder-label { display:inline-flex; align-items:center; gap:6px; align-self:flex-start; color:var(--brand-muted); font-size:11px; }
+.instagram-slide h3 { font-size:clamp(20px,2.2vw,28px); line-height:1.25; letter-spacing:-.5px; overflow-wrap:anywhere; margin:0; color:var(--brand-ink); }
+.instagram-slide>p { font-size:12px; line-height:1.6; margin:0; color:var(--brand-muted); }
+.instagram-slide-count { position:absolute; right:12px; top:12px; padding:4px 8px; border-radius:20px; background:#fff; color:var(--brand-ink); border:1px solid var(--brand-line); font-size:11px; font-weight:600; }
+.instagram-slide-controls { display:flex; justify-content:center; align-items:center; gap:16px; padding:8px 16px; border-bottom:1px solid #eef0f4; }
+.instagram-preview .instagram-slide-controls button { display:grid; place-items:center; min-width:38px; min-height:38px; padding:6px; background:#fff; border:1px solid var(--brand-line); border-radius:50%; color:var(--brand-ink); cursor:pointer; }
+.instagram-preview .instagram-slide-controls button:disabled { opacity:.35; cursor:default; }
+.instagram-slide-controls>span { font-size:12px; color:#667085; }
+.instagram-caption { padding:18px; font-size:13px; line-height:1.65; overflow-wrap:anywhere; }
+.instagram-decorative-actions { display:flex; align-items:center; gap:16px; padding:16px 18px 0; color:#344054; pointer-events:none; }
+.instagram-decorative-actions svg:last-child { margin-left:auto; }
+.instagram-caption>strong { display:block; }
+.instagram-caption p { white-space:pre-wrap; margin:10px 0; }
+.instagram-caption-short { display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+.instagram-preview .instagram-caption button { min-height:44px; padding:8px 0; border:0; background:transparent; color:var(--brand-primary); font-size:12px; font-weight:600; cursor:pointer; }
+.instagram-preview button:focus-visible { outline:3px solid var(--brand-primary); outline-offset:3px; }
+.instagram-visual-direction { margin-top:16px; padding:16px; border:1px solid #e6e7ef; border-radius:12px; background:#fff; }
+.instagram-visual-direction h3 { font-size:12px; margin:0 0 8px; }
+.instagram-visual-direction p { font-size:12px; line-height:1.7; color:#667085; margin:0; overflow-wrap:anywhere; }
+@media(max-width:480px) { .instagram-slide { padding:44px 22px 28px; } .instagram-slide h3 { font-size:25px; } }

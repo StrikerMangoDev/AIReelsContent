@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Content workspace — design walkthrough</title>
+<style>
+:root{font-family:Inter,system-ui,sans-serif;color:#182230;background:#f6f7fb;font-size:16px}*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button,a,input,select{outline-offset:4px}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #818cf8}button{cursor:pointer;border:1px solid #cbd2dc;border-radius:9px;background:white;color:#344054;padding:12px 18px;min-height:44px}button:hover{background:#eef2ff}button.primary{background:#4f46e5;color:white;border-color:#4f46e5}button:disabled{cursor:not-allowed;color:#667085;background:#f2f4f7}.banner{position:sticky;top:0;z-index:2;padding:14px 24px;background:#eef2ff;color:#3730a3;border-bottom:1px solid #c7d2fe;font-size:14px;font-weight:650}.layout{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 50px)}aside{background:#fff;border-right:1px solid #e4e7ec;padding:32px 20px}.brand{font-size:20px;font-weight:750;margin-bottom:12px}.muted{color:#667085;line-height:1.6}.sidebar-label{font-size:13px;text-transform:uppercase;letter-spacing:.07em;margin-top:36px}.sidebar-item{display:block;padding:12px;border-radius:8px;background:#eef2ff;color:#4338ca;font-weight:600}main{width:100%;max-width:1100px;padding:40px clamp(20px,5vw,64px);margin:auto}ol.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:0;list-style:none;margin:0 0 40px}.steps li{font-size:13px;border-bottom:2px solid #e4e7ec;padding:12px 0;color:#667085}.steps li[aria-current=step]{border-color:#4f46e5;color:#4338ca;font-weight:700}.eyebrow{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#4f46e5;font-weight:700}h1{font-size:clamp(26px,4vw,38px);line-height:1.15;margin:12px 0}h2{font-size:21px}h3{font-size:17px}p{line-height:1.6}.panel{background:white;border:1px solid #e4e7ec;border-radius:16px;padding:24px;margin:22px 0;box-shadow:0 4px 16px #18223003}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.cards .panel{margin:0;display:flex;flex-direction:column}.cards button{margin-top:auto}.badge{display:inline-block;font-size:12px;padding:5px 9px;border-radius:20px;background:#f2f4f7;color:#475467}.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}label{display:block;font-weight:600;margin:12px 0}input[type=text],select{display:block;width:100%;padding:12px;border:1px solid #cbd2dc;border-radius:8px;background:white;color:#182230;margin-top:7px}fieldset{border:0;padding:0;margin:20px 0}legend{font-weight:700}.choices{display:flex;gap:10px;flex-wrap:wrap}.choices label{display:flex;gap:8px;align-items:center;border:1px solid #e4e7ec;border-radius:9px;padding:12px;background:#f8f9fc}.choices label:has(input:checked){background:#eef2ff;border-color:#a5b4fc}input[type=checkbox]{accent-color:#4f46e5;width:17px;height:17px}.split{display:grid;grid-template-columns:1fr 1fr;gap:20px}.note{padding:14px 18px;border-left:3px solid #4f46e5;background:#f8f9ff;line-height:1.6}.hidden{display:none!important}summary{cursor:pointer;padding:12px 0;font-weight:600;min-height:44px}pre{white-space:pre-wrap;font-family:inherit;line-height:1.7}footer{font-size:13px;color:#667085;margin-top:40px}.back{border:0;background:transparent;padding-left:0}.list{padding-left:22px;line-height:1.8}.role{color:#4338ca;font-weight:700}#choice-error{color:#b42318} @media(max-width:760px){.layout{grid-template-columns:1fr}aside{display:none}main{padding:24px 18px}.cards,.split{grid-template-columns:1fr}.steps{gap:6px!important}.steps li{font-size:12px}.banner{padding:12px 18px}.panel{padding:20px}.actions button{flex:1 1 180px}}
+</style>
+</head>
+<body>
+<div class="banner">Design walkthrough · sample content · nothing is generated or published</div>
+<div class="layout">
+<aside><div class="brand">Content workspace</div><p class="muted">From an idea to a reviewed content package.</p><p class="sidebar-label">Preview mode</p><span class="sidebar-item">Create content</span><p class="muted">No login, external requests, provider calls or saved changes.</p></aside>
+<main>
+<ol class="steps" aria-label="Content journey"><li data-stage="0">1 · Find ideas</li><li data-stage="1">2 · Choose an idea</li><li data-stage="2">3 · Create content</li><li data-stage="3">4 · Review & export</li></ol>
+<section data-screen="0" aria-labelledby="title-0">
+<span class="eyebrow">Start with what you know</span><h1 id="title-0" tabindex="-1">What do you want to create content about?</h1><p class="muted">In the product, your topic sets the research direction. You can add an audience, choose a time window and supply reference links.</p>
+<div class="panel"><label for="topic">Your topic<input id="topic" type="text" value="AI for everyday work" maxlength="150" placeholder="For example: cooking, gardening or AI"></label><label for="mode">Discovery view<select id="mode"><option>Latest — recent sourced developments</option><option>Recommended — editorial relevance</option></select></label><p class="muted">Trending and Most viewed require verified metric sources. This walkthrough does not simulate those measurements.</p><details><summary>What happens in the real product?</summary><p>You review the research scope, source limits and funding status, then explicitly confirm. The app gathers permitted evidence and saves topic results. Missing data stays labelled unavailable.</p></details></div>
+<div class="note">This preview uses three fixed, illustrative AI ideas, even if you change the topic. It does not search the internet.</div>
+<div class="actions"><button class="primary" data-go="1">Explore the sample ideas →</button></div>
+</section>
+<section data-screen="1" class="hidden" aria-labelledby="title-1">
+<button class="back" data-go="0">← Back to your topic</button><span class="eyebrow">Illustrative results</span><h1 id="title-1" tabindex="-1">Choose one idea to develop</h1><p class="muted">Your input: <strong id="topic-label"></strong>. These fixed examples demonstrate the selection flow, not actual research findings.</p>
+<div class="cards">
+<article class="panel"><span class="badge">Sample idea · no trend data</span><h2>Build a useful AI meeting checklist</h2><p>Explain how a team can review an AI-assisted meeting summary before sharing it.</p><button data-idea="0">Choose this sample →</button></article>
+<article class="panel"><span class="badge">Sample idea · no trend data</span><h2>Ask better questions before using an AI tool</h2><p>Help readers think through their task, information sensitivity and expected result.</p><button data-idea="1">Choose this sample →</button></article>
+<article class="panel"><span class="badge">Sample idea · no trend data</span><h2>Check an AI-generated answer</h2><p>Show why claims, source context and uncertainty deserve a second look.</p><button data-idea="2">Choose this sample →</button></article>
+</div><div class="panel"><h3>Opening a topic is free of new generation</h3><p class="muted">The real product reads its saved research snapshot when you open details. Evidence, angles and known limitations appear there. Keyword intent, audience questions and demand measurements remain explicitly unavailable when not researched.</p></div>
+</section>
+<section data-screen="2" class="hidden" aria-labelledby="title-2">
+<button class="back" data-go="1">← Back to sample ideas</button><span class="eyebrow">Choose what you need</span><h1 id="title-2" tabindex="-1">Turn the idea into a content brief</h1><p class="muted" id="chosen-title"></p>
+<div class="panel"><fieldset><legend>Platforms</legend><div class="choices" id="platforms"><label><input type="checkbox" value="Facebook">Facebook</label><label><input type="checkbox" value="Instagram" checked>Instagram</label><label><input type="checkbox" value="X">X</label><label><input type="checkbox" value="LinkedIn">LinkedIn</label><label><input type="checkbox" value="YouTube">YouTube</label></div></fieldset><fieldset><legend>Outputs</legend><div class="choices" id="outputs"><label><input type="checkbox" value="Script and hooks" checked>Script and hooks</label><label><input type="checkbox" value="Captions">Captions</label><label><input type="checkbox" value="Platform posts" checked>Platform posts</label><label><input type="checkbox" value="Production directions">Production directions</label></div></fieldset><p class="muted">The real product requests only selected outputs. Production directions require a script. Selection alone never starts generation.</p><p id="choice-error" role="alert"></p></div>
+<div class="note"><strong>Separate confirmation in the real product:</strong> review the selected outputs, provider, allowance/cost and saved source scope before Generate. Queued work can be cancelled before it starts; uncertain outcomes require reconciliation.</div>
+<div class="actions"><button class="primary" id="show-example">View a fixed example draft →</button></div>
+</section>
+<section data-screen="3" class="hidden" aria-labelledby="title-3">
+<button class="back" data-go="2">← Back to output choices</button><span class="eyebrow">Static example · not generated</span><h1 id="title-3" tabindex="-1">Read and refine the draft</h1><p class="muted" id="selection-label"></p>
+<div class="panel"><span class="badge">Illustrative copy · not reviewed or approved</span><h2 id="example-title"></h2><pre id="example-copy"></pre><details><summary>Sources and evidence in the real product</summary><p>A real draft includes captured sources and claim links. This sample has no research evidence and cannot be approved or exported as verified content.</p></details><details><summary>Revisions and production handoff</summary><p>You can save edits, explicitly request a revision and inspect previous versions. Changes invalidate affected approvals. Production directions are instructions for a team, not a promise that media has been rendered.</p></details></div>
+<div class="note">The draft shown here is fixed example copy. Your selected platforms and formats demonstrate configuration only; this walkthrough does not adapt or generate content.</div>
+<div class="actions"><button class="primary" data-go="4">Understand review & export →</button></div>
+</section>
+<section data-screen="4" class="hidden" aria-labelledby="title-4">
+<button class="back" data-go="3">← Back to the example draft</button><span class="eyebrow">A separate quality gate</span><h1 id="title-4" tabindex="-1">Review first. Approve next. Export last.</h1><p class="muted">This screen explains the process. No review, approval or export is performed here.</p>
+<div class="split"><div class="panel"><span class="role">Independent reviewer</span><h2>Check the exact draft</h2><ul class="list"><li>A different, authorized account reviews the content.</li><li>Check each claim against its source, rights and title promise.</li><li>Recheck current sources and resolve or disclose contradictions.</li><li>The review is bound to this version and expires after 24 hours.</li></ul></div><div class="panel"><span class="role">Workspace owner / authorized approver</span><h2>Approve the reviewed version</h2><ul class="list"><li>Confirm the version and independent review are current.</li><li>Edits, changed evidence or revoked reviewer access block old approval.</li><li>Download an approved team brief or structured content package.</li><li>Export never publishes or schedules a social post.</li></ul></div></div>
+<div class="note"><strong>Sample status: not reviewed, not approved.</strong> There is no approval shortcut in this walkthrough. The production app checks permissions and evidence on the server.</div>
+<div class="actions"><button data-go="3">← Revisit the sample</button><button class="primary" data-go="0">Walk through again</button></div>
+</section>
+<footer>This is a design explanation, not a working research service or a production acceptance result. All interactions stay in this page.</footer>
+</main></div>
+<script>
+(() => {
+  const titles = ['Build a useful AI meeting checklist', 'Ask better questions before using an AI tool', 'Check an AI-generated answer'];
+  const examples = [
+    'Hook: Before you share that AI meeting summary, give it a human check.\n\nExample outline:\n1. Compare key decisions with your own notes.\n2. Confirm names, owners and due dates with the team.\n3. Remove information that should not be shared.\n\nClosing prompt: What would you add to your review checklist?',
+    'Hook: A clear task comes before a new AI tool.\n\nExample outline:\n1. Describe the result you need.\n2. Decide what information you can safely provide.\n3. Define how a person will check the answer.\n\nClosing prompt: What is the first question you ask before trying a tool?',
+    'Hook: An answer can sound confident and still need checking.\n\nExample outline:\n1. Identify the claims that matter.\n2. Open the original sources and read their context.\n3. State what remains uncertain.\n\nClosing prompt: Which claim would you verify first?'
+  ];
+  let selected = 0;
+  const values = id => Array.from(document.querySelectorAll('#' + id + ' input:checked')).map(input => input.value);
+  function show(screen) {
+    document.querySelectorAll('[data-screen]').forEach(section => section.classList.toggle('hidden', Number(section.dataset.screen) !== screen));
+    const stage = screen === 4 ? 3 : Math.min(screen, 2);
+    document.querySelectorAll('[data-stage]').forEach(step => { if (Number(step.dataset.stage) === stage) step.setAttribute('aria-current', 'step'); else step.removeAttribute('aria-current'); });
+    document.getElementById('topic-label').textContent = document.getElementById('topic').value.trim() || 'No topic entered';
+    document.getElementById('chosen-title').textContent = 'Sample idea: ' + titles[selected];
+    document.getElementById('example-title').textContent = titles[selected];
+    document.getElementById('example-copy').textContent = examples[selected];
+    document.getElementById('selection-label').textContent = 'Your sample configuration: ' + values('platforms').join(', ') + ' · ' + values('outputs').join(', ');
+    document.getElementById('title-' + screen).focus();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+  document.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click', () => show(Number(button.dataset.go))));
+  document.querySelectorAll('[data-idea]').forEach(button => button.addEventListener('click', () => { selected = Number(button.dataset.idea); show(2); }));
+  document.getElementById('show-example').addEventListener('click', () => {
+    const outputs = values('outputs');
+    const error = !values('platforms').length || !outputs.length ? 'Choose at least one platform and one output.' : outputs.includes('Production directions') && !outputs.includes('Script and hooks') ? 'Select Script and hooks for production directions.' : '';
+    document.getElementById('choice-error').textContent = error;
+    if (!error) show(3);
+  });
+  show(0);
+})();
+</script>
+</body>
+</html>

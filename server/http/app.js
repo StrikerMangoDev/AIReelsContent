@@ -6,13 +6,13 @@ import { randomUUID } from 'node:crypto'
 import { categories, regions } from '../domain/article.js'
 import { listNews, worldActivity, feedTopics } from '../services/news.js'
 import { env } from '../config/env.js'
-import { createAuthMiddleware, requireAdmin } from '../auth/firebase.js'
+import { createAuthMiddleware, requireAdmin, publicAuthConfig } from '../auth/index.js'
 import { eventSchema } from '../services/analytics.js'
 import { createMediaRouter } from '../media/router.js'
 import { studioRouter } from '../studio/routes.js'
 
 const querySchema = z.object({ region: z.enum(['Global', ...regions]).optional(), category: z.enum(['All signals', ...categories]).optional(), q: z.string().max(200).optional(), page: z.coerce.number().int().min(1).max(200).default(1), limit: z.coerce.number().int().min(1).max(60).default(24), timezone: z.string().max(100).default('UTC') })
-export function createApp({ repository, sources, verifyIdentity }) {
+export function createApp({ repository, sources, verifyIdentity, onResearchAdmitted, onGenerationAdmitted }) {
   const app = express()
   const auth = createAuthMiddleware(verifyIdentity)
   app.disable('x-powered-by'); app.use(helmet()); app.use(express.json({ limit: '128kb' }))
@@ -21,9 +21,7 @@ export function createApp({ repository, sources, verifyIdentity }) {
   app.get('/api/health', async (_request, response) => { await repository.ping(); response.json({ status: 'ok', storage: env.STORAGE_PROVIDER }) })
   app.get('/api/status', async (_request, response) => response.json({ lastRun: await repository.lastRun(), lastSuccessfulRun: await repository.lastSuccessfulRun() }))
   app.get('/api/auth/config', (_request, response) => {
-    let config = null
-    try { const raw = JSON.parse(env.FIREBASE_WEB_CONFIG || 'null'); if (raw?.apiKey && raw?.authDomain && raw?.projectId === env.FIREBASE_PROJECT_ID) config = { apiKey: raw.apiKey, authDomain: raw.authDomain, projectId: raw.projectId, appId: raw.appId } } catch { /* Not configured yet. */ }
-    response.json({ configured: Boolean(config), config })
+    response.json(publicAuthConfig())
   })
   app.get('/api/auth/me', auth, async (request, response) => { await repository.upsertUser(request.identity); response.setHeader('Cache-Control', 'no-store'); response.json(request.identity) })
   app.get('/api/admin/overview', auth, requireAdmin, async (_request, response) => { response.setHeader('Cache-Control', 'no-store'); response.json({ ...await repository.adminOverview(), ingestion: await repository.lastRun(), articleCount: (await repository.queryArticles({ page: 1, limit: 1 })).total }) })
@@ -55,7 +53,7 @@ export function createApp({ repository, sources, verifyIdentity }) {
     response.redirect(302, article.url)
   })
   app.use(createMediaRouter({ repository, auth }))
-  app.use('/api/studio', studioRouter({ repository, auth }))
+  app.use('/api/studio', studioRouter({ repository, auth, onResearchAdmitted, onGenerationAdmitted }))
   app.use('/api', (_request, response) => response.status(404).json({ error: 'Endpoint not found' }))
   app.use((error, _request, response, _next) => {
     console.error(JSON.stringify({ event: 'api_request_failed', requestId: response.getHeader('X-Request-Id'), type: error.name, code: error.code || null, storageCode: error.cause?.code || null }))

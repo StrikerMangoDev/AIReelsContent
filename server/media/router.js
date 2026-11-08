@@ -1,3 +1,4 @@
+import { workspaceAuth, requireWriteRole, ownerScope } from '../studio/workspaces.js'
 import { Router } from 'express'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
@@ -14,10 +15,10 @@ const assetId = (uid, requestId) => {
 export function createMediaRouter({ repository, auth, generate = generateMedia, refresh = refreshVideo, saveFile = saveMediaFile, readFile = readMediaFile, config = mediaConfig }) {
   const router = Router()
   router.get('/api/studio/media/config', (_req, res) => res.json(config()))
-  const protect = [auth, (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next() }]
+  const protect = [...workspaceAuth(repository, auth), requireWriteRole, (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next() }]
   router.get('/api/studio/packages/:id/assets', ...protect, async (req, res) => {
-    if (!await repository.studioGet(req.identity.uid, 'package', req.params.id)) return res.status(404).json({ error: 'Content package not found' })
-    const assets = (await repository.studioList(req.identity.uid, 'asset')).filter(asset => asset.packageId === req.params.id)
+    if (!await repository.studioGet(ownerScope(req), 'package', req.params.id)) return res.status(404).json({ error: 'Content package not found' })
+    const assets = (await repository.studioList(ownerScope(req), 'asset')).filter(asset => asset.packageId === req.params.id)
     res.json({ assets: assets.map(publicAsset) })
   })
   async function finish(uid, asset, result) {
@@ -28,7 +29,7 @@ export function createMediaRouter({ repository, auth, generate = generateMedia, 
   router.post('/api/studio/packages/:id/assets', ...protect, async (req, res) => {
     const parsed = schema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'Choose media, enter a prompt, and confirm the estimated cost.' })
-    const input = parsed.data; const uid = req.identity.uid
+    const input = parsed.data; const uid = ownerScope(req)
     const pack = await repository.studioGet(uid, 'package', req.params.id)
     if (!pack) return res.status(404).json({ error: 'Content package not found' })
     if (!pack.content) return res.status(422).json({ error: 'Generate and save a script before producing assets.' })
@@ -52,7 +53,7 @@ export function createMediaRouter({ repository, auth, generate = generateMedia, 
     }
   })
   router.post('/api/studio/assets/:id/refresh', ...protect, async (req, res) => {
-    const uid = req.identity.uid; const asset = await repository.studioGet(uid, 'asset', req.params.id)
+    const uid = ownerScope(req); const asset = await repository.studioGet(uid, 'asset', req.params.id)
     if (!asset) return res.status(404).json({ error: 'Asset not found' })
     if (asset.status !== 'running' || !asset.operation) return res.json(publicAsset(asset))
     try { res.json(publicAsset(await finish(uid, asset, await refresh(asset.operation)))) }
@@ -67,7 +68,7 @@ export function createMediaRouter({ repository, auth, generate = generateMedia, 
     }
   })
   router.get('/api/studio/assets/:id/file', ...protect, async (req, res) => {
-    const asset = await repository.studioGet(req.identity.uid, 'asset', req.params.id)
+    const asset = await repository.studioGet(ownerScope(req), 'asset', req.params.id)
     if (!asset || asset.status !== 'completed') return res.status(404).json({ error: 'Completed asset not found' })
     const signedUrl = await signedMediaUrl(asset.id)
     if (signedUrl) return res.redirect(302, signedUrl)
@@ -76,6 +77,7 @@ export function createMediaRouter({ repository, auth, generate = generateMedia, 
     res.send(await readFile(asset.id))
   })
   router.use((error, _req, res, next) => {
+    if (error.publicMessage) return res.status(error.status).json({ error: error.publicMessage })
     if (error.code === 'STUDIO_QUOTA') return res.status(429).json({ error: 'Daily media limit reached (10 requests).' })
     if (error.code === 'STUDIO_CONFLICT') return res.status(409).json({ error: 'Asset changed. Reload before retrying.' })
     next(error)

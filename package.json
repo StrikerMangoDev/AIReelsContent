@@ -19,6 +19,7 @@
     "start:api": "node server/index.js",
     "worker": "node server/worker.js",
     "research:worker": "node server/research-worker.js",
+    "content:worker": "node server/content-worker.js --once",
     "ingest": "node server/worker.js --once",
     "images:refresh": "node server/refresh-images.js",
     "feeds:collect": "node server/collect-feeds.js",
@@ -30,7 +31,10 @@
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
+    "@hexclave/js": "1.0.133",
+    "@hexclave/react": "1.0.133",
     "@supabase/supabase-js": "^2.117.2",
+    "@vercel/functions": "3.11.0",
     "@vitejs/plugin-react": "latest",
     "cheerio": "^1.2.0",
     "d3-geo": "^3.1.1",

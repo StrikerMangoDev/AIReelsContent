@@ -1,0 +1,2 @@
+export type CategorySetup = { coverage: 'international' | 'national' | 'both'; country: string; topics: string[]; intent: string; exclusions: string; refreshIntervalDays: number; autoRefresh: boolean; language: string; windowDays: number }
+export const categoryDefaults: CategorySetup = { coverage: 'international', country: '', topics: [], intent: '', exclusions: '', refreshIntervalDays: 7, autoRefresh: false, language: 'Auto', windowDays: 7 }

@@ -1,54 +1,42 @@
-import { Menu, Search, X } from 'lucide-react'
-import { useState } from 'react'
-import { NavLink, Outlet, useLocation, useSearchParams } from 'react-router-dom'
+import { Plus, LayoutGrid, FolderOpen, CalendarDays, Menu, X, ChevronDown, ArrowUpRight, Users, Gauge } from 'lucide-react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Logo } from '@/components/common/Logo'
-import { SignalBackground } from '@/components/common/SignalBackground'
-import { RegionPicker } from '@/components/ui/RegionPicker'
 import { useAuth } from '@/context/auth-state'
-import { configuredAuth } from '@/services/firebase'
+import { activeWorkspace, subscribeWorkspace } from '@/services/workspace-session'
+import { signOutCurrentUser } from '@/services/firebase'
+import '@/styles/workspace.css'
+
+const navigation = [
+  { to: '/ideas', label: 'Topic Library', description: 'Browse categories & researched ideas', Icon: LayoutGrid },
+  { to: '/studio', label: 'Content Studio', description: 'Write, preview & download', Icon: FolderOpen },
+  { to: '/planning', label: 'Content Planner', description: 'Organize work by stage & date', Icon: CalendarDays },
+]
 
 export function AppLayout() {
   const { identity } = useAuth()
-  const isFeed = useLocation().pathname === '/dashboard'
-  const [searchParams, setSearchParams] = useSearchParams()
-  const region = searchParams.get('region') ?? 'Global'
+  const workspace = useSyncExternalStore(subscribeWorkspace, activeWorkspace, () => 'personal')
+  const { pathname } = useLocation()
+  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
   const [menuOpen, setMenuOpen] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
-  const updateSearch = (value: string) => {
-    const next = new URLSearchParams(searchParams)
-    if (value) next.set('q', value)
-    else next.delete('q')
-    next.delete('page')
-    setSearchParams(next, { replace: true })
-  }
-  const changeRegion = (value: string) => {
-    const next = new URLSearchParams(searchParams)
-    if (value === 'Global') next.delete('region')
-    else next.set('region', value)
-    next.delete('page')
-    next.delete('category'); next.delete('q')
-    setSearchParams(next)
-  }
-  return (
-    <div className="app-shell app-shell--dark">
-      <SignalBackground />
-      <a className="skip-link" href="#main-content">Skip to content</a>
-      <header className="glass-header">
-        <div className="glass-header__shine" aria-hidden="true" /><Logo />
-        <nav className="glass-header__nav" aria-label="Main navigation">
-          <NavLink to="/" end>Research desk</NavLink><NavLink to="/studio">Content library</NavLink><NavLink to="/dashboard">AI news feed</NavLink><NavLink to="/insights">Insights</NavLink>
-        </nav>
-        <div className="glass-header__actions">
-          {isFeed && <><button className="header-search" aria-label={searchOpen ? 'Close search' : 'Search news'} aria-expanded={searchOpen} onClick={() => setSearchOpen(!searchOpen)}>{searchOpen ? <X size={18} /> : <Search size={18} />}</button><RegionPicker value={region} onChange={changeRegion} /></>}
-          {identity?.role === 'admin' && <NavLink className="header-account" to="/admin">Admin</NavLink>}
-          {identity ? <button className="header-account header-signout" onClick={async () => { const { signOut } = await import('firebase/auth'); await signOut(await configuredAuth()) }}>Sign out</button> : <NavLink className="header-account" to="/login">Sign in</NavLink>}
-          <button className="header-menu" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen} aria-controls="mobile-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
-        </div>
-      </header>
-      {menuOpen && <nav id="mobile-navigation" className="mobile-navigation" aria-label="Mobile navigation">{[['Research desk', '/'], ['Content library', '/studio'], ['AI news feed', '/dashboard'], ['Insights', '/insights']].map(([label, href]) => <NavLink to={href} key={href} onClick={() => setMenuOpen(false)}>{label}</NavLink>)}</nav>}
-      {searchOpen && isFeed && <div className="search-dock"><Search size={18} /><input autoFocus aria-label="Search headlines" placeholder="Search headlines, subjects, sources…" value={searchParams.get('q') ?? ''} onChange={(event) => updateSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setSearchOpen(false) }} /><button onClick={() => { updateSearch(''); setSearchOpen(false) }} aria-label="Clear and close search"><X size={16} /></button></div>}
-      <div className="ambient ambient--one" aria-hidden="true" /><div className="ambient ambient--two" aria-hidden="true" />
-      <main id="main-content" className="app-main"><div className="page-content"><Outlet /></div></main>
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const [error, setError] = useState('')
+  const title = pathname.startsWith('/ideas') ? 'Topic Library' : pathname.startsWith('/studio-review') ? 'Review content' : pathname.startsWith('/studio') ? 'Content Studio' : pathname.startsWith('/planning') ? 'Content Planner' : pathname.startsWith('/workspaces') ? 'Team & access' : pathname.startsWith('/usage') ? 'Usage & limits' : pathname.startsWith('/dashboard') ? 'Top ideas' : pathname.startsWith('/insights') ? 'Website insights' : pathname.startsWith('/admin') ? 'Administration' : 'Find new ideas'
+  const closeMenu = () => setMenuOpen(false)
+  return <div className="workspace-shell">
+    <a className="skip-link" href="#main-content">Skip to content</a>
+    <header className="workspace-mobile-header"><Logo /><button ref={menuButton} aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="workspace-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X aria-hidden="true" size={22} /> : <Menu aria-hidden="true" size={22} />}</button></header>
+    <aside id="workspace-navigation" className={`workspace-sidebar${menuOpen ? ' is-open' : ''}`} onKeyDown={event => { if (event.key === 'Escape') { closeMenu(); menuButton.current?.focus() } }}>
+      <div className="workspace-brand"><Logo /></div>
+      <Link to="/workspaces" onClick={closeMenu} className="workspace-switcher"><span><strong>{workspace === 'personal' ? 'Personal workspace' : 'Team workspace'}</strong><small>{workspace === 'personal' ? 'Your personal research & drafts' : 'Shared with workspace members'}</small><span>Change workspace <ArrowUpRight aria-hidden="true" size={13} /></span></span></Link>
+      <NavLink to="/find-ideas" end className="workspace-create" onClick={closeMenu}><Plus aria-hidden="true" size={18} /> Find new ideas</NavLink>
+      <span className="workspace-nav-label">Your content</span>
+      <nav aria-label="Main navigation" className="workspace-nav">{navigation.map(({ to, label, description, Icon }) => <NavLink key={to} to={to} className={({ isActive }) => isActive || (to === '/studio' && pathname.startsWith('/studio-review')) ? 'active' : undefined} onClick={closeMenu}><Icon aria-hidden="true" size={20} /><span><strong>{label}</strong><small>{description}</small></span></NavLink>)}</nav>
+      <nav className="workspace-secondary" aria-label="Workspace settings"><NavLink to="/workspaces" onClick={closeMenu}><Users aria-hidden="true" size={17} /> Team & access</NavLink><NavLink to="/usage" onClick={closeMenu}><Gauge aria-hidden="true" size={17} /> Usage & limits</NavLink><details><summary>More <ChevronDown aria-hidden="true" size={15} /></summary><nav aria-label="More navigation"><NavLink to="/dashboard" onClick={closeMenu}>Top ideas</NavLink><NavLink to="/insights" onClick={closeMenu}>Website insights</NavLink>{identity?.role === 'admin' && <NavLink to="/admin" onClick={closeMenu}>Administration</NavLink>}</nav></details></nav>
+      <div className="workspace-account"><span className="workspace-avatar" aria-hidden="true">{identity?.name?.slice(0, 1).toUpperCase() || (identity ? 'W' : 'A')}</span><div><strong>{identity ? identity.name || 'Your account' : 'Welcome to AIReels'}</strong><span>{identity ? 'Signed in' : 'Sign in to save your work'}</span></div>{identity ? <button onClick={async () => { try { await signOutCurrentUser(); closeMenu() } catch { setError('Could not sign out. Please try again.') } }}>Sign out</button> : <Link to="/login" onClick={closeMenu}>Sign in</Link>}</div>
+    </aside>
+    <div className="workspace-body"><header className="workspace-topbar"><span>{title}</span><Link to="/workspaces">{workspace === 'personal' ? 'Personal workspace' : 'Shared workspace'} <ArrowUpRight aria-hidden="true" size={14} /></Link></header>
+      <main id="main-content" tabIndex={-1} className="workspace-main">{error && <p role="alert" className="workspace-error">{error}</p>}<Outlet key={`${identity?.uid || 'guest'}:${workspace}`} /></main>
     </div>
-  )
+  </div>
 }

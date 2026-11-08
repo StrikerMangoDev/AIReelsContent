@@ -7,12 +7,13 @@ export function cronFailure(error, stage, requestId) {
   return { event: 'scheduled_refresh_failed', requestId, stage, type: identifier(error?.name), operation: identifier(error?.operation), code: identifier(error?.code), causeCode: identifier(error?.cause?.code) }
 }
 
-export function createCronHandler({ secret, loadCollection, loadIngestion, now = () => new Date(), log = value => console.error(JSON.stringify(value)) }) {
+export function createCronHandler({ secret, enabled = false, loadCollection, loadIngestion, now = () => new Date(), log = value => console.error(JSON.stringify(value)) }) {
   return async function handler(request, response) {
     response.setHeader('Cache-Control', 'no-store')
     const expected = Buffer.from(`Bearer ${secret || ''}`)
     const actual = Buffer.from(request.headers.authorization || '')
     if (request.method !== 'GET' || !secret || expected.length !== actual.length || !timingSafeEqual(expected, actual)) return response.status(401).json({ error: 'Unauthorized' })
+    if (!enabled) return response.status(503).json({ error: 'Automatic research is disabled.' })
     const requestId = randomUUID()
     response.setHeader('X-Request-Id', requestId)
     let stage = 'load_collection'

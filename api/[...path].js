@@ -1,8 +1,23 @@
+import { waitUntil } from '@vercel/functions'
+import { runContentJob } from '../server/studio/job-worker.js'
+
+export function vercelJobDispatcher(repository, retain = waitUntil, run = runContentJob) {
+  return ({ uid, requestId }) => {
+    // Retain only this admitted job; the durable worker enforces membership, claim and budget checks.
+    retain(run({ repository, uid, requestId }).catch(error => {
+      console.error(JSON.stringify({ event: 'vercel_job_failed', jobId: requestId, code: error.code || null }))
+    }))
+  }
+}
+
 let pending
 export default async function handler(request, response) {
   try {
     pending ??= Promise.all([import('../server/http/app.js'), import('../server/storage/index.js'), import('../server/config/sources.js')])
-      .then(([{ createApp }, { repository }, { sources }]) => createApp({ repository, sources }))
+      .then(([{ createApp }, { repository }, { sources }]) => {
+        const dispatch = vercelJobDispatcher(repository)
+        return createApp({ repository, sources, onResearchAdmitted: dispatch, onGenerationAdmitted: dispatch })
+      })
     const app = await pending
     return app(request, response)
   } catch (error) {

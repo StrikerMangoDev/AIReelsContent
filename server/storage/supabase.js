@@ -10,11 +10,21 @@ export function createSupabaseRepository(config) {
       failure.operation = op
       if (error.code === 'P0002') failure.code = 'STUDIO_CONFLICT'
       if (error.code === 'P0003') failure.code = 'STUDIO_QUOTA'
+      if (error.code === 'P0004') failure.code = 'BUDGET_BLOCKED'
       throw failure
     }
     return data
   }
   return {
+    budgetConfigure: (currency, owner, globalLimitMicros, ownerLimitMicros) => call('configure', { currency, owner, globalLimitMicros, ownerLimitMicros }, 'signal_budget'),
+    budgetGet: (owner, requestId) => call('get', { owner, requestId }, 'signal_budget'),
+    budgetSummary: (owner, currency = 'USD') => call('summary', { owner, currency }, 'signal_budget'),
+    budgetReserve: (owner, requestId, scopeHash, quote) => call('reserve', { owner, requestId, scopeHash, quote }, 'signal_budget'),
+    budgetTransition: (owner, requestId, expectedRevision, action, actualMicros) => call('transition', { owner, requestId, expectedRevision, action, actualMicros }, 'signal_budget'),
+    studioPendingJobs: (limit = 20) => call('pending', { limit }, 'signal_studio_jobs'),
+    studioJobGet: (uid, requestId) => call('get', { uid, requestId }, 'signal_studio_jobs'),
+    studioJobReserve: (uid, requestId, scopeHash, limit, scope = {}) => call('reserve', { uid, requestId, scopeHash, limit, scope }, 'signal_studio_jobs'),
+    studioJobUpdate: (uid, requestId, patch, expectedRevision, expectedStatus) => call('update', { uid, requestId, patch, expectedRevision, expectedStatus }, 'signal_studio_jobs'),
     studioDueNiches: () => call('due', {}, 'signal_research_due'),
     studioResearchPage: (uid, before = '', beforeId = '') => call('page', { uid, before, beforeId }, 'signal_research_page'),
     studioGet: (uid, kind, id) => call('get', { uid, kind, id }, 'signal_studio'),

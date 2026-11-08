@@ -1,12 +1,13 @@
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai'
 import { env } from '../config/env.js'
+import { assertCapability, capabilityAllowed } from '../policy.js'
 
 export function mediaConfig() {
   return Object.fromEntries(['image', 'audio', 'video'].map(kind => {
     const model = process.env[`STUDIO_${kind.toUpperCase()}_MODEL`]
     const price = process.env[`STUDIO_${kind.toUpperCase()}_ESTIMATE_USD`]
     const estimatedUsd = price === undefined ? null : Number(price)
-    return [kind, { enabled: Boolean(kind !== 'audio' && env.GOOGLE_CLOUD_PROJECT && model && !/gemini/i.test(model) && estimatedUsd !== null && Number.isFinite(estimatedUsd) && estimatedUsd >= 0 && (env.STORAGE_PROVIDER !== 'supabase' || process.env.STUDIO_MEDIA_BUCKET)), estimatedUsd: Number.isFinite(estimatedUsd) ? estimatedUsd : null }]
+    return [kind, { enabled: Boolean(capabilityAllowed('media') && kind !== 'audio' && env.GOOGLE_CLOUD_PROJECT && model && !/gemini/i.test(model) && estimatedUsd !== null && Number.isFinite(estimatedUsd) && estimatedUsd >= 0 && (env.STORAGE_PROVIDER !== 'supabase' || process.env.STUDIO_MEDIA_BUCKET)), estimatedUsd: Number.isFinite(estimatedUsd) ? estimatedUsd : null }]
   }))
 }
 
@@ -37,6 +38,7 @@ export function videoResult(operation) {
 }
 
 export async function generateMedia(kind, prompt) {
+  assertCapability('media')
   const model = process.env[`STUDIO_${kind.toUpperCase()}_MODEL`]
   if (kind === 'audio' || /gemini/i.test(model || '')) throw new Error('Gemini generation is disabled')
   const ai = client()
@@ -51,6 +53,7 @@ export async function generateMedia(kind, prompt) {
 }
 
 export async function refreshVideo(name) {
+  assertCapability('media')
   const operation = new GenerateVideosOperation()
   operation.name = name
   return videoResult(await client().operations.getVideosOperation({ operation }))
