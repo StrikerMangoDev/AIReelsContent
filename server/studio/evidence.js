@@ -57,7 +57,7 @@ export async function fetchEvidence(value, redirects = 0) {
   }
   const { url } = page
   const $ = load(page.body)
-  const title = $('title').text().trim().slice(0, 300) || url.hostname
+  const title = $('head > title').first().text().trim().slice(0, 300) || url.hostname
   $('script,style,nav,footer,header,noscript').remove()
   const main = $('article,main').first()
   const excerpt = (main.length ? main.text() : $.text()).replace(/\s+/g, ' ').trim().slice(0, 16000)

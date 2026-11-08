@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 
 export const MAX_MICROS = 1_000_000_000_000
 export const budgetError = message => Object.assign(new Error(message), { code: 'BUDGET_BLOCKED', status: 409 })
+// PostgreSQL jsonb reorders object keys; persisted scope checks must ignore key order.
+export const costScopeHash = (scope, quote) => createHash('sha256').update(JSON.stringify({ scope, quote }, (_key, value) => value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]])) : value)).digest('hex')
 export function validateAmount(value) {
   if (!Number.isSafeInteger(value) || value < 0 || value > MAX_MICROS) throw budgetError('A bounded integer monetary amount is required')
 }
@@ -30,7 +32,7 @@ export async function reserveCost(repository, { owner, requestId, scope, quote, 
   quote = quote?.credit ? { ...quote, creditEvidence: confirmedCredit } : quote
   validateBudgetOwner(owner, quote?.currency)
   validateQuote(quote, now)
-  const scopeHash = createHash('sha256').update(JSON.stringify({ scope, quote })).digest('hex')
+  const scopeHash = costScopeHash(scope, quote)
   return repository.budgetReserve(owner, requestId, scopeHash, quote)
 }
 

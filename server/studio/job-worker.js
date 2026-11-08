@@ -4,6 +4,7 @@ import { generateContent, reviewContent } from './content.js'
 import { contentHash } from './approval.js'
 import { workspaceRole } from './workspaces.js'
 import { dispatchFreeOperation } from '../budget/free-operation.js'
+import { costScopeHash } from '../budget/policy.js'
 import { assertCapability } from '../policy.js'
 import { readFreeGenerationReceipt } from '../providers/llm.js'
 import { generateVertexJson, vertexFallbackAllowed } from '../providers/vertex-fallback.js'
@@ -57,7 +58,7 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
   try {
     await checkActor()
     cost = await repository.budgetGet(uid, requestId)
-    if (!cost || cost.status !== 'reserved' || cost.cancellationRequested || cost.scopeHash !== createHash('sha256').update(JSON.stringify({ scope, quote: cost.quote })).digest('hex')) throw failure('A matching reserved budget is required before dispatch.')
+    if (!cost || cost.status !== 'reserved' || cost.cancellationRequested || cost.scopeHash !== costScopeHash(scope, cost.quote)) throw failure('A matching reserved budget is required before dispatch.')
     if (scope.operation === 'generation') {
       pack = await repository.studioGet(uid, 'package', scope.packageId)
       if (!pack || pack.jobId !== job.id || pack.status !== 'generating' || pack.revision !== scope.revision + 1 || contentHash(pack) !== scope.contentHash) throw failure('The queued package changed before dispatch.')
@@ -103,11 +104,11 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
     if (cost?.status === 'dispatched') await repository.budgetTransition(uid, cost.id, cost.revision, 'unknown')
     else if (cost?.status === 'reserved') await repository.budgetTransition(uid, cost.id, cost.revision, 'cancel')
     if (currentJob?.status === 'running') await repository.studioJobUpdate(uid, job.id, { status, error: message }, currentJob.revision, 'running')
-    if (pack) {
-      const current = await repository.studioGet(uid, 'package', pack.id)
+    if (scope.operation === 'generation') {
+      const current = await repository.studioGet(uid, 'package', scope.packageId)
       if (current?.jobId === job.id && ['generating', 'completed'].includes(current.status)) await repository.studioPut(uid, 'package', current.id, { ...current, status, error: message }, current.revision)
     }
-    if (state) {
+    if (scope.operation === 'research') {
       const current = await repository.studioGet(uid, 'research_state', scope.nicheId)
       if (current?.jobId === job.id) await repository.studioPut(uid, 'research_state', scope.nicheId, { ...current, status }, current.revision)
     }
@@ -127,6 +128,8 @@ export async function recoverRejectedGeneration({ repository, uid, packageId, re
   // A confirmed request rejection permits a new user-confirmed attempt; ambiguous cost stays held.
   const vertexReservations = await Promise.all([0, 1].map(attempt => repository.budgetGet(uid, `vertex-${job.id}-${attempt}`)))
   const vertexAttempted = vertexReservations.some(value => value?.quote.priceVersion === 'gemini-3.8-flash-global-2026-10-29')
+  const cost = await repository.budgetGet(uid, job.id)
+  const preDispatchRejected = job.status === 'failed' && diagnostics?.code === 'JOB_BLOCKED' && cost?.status === 'cancelled' && !vertexAttempted
   const acknowledgedTimeout = acknowledgeTimeoutCost === true && vertexAttempted && diagnostics?.code === 'VERTEX_REQUEST_FAILED' && diagnostics.httpStatus === 504
   const vertexRejected = (vertexAttempted || job.scope.generationProvider === 'vertex-fallback') && ['JOB_FAILED', 'VERTEX_REQUEST_FAILED'].includes(diagnostics?.code) && [400, 429].includes(diagnostics.httpStatus)
   if (!rejectedGeneration(diagnostics) && !vertexRejected && diagnostics?.code === 'MODEL_INCOMPLETE' && diagnostics.generationId) {
@@ -134,9 +137,9 @@ export async function recoverRejectedGeneration({ repository, uid, packageId, re
     catch { throw failure('The provider has not confirmed a failed zero-cost attempt. Your saved content is preserved; try checking its status later.') }
     const cost = await repository.budgetGet(uid, job.id)
     if (cost && ['dispatched', 'dispatch_unknown'].includes(cost.status)) await repository.budgetTransition(uid, cost.id, cost.revision, 'settle', reconciliation.actualMicros)
-  } else if (!rejectedGeneration(diagnostics) && !vertexRejected && !acknowledgedTimeout) throw failure('This attempt has no confirmed validation rejection. Its provider outcome still needs reconciliation.')
+  } else if (!rejectedGeneration(diagnostics) && !vertexRejected && !acknowledgedTimeout && !preDispatchRejected) throw failure('This attempt has no confirmed validation rejection. Its provider outcome still needs reconciliation.')
   if (job.status === 'dispatch_unknown') await repository.studioJobUpdate(uid, job.id, { status: 'failed', error: job.error, ...(acknowledgedTimeout ? { result: { timeoutAcknowledgedAt: new Date().toISOString(), billingOutcome: 'unknown-reservation-retained' } } : {}), ...(reconciliation ? { result: { reconciliation } } : {}) }, job.revision, 'dispatch_unknown')
-  if (pack.status !== 'dispatch_unknown') return pack
+  if (pack.status !== 'dispatch_unknown' && !(preDispatchRejected && pack.status === 'generating')) return pack
   return repository.studioPut(uid, 'package', pack.id, { ...pack, status: 'failed', error: 'The previous attempt produced no usable content. Your saved draft is preserved; you can request a new attempt.' }, pack.revision)
 }
 
