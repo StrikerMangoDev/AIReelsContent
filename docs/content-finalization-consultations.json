@@ -1,0 +1,332 @@
+{
+  "date": "2026-11-08",
+  "policyVersion": "editorial-text-v1",
+  "runtimePolicyVersion": "content-finalization-v1",
+  "policyMapping": "Runtime content-finalization-v1 implements the consulted editorial-text-v1 text policy; consultation approval does not certify software behavior. Hash covers content/settings/evidence JSON including evidence retrievedAt, excluding package revision/updatedAt alone.",
+  "status": "director_and_independent_qa_policy_approved",
+  "method": "Existing expert chats consulted individually, strictly sequential completion before next dispatch. SMM initial irrelevant old heartbeat was corrected before continuing (not counted as opinion). Audience initial acknowledgment retained as non-substantive; follow-up gives substantive review.",
+  "scope": "Policy approval only, not software acceptance, content approval, deployment, rendered media acceptance or publication authority.",
+  "finalDecisions": {
+    "director": {
+      "verdict": "APPROVE",
+      "turnId": "01a1bb96-e3ee-7c80-a74f-a50984dabd1f"
+    },
+    "qa": {
+      "verdict": "APPROVE",
+      "turnId": "01a1bb97-abf9-74d3-a2ce-d56b1ba31e98"
+    }
+  },
+  "coverage": [
+    {
+      "role": "director",
+      "threadId": "01a11d40-313b-79d0-857b-c7b0729682d2",
+      "substantiveTurnId": "01a1bb8b-1c2a-7840-a2a6-ae4e971efc41"
+    },
+    {
+      "role": "smm",
+      "threadId": "01a122ae-0081-74e0-9914-87e5e5349111",
+      "substantiveTurnId": "01a1bb8c-de45-7c51-89da-b6e86ab3b1e2"
+    },
+    {
+      "role": "market-trends",
+      "threadId": "01a11d40-3c38-7bc0-a243-763d3ad4bb1f",
+      "substantiveTurnId": "01a1bb8d-3519-70b0-afc6-38a2f2b96eba"
+    },
+    {
+      "role": "competitor",
+      "threadId": "01a11d40-474a-7d00-8e2c-cfec9e6d27d8",
+      "substantiveTurnId": "01a1bb8d-7317-78d1-ada0-ea43e8a62467"
+    },
+    {
+      "role": "audience-keywords",
+      "threadId": "01a11d40-5555-7302-8d8e-22a2e7b4e685",
+      "substantiveTurnId": "01a1bb95-897a-70b3-aedc-c240a5d5a91d"
+    },
+    {
+      "role": "seo-social",
+      "threadId": "01a11d40-63f4-70b0-8a14-34015be9a906",
+      "substantiveTurnId": "01a1bb8e-28ec-7072-82fc-06b8e3b0f8b8"
+    },
+    {
+      "role": "writer",
+      "threadId": "01a11d40-70e0-7880-bd7c-973a1d7d9f1e",
+      "substantiveTurnId": "01a1bb8e-7e80-7f31-b1ad-6a96563adad9"
+    },
+    {
+      "role": "creative-review",
+      "threadId": "01a11d40-7ccc-78c2-b3fe-e98f311216de",
+      "substantiveTurnId": "01a1bb8e-d5be-7042-aaf4-0fae5c3c6130"
+    },
+    {
+      "role": "calendar",
+      "threadId": "01a11d40-8ba8-7963-ba26-e9a9ad76467f",
+      "substantiveTurnId": "01a1bb8f-e25b-7b23-ad06-28bedbe3850a"
+    },
+    {
+      "role": "community",
+      "threadId": "01a11d40-96dc-7bd2-ad58-8050de8983e3",
+      "substantiveTurnId": "01a1bb90-aea4-7520-8bdd-fb715947c800"
+    },
+    {
+      "role": "analytics",
+      "threadId": "01a11d40-a2d2-70f3-bfc5-4f2bc349c557",
+      "substantiveTurnId": "01a1bb91-a48b-7050-9cb5-d50b4be5e338"
+    },
+    {
+      "role": "qa",
+      "threadId": "01a11d40-b131-7170-9370-530972dd13ac",
+      "substantiveTurnId": "01a1bb92-6300-7e31-9cb3-a98b6e1694be"
+    },
+    {
+      "role": "graphic-carousel",
+      "threadId": "01a127bb-5b61-7cb1-bfbb-1e74c391d397",
+      "substantiveTurnId": "01a1bb92-c223-7b30-8f0d-24d1cbd0c30d"
+    },
+    {
+      "role": "thumbnails",
+      "threadId": "01a127bb-6ca6-7f82-99de-680f35ba13ba",
+      "substantiveTurnId": "01a1bb93-7e2b-7930-975c-a1332fc5f114"
+    },
+    {
+      "role": "video-producer",
+      "threadId": "01a127bb-7d7d-7871-9712-1fca51bb6ea6",
+      "substantiveTurnId": "01a1bb93-fed2-7f63-9038-ea0c599dd540"
+    },
+    {
+      "role": "video-editor",
+      "threadId": "01a127bb-8e38-78b3-9388-9cad9dbccda6",
+      "substantiveTurnId": "01a1bb94-ac60-76c0-b95e-98bfcd80099c"
+    }
+  ],
+  "consolidatedProposal": "Consolidated policy editorial-text-v1 after individual sequential consultation of you, SMM, all ten existing social specialists and four production specialists:\nBrief(Director/SMM)->source/claim mapping(Market/Competitor/Audience/SEO)->versioned writing(Writer)->text creative review(Creative)->independent noncontributor claim/quality review->separate owner approval->text export. Required seven core TEXT PACKAGE dimensions relevance/originality/clarity/hook/brand/factual/CTA0-10; unrounded mean>=8 each>=6 factual>=8; each human rationale>=20chars plus existing source IDs. No evidence=UNRATED/REVIEW_REQUIRED; no partial mean; low score=needs_revision; hard blockers override ratings. Anchors0-3 unusable/unsupported,4-5 major revision,6-7 adequate improvement,8-9 strong supported,10 exceptional specific support. Rights/promise/freshness/contradictions and existing claim/citation validation mandatory. Exact content/settings/evidence hash, reviewer, policy version, expiry<=24h; material edits invalidate; old approvals need re-review.\nResolve consultation differences: no N/A renormalization of seven sourced TEXT PACKAGE scores. CTA rates fit of next action OR justified deliberate no-CTA against brief; genuinely unassessable required core score=REVIEW_REQUIRED. Optional standalone asset criteria may N/A with reason outside core mean. Claim-free fiction and rendered-only assets are outside this sourced-package rubric. SEO search-language clarity folded into clarity/relevance, not eighth score. Relevance can be inferred brief fit; actual audience demand stays UNKNOWN without dated attributable audience evidence. Originality needs available comparison/provenance and cannot guarantee global uniqueness. Citation IDs make reasoning traceable, never prove creative quality/demand.\nText-package approval explicitly excludes rendered-media acceptance/native delivery. Graphic/thumbnail/producer/editor require separate actual exports/hash/order/rights/consent/truthful visual implications/mobile crop/contrast/caption/audio/playback/accessibility review before media release. Calendar publication is a separate explicitly authorized account/version/timezone/dedup/readback action. Analytics compares compatible metrics/windows/post ages; no growth prediction from ratings.\nImplementation owner reports188/188 tests,build,targeted lint; fixture-backed real component browser checks1440/768/390/320 include missing/low/pass/expired reviews and separate owner/download. This is reported LOCAL verification, not your software audit; no deployment/live auth/real content approval/publication performed.\nPlease explicitly APPROVE or REVISE this complete consolidated POLICY for your remit in<=250words; identify essential unresolved blockers only. This is the user-authorized final policy review after all expert consultations. Do not resume campaigns, delegate, edit or send messages. Reply here; I read it.",
+  "records": [
+    {
+      "role": "director",
+      "threadId": "01a11d40-313b-79d0-857b-c7b0729682d2",
+      "title": "Social Media — Marketing Director",
+      "turnId": "01a1bb8b-1c2a-7840-a2a6-ae4e971efc41",
+      "startedAt": 1794147818,
+      "completedAt": 1794147858,
+      "status": "completed",
+      "response": "My Director process for AIReelsContent should be:\n\n1. **Brief:** Identify brand, audience, objective, platform, account, format and action requested.\n2. **Research:** Map material claims to sources, recording URLs, publication/retrieval dates, limitations and availability. Competitor examples inform ideas; they do not prove demand.\n3. **Production:** Develop alternative hooks, select one, and produce the script, captions, media, accessibility descriptions and platform adaptations.\n4. **Review:** Creative reviews the actual export; independent QA checks claims, rights, readability and consistency between approved copy and rendered media.\n5. **Finalization:** Freeze the exact approved version. Record reviewer, evidence, unresolved limitations and authorization.\n6. **Execution:** One authorized publishing owner submits it, checks provider acceptance and verifies the saved media. An uncertain response requires checking actual state before retrying.\n7. **Learning:** Compare platform-specific results at comparable post ages. Missing metrics remain unknown; weak results produce a specific revision hypothesis.\n\nThe **documented rubric** has seven equally weighted dimensions. Its proposed thresholds translate directly from 0–5 to 0–10:\n\n| Dimension | Required evidence |\n|---|---|\n| Relevance | Clear audience need and useful takeaway |\n| Originality | Distinct angle; no copied creative |\n| Clarity | Readable copy, understandable sequence |\n| Hook strength | Accurate opening that earns attention |\n| Brand fit | Appropriate identity, voice and subject |\n| Factual accuracy | Claim-to-source support and necessary qualifications |\n| CTA | Clear, relevant next action |\n\n**Recommended local gate:** total **≥56/70**, every dimension **≥6/10**, factual accuracy **≥8/10**. These are editorial thresholds—not validated predictors of growth. Missing evidence should produce **UNRATED/REVIEW_REQUIRED**, rather than an invented score.\n\n**Hard blockers override scores:** unsupported material claims; misleading demonstrations or results; wrong account/brand; unresolved asset rights; material accessibility/readability defects; missing required media; copy/media/version mismatch; failed platform requirements; absent or out-of-scope execution authorization. Missing analytics blocks performance claims, not necessarily content approval.\n\n**Responsibilities:** specialists provide evidence and recommendations; Creative reviews presentation; independent QA can return **PASS, REVISE or BLOCKED**; Director owns the consolidated release decision. Human authorization governs external scheduling/publishing. An automated rating must never manufacture that authorization.\n\n**Demonstrated outcome:** the November 2–8 campaign recorded 35 reviewed images, 21 accepted queue entries, ordered-media preview checks and preservation of 70 existing records. [Implementation evidence](D:/AI_Team/Marketing/Social_Command_Center/FB-WEEK-20261102-08/IMPLEMENTATION-REPORT.md). The documented gates are in [OPERATIONS.md](D:/AI_Team/Marketing/Social_Command_Center/OPERATIONS.md).\n\nNot checked here: current publication status, growth outcomes or AIReelsContent implementation. The process has demonstrated scheduling verification, not proven content-performance prediction or full unattended operation.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "smm",
+      "threadId": "01a122ae-0081-74e0-9914-87e5e5349111",
+      "title": "Finalize Future Bytes delegation",
+      "turnId": "01a1bb8c-de45-7c51-89da-b6e86ab3b1e2",
+      "startedAt": 1794147933,
+      "completedAt": 1794147955,
+      "status": "completed",
+      "response": "**SMM content flow:** Brief, audience, goal, platform, brand guidance, source material, and rights evidence → research and plan → writer creates the exact caption and platform variants → creative supplies ordered, rendered assets → fact-checker verifies claims against dated sources → independent QA reviews the exact copy and assets for accuracy, readability, rights, duplicates, and platform fit → Director makes the final decision.\n\n**Outputs:** versioned content packet with captions, ordered asset references, source IDs and retrieval dates, rights notes, assumptions, QA verdict, and Director decision. Missing evidence stays marked missing; drafts and proposals are not treated as queued or approved content.\n\n**Rubric: REVISE, then approve with these clarifications.** The seven dimensions and thresholds are a reasonable editorial gate, but the thresholds are policy choices, not validated predictors of reach or growth. Require a short evidence-based rationale for each score. Mark genuinely inapplicable dimensions `N/A` and return `REVIEW_REQUIRED` rather than silently changing the mean. A missing factual source should block the claim and leave factual accuracy unrated; it should not receive a guessed score. Define hard blockers explicitly—unsupported factual claims, rights uncertainty, unsafe or misleading content, duplicate content, or mismatch between reviewed and final asset/copy. Hard blockers override all scores. Independent QA must review the exact final version after any edits; Director approval follows QA.\n\nSkipped: no AIReelsContent implementation or empirical validation was performed. The rubric should be described as an editorial quality control, not a performance guarantee.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "market-trends",
+      "threadId": "01a11d40-3c38-7bc0-a243-763d3ad4bb1f",
+      "title": "Social Media — Market and Trend Researcher",
+      "turnId": "01a1bb8d-3519-70b0-afc6-38a2f2b96eba",
+      "startedAt": 1794147956,
+      "completedAt": 1794147971,
+      "status": "completed",
+      "response": "**REVISE for market research and topic validation.** The rubric covers editorial quality, but it does not define what my remit needs: traceable evidence for topic claims and clear boundaries between product facts and audience demand.\n\n### My review flow\n\n- **Inputs:** Approved product/tool scope, audience and market context, recent topic history, and proposed claims or examples.\n- **Steps:** Check the assigned scope and exclusions; find current official primary sources; record each source’s URL, publication date if shown, and retrieval date; connect each proposed factual claim to what the source actually supports; record uncertainty and recheck or expiry conditions; compare with recent topics for duplication.\n- **Outputs:** A deduplicated shortlist with topic/category, supported facts, limitations, worked example, source record, and recheck guidance. Product documentation establishes feature claims; it does **not** establish audience demand or predict performance.\n- **Reviewer:** An independent reviewer should check that each claim is supported by its cited source, exclusions and recent topics were checked, and no demand or performance claim has been inferred from feature availability.\n\n### Evidence requirements and blockers\n\nFor a factual claim, require a direct official source and a clear mapping from source to claim. Mark missing publication dates as “not shown”; don’t guess them. A claim without adequate evidence is **UNRATED / REVIEW_REQUIRED**. Hard blockers include unsupported or exaggerated product claims, stale or ineligible feature details presented as current, a known duplicate or excluded topic, and any implication that feature availability proves market demand. If a topic is useful but access is uncertain, qualify it or hold it for recheck.\n\n### Rubric\n\n**REVISE** the proposed rubric to include an evidence gate and a separate demand-evidence field. Factual accuracy ≥8 is a sensible editorial threshold, but a numeric score cannot compensate for an uncited claim: require direct evidence first, then score accuracy. Keep demand **N/A** unless actual audience research is supplied; never derive it from product docs. The mean and dimension thresholds may guide editorial selection, but—as specified—they are policy choices, not validated growth predictors. Hard blockers should override scores.\n\n### Finalization for AIReelsContent\n\nTreat research evidence as input to, not approval of, the finished asset. In finalization, map each factual statement in the script and visuals to its source; check any product UI or eligibility details again before release; label unsupported claims for revision; and have a reviewer inspect the rendered content as well as the text. Text-only review cannot establish whether the final visual communicates a different claim, obscures a caveat, or uses a mismatched interface. Keep unresolved evidence or visual issues at **REVIEW_REQUIRED**; record demand as **N/A** unless separately evidenced.\n\n**Skipped:** No repository or rendered-asset inspection; this consultation was limited to the existing research role and supplied rubric. **Risk:** Current feature availability and eligibility still need a pre-publication recheck.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "competitor",
+      "threadId": "01a11d40-474a-7d00-8e2c-cfec9e6d27d8",
+      "title": "Social Media — Competitor Intelligence…",
+      "turnId": "01a1bb8d-7317-78d1-ada0-ea43e8a62467",
+      "startedAt": 1794147971,
+      "completedAt": 1794148012,
+      "status": "completed",
+      "response": "## Research/content remit: APPROVE with one clarification\n\n**Inputs:** a brief (topic or niche, audience, region, language, voice/tone, duration, platform); source-backed updates and reactions; and any proposed content package. Optional preferences can guide the work but cannot serve as evidence.\n\n**Process:** research the brief; validate claims against sources; label claims as reported, disputed, or unconfirmed; separate observed reactions from inferred audience response; record unknowns; then draft platform-specific hooks, angles, counterpoints, claims, and citations. Review the text package before preview/edit/approval. If rendered media is in scope, inspect that output separately.\n\n**Outputs:** cited research and explicit unknowns; a content package for the requested platform; and, after approval, a team brief or production export. Virality, sentiment, and performance should remain hypotheses unless supported by actual evidence.\n\n**Reviewer:** the content owner or assigned human reviewer approves the final package. AI scoring can flag review needs; it should not convert missing evidence into a pass.\n\n**Required evidence:** each factual claim needs a traceable source that supports that claim. Evidence for audience reaction must be identified separately from general web research. A missing or weak source leaves the claim unrated and sends it to review.\n\n**Hard blockers:** fabricated or unsupported factual claims; presenting disputed or unconfirmed claims as established; invented audience sentiment or performance; and unresolved material accuracy concerns. A high average score must not override these blockers.\n\nI **approve** the proposed rubric as an editorial review aid, with your stated caveat that its thresholds are policy choices rather than proven growth predictors. Keep **N/A** for genuinely inapplicable dimensions and exclude it from the mean; do not turn N/A into a zero or invent a score. Missing evidence should yield **UNRATED / REVIEW_REQUIRED**, as proposed. A factual-accuracy score of 8 or higher should require claim-level evidence; the score alone cannot substitute for it.\n\n**Enforcement:** store dimension scores with short rationales and evidence links; calculate the mean only across rated dimensions; apply the minimums and hard blockers as finalization gates. Keep text approval distinct from rendered-asset review: text checks cannot establish visual legibility, timing, audio quality, or platform rendering.\n\nThis is based on the recorded AIReelsContent research workflow: brief → sourced research → platform package → preview/edit/approve → export or production. I did not inspect the current tool implementation, so this is process guidance rather than an implementation audit.\n\n**Ponytail:** I skipped implementation and live product checks as requested. Risk: the proposed score thresholds are editorial policy, not validated predictors of reach or growth.\n\n",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "audience-keywords",
+      "threadId": "01a11d40-5555-7302-8d8e-22a2e7b4e685",
+      "title": "Social Media — Audience and Keyword…",
+      "turnId": "01a1bb8e-13a0-74a1-b0da-b5bf27ee018e",
+      "startedAt": 1794148013,
+      "completedAt": 1794148017,
+      "status": "completed",
+      "response": "I’m handling a separate read-only expert consultation in the AIReelsContent thread. I’ll give it the exact audience and keyword evidence process, review the proposed rubric for my remit, and flag where text-only review cannot establish rendered-asset quality.",
+      "substantive": false,
+      "reviewStage": "acknowledgment_only"
+    },
+    {
+      "role": "seo-social",
+      "threadId": "01a11d40-63f4-70b0-8a14-34015be9a906",
+      "title": "Social Media — SEO and Social Search…",
+      "turnId": "01a1bb8e-28ec-7072-82fc-06b8e3b0f8b8",
+      "startedAt": 1794148018,
+      "completedAt": 1794148039,
+      "status": "completed",
+      "response": "**REVISE for my social search and copy-review remit.** The rubric covers general editorial quality, but has no explicit measure for whether the topic is described in the words a reader might search. Add **search-language clarity (0–10)**: relevant plain-language terms appear naturally in the headline or opening caption, with product names and platform-specific phrasing accurate. This rates copy clarity, not ranking potential. Search demand and volume stay **UNKNOWN** unless supported by direct data; do not score them by inference. The proposed thresholds remain editorial policy, not proven growth predictors.\n\n**My review process**\n\n- **Inputs:** Exact, versioned headline and captions for each platform; target audience and intended task; source register and claim-to-source map; platform/format; brand guidance; demand or performance data, if available.\n- **Steps:** Check that the core topic and likely reader question are clear; compare terms across headline, opening caption, and platform-specific copy; verify product and feature names against sources; distinguish observed queries from phrase hypotheses; record platform discovery guidance only when supported by current first-party evidence.\n- **Output:** Per-platform suitability, natural phrase/question hypotheses, evidence and freshness, observed versus inferred signals, caveats, and `UNKNOWN` where evidence is absent.\n- **Reviewer:** An independent copy/factual reviewer checks claim-to-source alignment and wording; a platform or analytics owner verifies native query evidence. Neither should infer demand from clarity or topicality.\n\n**Hard blockers:** Unsupported or materially misleading claims; source or version mismatch; overstated availability, guarantees, ranking, or demand; or a required claim with no adequate evidence. Block publication or mark `REVIEW_REQUIRED` regardless of average score.\n\nText-only review can assess wording, term clarity, and supplied evidence. It cannot verify rendered text legibility, contrast, crop, reading order, or platform upload behavior; those need the final rendered asset and platform-specific QA. Mark those checks `N/A` or `REVIEW_REQUIRED` as appropriate—don’t invent scores.\n\n**Implementation advice:** Add the search-language dimension and its evidence field to finalization; preserve `UNKNOWN` for demand and `N/A` for genuinely inapplicable dimensions. Keep the hard-blocker gate separate from arithmetic scoring so a passing mean cannot override an evidence failure.\n\nSkipped rendered-asset and native analytics review because this consultation is text-only. Search phrase suggestions are hypotheses and carry no reach or performance guarantee.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "writer",
+      "threadId": "01a11d40-70e0-7880-bd7c-973a1d7d9f1e",
+      "title": "Social Media — Hook, Headline and Script…",
+      "turnId": "01a1bb8e-7e80-7f31-b1ad-6a96563adad9",
+      "startedAt": 1794148040,
+      "completedAt": 1794148061,
+      "status": "completed",
+      "response": "## Writer process\n\n**Inputs:** task and brand ID, scope, dated source snapshot, assigned output path, audience/objective, platform and account, and reviewer. I work only in the assigned brand folder.\n\n**Steps:** check the brand brief and operating rules; map each factual claim to dated evidence and mark `OBSERVED`, `INFERRED`, `PROPOSED`, or `UNKNOWN`; draft distinct hooks, headlines, scripts and platform captions with a relevant CTA; then check factual support, brand fit, originality, clarity and text limits. Fictional examples must be labeled, and source text is treated as untrusted input.\n\n**Output:** a structured draft package with source URLs and dates, claim-to-source links, platform adaptations, CTA, uncertainty, and any visual or accessibility notes relevant to copy.\n\n**Reviewer:** an independent creative or QA reviewer checks the exact draft. The author does not approve their own work. Human approval remains separate from the score.\n\n**Evidence and blockers:** factual claims need relevant, current sources and traceable claim mappings. Missing support leaves a claim `UNKNOWN` and the package `REVIEW_REQUIRED`; material unsupported claims, inaccurate copy, wrong brand, or missing rights/evidence block approval regardless of score. Demand, reach, and growth remain unknown unless supported by suitable evidence.\n\n## Rubric decision\n\n**APPROVE for my writing remit.** The criteria fit copy review, and the gates are coherent as editorial policy. The thresholds are not evidence of predicted growth or performance. Apply them only to dimensions that can be judged from the submitted material; record `N/A` with a reason where a dimension truly does not apply, and do not use N/A to conceal missing evidence. Missing evidence means `UNRATED/REVIEW_REQUIRED`, not a zero or an inferred score. Any hard blocker overrides the mean and dimension thresholds.\n\nFor finalization, AIReelsContent should retain the rubric version, evidence links, criterion scores with short rationales, N/A reasons, blocker status, reviewer identity, and exact content/version reviewed. Only an independent reviewer should set the review result; keep human approval as a separate final gate. Scores should describe editorial readiness, not promise reach or results.\n\nSkipped rendered-asset review and implementation details for the tool; this consultation covers the writer’s text-only remit.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "creative-review",
+      "threadId": "01a11d40-7ccc-78c2-b3fe-e98f311216de",
+      "title": "Social Media — Creative Director and…",
+      "turnId": "01a1bb8e-d5be-7042-aaf4-0fae5c3c6130",
+      "startedAt": 1794148062,
+      "completedAt": 1794148130,
+      "status": "completed",
+      "response": "**REVISE — approved for the creative-review remit with two rubric rules added.** The dimensions and thresholds are usable as editorial policy, not as validated predictors of growth.\n\n**Creative review process**\n\n- **Inputs:** Frozen copy and version hash; brief with audience, objective, and platform; source and claim map; brand references; prior-content baseline for originality; intended CTA; per-card alt text; and exact rendered assets with order and hashes.\n- **Steps:** Confirm version binding; review relevance, originality, clarity, hook, brand fit, CTA, and card-to-card flow; check each alt description against its card; then inspect the rendered files at delivery size for hierarchy, contrast, wrapping, crops, and readability. A separate, independent QA reviewer verifies factual claims against cited sources.\n- **Outputs and reviewers:** Creative reviewer returns per-dimension scores or `UNRATED`, evidence, concrete revisions, and a release recommendation bound to the exact copy and media hashes. Independent QA returns its factual verdict. The Director owns final release decisions.\n- **Required evidence:** A claim-to-source link for accuracy; brand artifacts for brand fit; recent content records for originality; stated audience/objective for relevance; rendered exports for visual readability; and the intended action for judging CTA fit. If evidence is missing, mark that dimension `UNRATED / REVIEW_REQUIRED`, not zero.\n\n**Rubric decision:** Keep the proposed thresholds as the Director’s editorial rule: mean ≥8, each scored dimension ≥6, factual accuracy ≥8. Add that the mean uses only applicable, rated dimensions. Mark CTA `N/A` when no CTA is intended; do not invent a score. If a required dimension is unrated, the package remains `REVIEW_REQUIRED`. Hard blockers override every score: material unsupported claims, misleading product imagery or endorsement, unresolved asset rights, unreadable essential qualifications, a copy/media hash mismatch, or missing required fictional/source labeling.\n\n**Limits:** Text-only review can assess wording, sequence, and whether alt text maps to cards. It cannot establish visual legibility, contrast, crop behavior, or rendered alt delivery; those require the exact assets and platform-specific evidence.\n\nSkipped: no package was scored or changed in this consultation. Risk: the numeric thresholds are editorial judgment, not evidence of expected engagement.\n\n",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "calendar",
+      "threadId": "01a11d40-8ba8-7963-ba26-e9a9ad76467f",
+      "title": "Social Media — Content Calendar and…",
+      "turnId": "01a1bb8f-e25b-7b23-ad06-28bedbe3850a",
+      "startedAt": 1794148131,
+      "completedAt": 1794148182,
+      "status": "completed",
+      "response": "## Calendar review: **APPROVE, with scope conditions**\n\nThe proposed 0–10 thresholds are mathematically equivalent to the current Calendar workflow’s 0–5 rubric: mean ≥8, every applicable dimension ≥6, and factual accuracy ≥8 match total ≥28/35, every dimension ≥3, and factual accuracy ≥4. They remain editorial thresholds, not validated predictors of reach or growth.\n\n### Calendar process\n\n- **Inputs:** Task and brand IDs, scope, dated source snapshot, exact account/platform, schedule and timezone, output path, and reviewer. Confirm the latest approved version and publishing authority first.\n- **Steps:** Reconcile coverage against released account-bound evidence; verify the exact copy and asset version, account, time, duplicate status, QA, and Director release. Return a blocked handoff if a required item is missing. After an authorized schedule action, reconcile the exact provider IDs and read back state, account, time, content, settings, and errors. For an ambiguous result, stop and inspect the same IDs before considering any retry.\n- **Outputs:** Evidence-linked coverage/readback and an account-bound scheduling handoff or receipt, with missing evidence and limits stated.\n- **Reviewers:** Independent QA reviews the exact content and assets; the Director owns decisions and authorized execution. Calendar verifies the schedule handoff and provider state; it does not replace either reviewer.\n\n### Rubric conditions for finalization\n\nScore each applicable dimension against evidence tied to the exact version. Keep the score, short rationale, and evidence reference. Use `UNRATED / REVIEW_REQUIRED` when evidence is missing. Use `N/A` only with a reason; exclude it from the mean and show the rated-dimension count. Mark factual accuracy `N/A` only when a claim review confirms there are no factual claims. Any hard blocker overrides the score.\n\nHard blockers include unsupported material claims, wrong brand/account, missing rights or accessibility review, mismatched version or hash, missing independent QA or required human approval, and ambiguous or conflicting provider state.\n\nText-only review can assess copy, sources, captions, and metadata. It cannot establish rendered readability, crop, visual hierarchy, or delivery of alt text. Those require review of the final rendered assets at the target display size; Calendar records that evidence but does not substitute for Creative or QA.\n\nThis follows the registered [Calendar role](D:/AI_Team/Marketing/Social_Command_Center/agents/calendar.md) and [Operations rubric and approval flow](D:/AI_Team/Marketing/Social_Command_Center/OPERATIONS.md).\n\nSkipped implementation changes and product testing, which were outside this read-only consultation. Threshold equivalence holds; growth impact remains unvalidated.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "community",
+      "threadId": "01a11d40-96dc-7bd2-ad58-8050de8983e3",
+      "title": "Social Media — Community Engagement…",
+      "turnId": "01a1bb90-aea4-7520-8bdd-fb715947c800",
+      "startedAt": 1794148183,
+      "completedAt": 1794148246,
+      "status": "completed",
+      "response": "**APPROVE for the Community remit**, provided the 0–10 scale is versioned as the active rubric. It preserves the existing Operations rubric’s proportional gates (80% overall, 60% minimum per dimension, 80% factual accuracy), but both scales should not remain active in the tool. These are editorial gates, not validated growth predictors.\n\n**Community review flow:** Inputs are the exact package/version and hash; platform and intended audience; caption and CTA; linked claim evidence; and, if demand is being assessed, a dated native comment snapshot with account/post IDs and visible scope. I check reader comfort, clarity, pressure or engagement bait, and whether prompts invite sensitive or identifying disclosures. I classify audience text as observed only when tied to a source; otherwise label it inferred or unknown. The output is an `APPROVE`, `REVISE`, or `BLOCKED` recommendation tied to that version, with evidence, specific issues, limitations, and any N/A reasons. An independent reviewer—never the author—checks the result.\n\nHard blockers include unsupported material claims, prompts that solicit sensitive or identifying information, and treating inaccessible comments or hypothetical questions as observed demand. If comments are unavailable, demand remains unknown; that alone does not invalidate a copy score.\n\nFor N/A, require a reason and exclude it from the mean; if a required dimension or minimum review coverage is missing, return `UNRATED / REVIEW_REQUIRED`, not a passing score. A text-only review can assess captions and supplied CTA wording. It cannot approve rendered asset text, legibility, visual context, audio, or accessibility in the final media; require a rendered review before finalization when those elements are present. This follows the evidence and independent-QA controls in [community role instructions](D:\\AI_Team\\Marketing\\Social_Command_Center\\agents\\community.md) and [Operations](D:\\AI_Team\\Marketing\\Social_Command_Center\\OPERATIONS.md).\n\nSkipped: account/comment inspection and any copy changes. Risk: a text-only pass cannot establish visual or audio safety.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "analytics",
+      "threadId": "01a11d40-a2d2-70f3-bfc5-4f2bc349c557",
+      "title": "Social Media — Analytics and Growth…",
+      "turnId": "01a1bb91-a48b-7050-9cb5-d50b4be5e338",
+      "startedAt": 1794148246,
+      "completedAt": 1794148294,
+      "status": "completed",
+      "response": "**Analytics remit: REVISE.** The seven proposed dimensions can guide editorial review, but their mean and thresholds do not measure demand or predict performance. Keep them separate from analytics evidence and label the cutoffs as editorial policy.\n\n**Process for content finalization**\n\n- **Inputs:** task and brand IDs, scope, dated source snapshot, package version, output path, and reviewer; also the brief, platform variants, claim/source ledger, demand observations, and any owned-account metrics being considered.\n- **Steps:** preserve the brief’s audience, locale, platform, and objective; review demand evidence separately from factual support; check that comparisons match platform, format, audience, metric, reporting window, and post age; retain missing values as `UNKNOWN`/`UNRATED`, never zero; record findings as observed, inferred, or unknown, with dates, URLs, sample/coverage, metric definitions, and limits.\n- **Outputs and review:** return findings, evidence and dates, limitations, next action, and human owner. An independent reviewer checks the exact package version; final handoff should retain that review and package hash.\n\n**Hard blockers:** unsupported material claims; demand or trend labels without dated, scoped evidence; incomparable metrics presented as a ranking; unknown denominators treated as zero; or causal/lift claims unsupported by an appropriate design. Keep the item `REVIEW_REQUIRED` until resolved. Handle N/A by marking it N/A with a reason and excluding it from the mean; if a required dimension is N/A, require human review rather than silently lowering the bar.\n\nText-only review can assess copy, evidence links, and stated metric logic. It cannot verify rendered legibility, crop, media order, accessibility in the actual platform surface, or asset integrity; those need rendered assets and separate review. **I did not inspect or implement the tool.** Risk: these thresholds remain editorial choices, not validated growth predictors.\n\n",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "qa",
+      "threadId": "01a11d40-b131-7170-9370-530972dd13ac",
+      "title": "Social Media — Fact-Checking and Quality…",
+      "turnId": "01a1bb92-6300-7e31-9cb3-a98b6e1694be",
+      "startedAt": 1794148295,
+      "completedAt": 1794148318,
+      "status": "completed",
+      "response": "**APPROVE WITH TWO ENFORCEMENT REQUIREMENTS** for independent QA.\n\n### QA process\n\n- **Inputs:** frozen copy and brief; claim-to-source map with retrieval date and supported facts; audience and brand constraints; risk disclosures; CTA; and, when reviewing publication assets, exact rendered files, asset manifest, alt descriptions, and platform bindings.\n- **Steps:** bind review to artifact hashes; check claims against primary sources; check clarity, originality, brand fit, CTA, and unsupported outcome or performance claims; validate copy limits, captions, dedup evidence, and alt text; then verify rendered text, order, dimensions, legibility, and media binding when assets are supplied.\n- **Output:** per-dimension score or `UNRATED`/`N/A`, cited evidence and rationale, hard blockers, and an overall `PASS` or `REVISE` bound to the reviewed version.\n- **Reviewer:** a QA reviewer independent of the writer and asset creator. The Director or designated approver owns the final release decision.\n\n**Evidence and blockers:** factual scores require primary-source evidence for each material claim. Missing or unverifiable evidence means `UNRATED` and `REVIEW_REQUIRED`, never an assumed score. Hard blockers override averages: unsupported material claims, fabricated tests/results, rights or safety concerns, material copy/render mismatch, broken or misleading CTA, or inaccessible content without an adequate alternative.\n\nFor a text-only review, I can assess claims, copy, structure, captions, and the written alt descriptions. I cannot verify rendered legibility, cropping, media order, asset provenance, or native alt delivery without the exact rendered files and platform evidence. A preview or manifest does not prove public-platform delivery.\n\n### Rubric review\n\nThe proposed dimensions and thresholds are suitable as **editorial policy**, not proven growth predictors. Keep the mean ≥8, each dimension ≥6, and factual accuracy ≥8 as stated. Add anchored score descriptions so reviewers apply the scale consistently. Treat `N/A` as excluded only when the dimension truly does not apply; it must not be used to hide missing evidence. Never calculate an overall mean while any required dimension is `UNRATED`.\n\nAt finalization, require evidence pointers and reviewer rationale for every score; make blockers and `UNRATED` outcomes stop approval automatically. Freeze and record the exact copy and asset hashes after review. Any material change returns the affected items for review; a timestamp-only change need not.\n\nSkipped: no files, shared state, or publication workflow were changed. **Risk:** scores remain subjective unless the scale has clear anchors and reviewers apply the evidence rules consistently.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "graphic-carousel",
+      "threadId": "01a127bb-5b61-7cb1-bfbb-1e74c391d397",
+      "title": "Social Media — Graphic & Carousel Designer",
+      "turnId": "01a1bb92-c223-7b30-8f0d-24d1cbd0c30d",
+      "startedAt": 1794148319,
+      "completedAt": 1794148367,
+      "status": "completed",
+      "response": "**Graphic & Carousel Designer verdict: REVISE.** Keep the proposed rubric as an editorial filter, but require separate rendered-asset acceptance gates. A high average cannot compensate for unreadable text, unresolved rights or an unreviewed export.\n\n**Exact process: inputs → steps → outputs → reviewer**\n\n1. **Validate inputs:** account/brand, audience, objective, approved copy/CTA, claim sources, rights, placement, dimensions, card order, deadline/timezone, editable format and named reviewers. Record missing information as UNKNOWN.\n2. **Develop the visual direction:** inspect relevant professional references, record what informs hierarchy/composition, and source assets deliberately. Reuse established design for small changes. References do not confer reuse rights.\n3. **Produce:** build the editable master using approved wording; create a coherent cover → explanation/example → closing-action sequence.\n4. **Verify actual renders:** compare exports with the approved copy and master. Inspect target dimensions and realistic phone size for hierarchy, wrapping, spacing, contrast, safe areas, crops, sequencing and misleading visual implications.\n5. **Package evidence:** editable master, ordered exports, previews, absolute paths, file hashes, per-card alt/text equivalents, source/rights records and unresolved findings.\n6. **Review:** designer self-check → Creative lead → independent QA and human accessibility review → Director decision → authorized SMM handoff. Record reviewer, date and exact version at every gate. Self-review never replaces independent review.\n\n**Rubric revisions**\n\nRetain relevance, originality, clarity, hook strength, brand fit, factual accuracy and CTA, each 0–10, with the proposed mean ≥8, each applicable dimension ≥6 and factual accuracy ≥8. These are **editorial policy thresholds, not validated growth predictors**.\n\nEach rating needs a short rationale and supporting evidence. Specify its scope: copy, visual concept or final render. For example, a copy hook score does not establish that the rendered cover communicates effectively.\n\nUse:\n- **UNRATED / REVIEW_REQUIRED** when evidence is missing.\n- **N/A** only when genuinely inapplicable, with a recorded reason and reviewer acceptance. Exclude accepted N/A dimensions from the denominator and show the applicable count.\n- Do not substitute N/A for absent evidence. Unsupported audience demand remains UNKNOWN; originality assessment cannot guarantee worldwide uniqueness.\n- Factual accuracy ≥8 applies where factual claims exist. Claim-free content may receive approved N/A, while visual honesty and provenance checks remain mandatory.\n\n**Hard blockers**\n\nUnresolved claims/rights; copy-to-export mismatch; missing or corrupted cards; incorrect order/dimensions; illegible or clipped text; accessibility failures; misleading diagrams/results; unavailable editable master without an approved substitution; or missing independent approvals.\n\n**AIReelsContent enforcement**\n\nStore ratings, evidence and approvals against an immutable package version containing copy, master, ordered export hashes and alt text. Finalization requires both rubric eligibility **and** every required gate PASS. Material changes invalidate affected approvals; changed export hashes require renewed rendered review. Keep `COPY_APPROVED`, `RENDERED_REVIEW_PENDING`, `APPROVED_FOR_HANDOFF` and publication status distinct.\n\nThis consultation used the role document and reference-led design workflow; no product implementation or current assets were inspected. No edits, external actions or publication occurred.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "thumbnails",
+      "threadId": "01a127bb-6ca6-7f82-99de-680f35ba13ba",
+      "title": "Social Media — Thumbnail & Visual Packaging…",
+      "turnId": "01a1bb93-7e2b-7930-975c-a1332fc5f114",
+      "startedAt": 1794148368,
+      "completedAt": 1794148399,
+      "status": "completed",
+      "response": "**REVISE for Thumbnail & Visual Packaging.** The proposed rubric is suitable for editorial review, but thumbnail approval also needs checks of the rendered asset, crop, accessibility, and rights. A strong text score cannot establish visual readiness.\n\n**Exact process: inputs → steps → outputs → reviewer**\n\n1. **Inputs:** Approved content/script and supporting evidence; audience, niche, objective, brand identity, language/locale; target platform and placement; candidate frames with timestamps or artwork provenance; asset/font rights; deadline/timezone; named reviewers.\n2. **Truth alignment:** Map each headline, visual implication, comparison, and depicted result to the content and evidence. Identify fictional or synthetic elements and necessary disclosures.\n3. **Concept selection:** Compare distinct concepts for topic recognition, truthful promise, hierarchy, and audience fit. Record the selection rationale; treat expected attention or CTR as a hypothesis.\n4. **Rendered inspection:** Examine the exact exported version at intended mobile display size and each required crop. Check clipping, text/background separation, subject recognition, reading order, localization, and meaning conveyed by color. Verify current official placement requirements or record them as unknown.\n5. **Package:** Supply editable master, exports, version identifiers, SHA256 hashes, source/rights manifest, prepared text alternative, review evidence, and unresolved issues.\n6. **Review:** Graphics owns final exports → Creative reviews craft and content alignment → independent QA checks exact versions and evidence → Director decides release → SMM retains publishing custody. Self-review cannot replace independent QA.\n\n**Rubric treatment**\n\n- Retain relevance, originality, clarity, hook strength, brand fit, factual accuracy, and CTA, scored 0–10 **only where assessable**. Each score needs a reason and evidence reference.\n- Retain mean ≥8, applicable dimensions ≥6, and factual accuracy ≥8 as proposed editorial thresholds. They do not predict growth.\n- Assess factual accuracy across visual implications as well as words. An image implying an unperformed demonstration fails even if the headline is technically accurate.\n- **CTA may be N/A** when the thumbnail’s purpose is recognition or opening the content. Require a rationale; exclude N/A from the mean and display the denominator.\n- Missing evidence is **UNRATED/REVIEW_REQUIRED**, never N/A or an invented score. A partial mean must not qualify the item.\n- Add mandatory rendered checks: **mobile legibility, crop integrity, contrast/accessibility, localization where applicable, and asset/font rights**. These are pass/fail/review-required gates.\n\n**Required evidence and hard blockers**\n\nEvidence must identify the source passage/frame, asset provenance and permitted use, exact export/hash, inspected preview dimensions/crops, and reviewer decisions. Block approval for misleading promises, unresolved rights, essential content clipped or unreadable, material translation errors, or an unreviewed required placement.\n\nText-only consultation can approve a brief or proposed copy. It cannot approve rendered readability, contrast, crops, font rendering, or native accessibility delivery.\n\n**AIReelsContent enforcement**\n\nKeep separate states for **brief reviewed**, **rendered asset reviewed**, **independent QA passed**, and **Director approved**. Finalization requires complete applicable scores, passed mandatory gates, and decisions bound to exact hashes. Changed assets invalidate affected reviews; hard blockers override averages. Director approval remains distinct from publishing authorization.\n\nNo assets or live tool behavior were inspected here; this is a process recommendation, not final-asset approval.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "video-producer",
+      "threadId": "01a127bb-7d7d-7871-9712-1fca51bb6ea6",
+      "title": "Social Media — AI Video Producer & Storyboard…",
+      "turnId": "01a1bb93-fed2-7f63-9038-ea0c599dd540",
+      "startedAt": 1794148400,
+      "completedAt": 1794148444,
+      "status": "completed",
+      "response": "**REVISE for the AI Video Producer & Storyboard remit.** Accept the proposed thresholds as editorial policy, with separate script and rendered-video gates. They are not validated growth predictors. This approves a proposed process only; it does not approve content or establish implementation.\n\nBased on the verified [role document](<D:/Projects/Social Media Grpahics & Video/ROLE_AI_VIDEO_PRODUCER_STORYBOARD.md>), my process is:\n\n1. **Inputs → validated brief.** Require account/brand, audience, objective, CTA, source material, rights/consent, exact format, deadline/timezone, production owner and reviewer. Record missing facts as unknown.\n2. **Brief → evidence map.** Link factual claims and planned demonstrations to sources or actual capture/test evidence. Record date, applicability and caveats. Verify required production capability and authorization before use; tool presence is insufficient.\n3. **Evidence → script and storyboard.** Each shot specifies purpose, timing, framing/action, narration, on-screen text, asset/source, continuity and accessibility requirements. Label fictional examples and simulations; never imply an unperformed demonstration.\n4. **Storyboard → Creative review.** Deliver versioned script, shotlist, storyboard, source/rights manifest and unresolved issues. Creative lead approves the exact production plan.\n5. **Authorized production → rendered review.** Production owner supplies editable masters, linked assets, versioned exports, transcript/captions and provenance. Check actual playback, continuity, timing, audio, mobile legibility and accessibility.\n6. **Review → decision.** Creative reviews craft; independent QA reviews the exact version and evidence. Director makes the final decision; SMM retains publishing custody. Revisions return through affected checks.\n\n**Rubric changes required:**\n\n- Retain mean **≥8**, every applicable dimension **≥6**, and factual accuracy **≥8**.\n- Define scoring anchors and require a short rationale plus evidence reference for every score. Originality means documented provenance and creative distinction, not proof of worldwide uniqueness.\n- Separate **SCRIPT_REVIEW** from **RENDER_REVIEW**. Text can support provisional relevance, narrative clarity, hook wording, brand voice, factual claims and CTA assessment. It cannot establish actual pacing, visual hook execution, caption readability, audio quality or accessibility.\n- Missing evidence is **UNRATED/REVIEW_REQUIRED**, never zero or N/A.\n- Permit **N/A only when genuinely inapplicable**, with reviewer rationale; exclude it from the mean and display the denominator. Pure fiction may have factual accuracy N/A only after confirming no factual/product implication. An absent CTA is not N/A when the brief requires one.\n- Treat rights, consent, truthful demonstrations, required disclosures, accessibility and independent QA as mandatory gates outside the average. Hard blockers override all scores.\n\n**AIReelsContent enforcement:** store the rubric version, content version/hash, review stage, dimension scores/statuses, evidence references, reviewer identity, blockers and decision. Recalculate eligibility automatically; prevent finalization when required evidence, rendered checks or approvals are missing. Any changed script or export invalidates affected approvals. Director approval must bind to the exact reviewed artifact; publication remains a separate action.\n\nSkipped implementation and rendered-asset inspection, as requested. These recommendations do not certify the tool’s current enforcement or any content’s release readiness.\n\n",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "video-editor",
+      "threadId": "01a127bb-8e38-78b3-9388-9cad9dbccda6",
+      "title": "Social Media — Video Editor, Motion…",
+      "turnId": "01a1bb94-ac60-76c0-b95e-98bfcd80099c",
+      "startedAt": 1794148445,
+      "completedAt": 1794148479,
+      "status": "completed",
+      "response": "**Video Editor, Motion & Audio Specialist — REVISE for my remit.** The proposed rubric is suitable for editorial screening, but final video acceptance also needs separate technical, rights and accessibility gates. A strong script score cannot establish that an exported video works.\n\nMy process is **approved brief and source assets → edit and inspect → versioned media package → Creative review → independent QA → Director finalization**:\n\n1. **Inputs:** exact account and audience, objective, approved script/storyboard version, format/duration, deadline/timezone, source media and rights evidence, brand assets, caption language, named production owner and reviewer. Unknown inputs stay explicitly unknown.\n2. **Prepare:** inventory originals and permissions; confirm source/script versions; verify the actual editing/export route. Tool presence alone does not prove capability.\n3. **Edit:** assemble the rough cut; refine pacing, visual hierarchy, captions, color and optional audio. Keep simulations, conceptual diagrams and authored examples accurately labeled. Preserve editable masters and review history.\n4. **Inspect:** check the entire export through decode and playback. Verify dimensions, aspect ratio, duration, frame rate, caption spelling/timing, readable framing, sync and any audio clipping/dropouts. Perform human phone-readability and accessibility checks.\n5. **Outputs:** versioned preview and final candidate, editable project/dependencies, transcript and subtitle files, source/rights manifest, export properties, SHA-256 and timecoded inspection findings.\n6. **Reviewers:** Creative evaluates craft; independent QA checks the exact submitted media and evidence; Director makes the final decision. SMM retains publishing custody.\n\n**Required evidence:** source/license or consent records; approved input versions; actual output file/hash; export inspection results; human playback/accessibility evidence; and reviewer decisions bound to that version. Optional audio needs provenance and relevant consent/license evidence. Silent content needs all substantive meaning visibly readable.\n\n**Hard blockers:** unsupported material claims; unresolved asset or voice rights; wrong destination/account; missing or corrupt required media; misleading simulation; unreadable essential information; materially inaccurate captions; or absent required independent review. Production ownership must be assigned before commissioning work.\n\nI approve the seven proposed dimensions and thresholds **as editorial policy**, with these amendments:\n\n- Record whether each rating covers **text**, **storyboard**, or **rendered media**. Text-only clarity/hook ratings cannot become final-video ratings.\n- Add mandatory **PASS / FAIL / NOT_VERIFIED** gates for rights, technical delivery, accessibility and version-bound review.\n- For genuinely inapplicable dimensions, record **N/A with a reviewer-approved reason**; exclude them from the mean and show the denominator. Missing evidence is not N/A. Applicable factual claims still require the accuracy threshold; absence of factual claims earns no automatic 10.\n- Passing scores never override a blocker or incomplete gate.\n\nAIReelsContent should require evidence references for ratings, prevent finalization while an applicable gate is unresolved, and invalidate affected approvals when the script, media or rights change. “Editorially approved,” “media verified,” and “release approved” should remain separate states.\n\nThis is a process consultation; I inspected no current media or application implementation. The thresholds do not predict growth or replace human review.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "audience-keywords-followup",
+      "threadId": "01a11d40-5555-7302-8d8e-22a2e7b4e685",
+      "title": "Social Media — Audience and Keyword…",
+      "turnId": "01a1bb95-897a-70b3-aedc-c240a5d5a91d",
+      "startedAt": 1794148501,
+      "completedAt": 1794148512,
+      "status": "completed",
+      "response": "**Audience/keyword process**\n\n**Inputs:** Final text package and its exact version; campaign brief and exclusions; source IDs with URLs or records; any current audience questions, native analytics, or search-query data supplied for this campaign.\n\n**Steps:** Check the package against the brief and excluded topics. Extract audience wording only from attributable questions or query data. Keep editorial fit distinct from measured demand: brief-to-content fit may inform relevance as an explicitly **inferred** judgment; demand metrics remain **UNKNOWN** unless supported by actual audience evidence. For each rating, cite source IDs and give a rationale of at least 20 characters. Flag unsupported audience claims, stale evidence, overlap, or wording that promises more than the evidence supports.\n\n**Outputs:** Version-bound audience-fit and phrase notes; sources and evidence limits; observed/inferred/unknown labels; hard blockers; and an independent human review decision. The content owner then gives separate approval. Re-review after 24 hours or any version change.\n\n**Hard blockers:** Missing source support for factual or audience claims, unclear usage rights, misleading promises, stale evidence presented as current, or unresolved contradictions. Missing any core rating is `REVIEW_REQUIRED`; do not renormalize N/A.\n\n**Rubric decision: APPROVE for text-package review.** The seven dimensions and thresholds are usable as editorial policy, not validated predictors of audience demand or growth. Preserve “relevance” as brief fit rather than proof that people are searching for the topic. Keep optional asset checks outside the seven-score mean. Text approval does not certify the rendered media or its performance.\n\nSkipped: No live audience, search, or asset evidence was gathered for this consultation.  \nRisk: Without current attributable demand evidence, audience demand stays UNKNOWN.",
+      "substantive": true,
+      "reviewStage": "individual_process"
+    },
+    {
+      "role": "director-final-policy-review",
+      "threadId": "01a11d40-313b-79d0-857b-c7b0729682d2",
+      "title": "Social Media — Marketing Director",
+      "turnId": "01a1bb96-e3ee-7c80-a74f-a50984dabd1f",
+      "startedAt": 1794148590,
+      "completedAt": 1794148606,
+      "status": "completed",
+      "response": "**APPROVE editorial-text-v1 for the Director remit.** No essential policy blocker remains in the supplied specification.\n\nThe thresholds preserve the documented seven-dimension gate: an unrounded mean ≥8/10, every dimension ≥6, and factual accuracy ≥8. Evidence gaps and hard blockers correctly override numerical scores.\n\nThe policy also preserves the required separation between independent review, owner approval, rendered-media acceptance and explicitly authorized publication. Hash binding, expiry and invalidation after material edits make approval specific and auditable. A deliberate no-CTA remains assessable against the brief without inventing a score for genuinely missing evidence.\n\nTreat this as **policy approval only**. It does not approve individual content, authorize deployment or publishing, or certify the reported software checks. The scoring gate is an editorial control; its ability to predict growth remains unproven.\n\nNot checked: implementation, test results, reviewer independence or permission enforcement in the application. Those require separate software acceptance.",
+      "substantive": true,
+      "reviewStage": "consolidated_policy"
+    },
+    {
+      "role": "qa-final-policy-review",
+      "threadId": "01a11d40-b131-7170-9370-530972dd13ac",
+      "title": "Social Media — Fact-Checking and Quality…",
+      "turnId": "01a1bb97-abf9-74d3-a2ce-d56b1ba31e98",
+      "startedAt": 1794148641,
+      "completedAt": 1794148653,
+      "status": "completed",
+      "response": "**APPROVE** `editorial-text-v1` for my QA remit. The policy clearly separates evidence-based text review from rendered-media acceptance and publication, makes missing evidence a review blocker, requires independent review and owner approval, and binds decisions to exact versions. Its treatment of `N/A`, fictional content, audience demand, and material edits avoids inflating scores or approval scope.\n\nNo essential policy blocker remains. The 24-hour expiry is conservative and may require timely re-review, but it is a clear operational rule. The score anchors and thresholds are appropriately identified as editorial policy, not empirically validated predictors.\n\nNot assessed: software implementation or its reported local test results. **Risk:** scores remain judgment calls; rationale and anchors reduce inconsistency but do not make them objective.",
+      "substantive": true,
+      "reviewStage": "consolidated_policy"
+    }
+  ]
+}

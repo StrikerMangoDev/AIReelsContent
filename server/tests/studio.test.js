@@ -6,6 +6,7 @@ import { createRepository } from '../storage/repository.js'
 import { studioRouter } from '../studio/routes.js'
 import { safeSourceUrl, publicAddress } from '../studio/evidence.js'
 import { reviewContent, settingsSchema } from '../studio/content.js'
+import { ratingsFixture } from './fixtures/finalization.js'
 import { generateContent } from './helpers/passage-model.js'
 
 const excerpt = 'The publisher announced a new model with support for text and image inputs. Availability remains limited to the preview programme.'
@@ -89,7 +90,7 @@ test('generation requests only selected output formats and validates their depen
   assert.ok(reviewContent({ claims: content.claims }, evidence, { outputs: ['script'] }).issues.length)
 })
 
-test('studio preserves generation checks and lets the author confirm valid saved content without another reviewer', async () => {
+test('studio preserves generation checks and requires evidence-rated independent review before owner approval', async () => {
   const repository = createRepository(':memory:')
   const app = express(); app.use(express.json())
   let admin = false
@@ -114,22 +115,15 @@ test('studio preserves generation checks and lets the author confirm valid saved
     assert.equal((await call(`/packages/${draft.id}`, 'PATCH', { revision: draft.revision, content: generatedContent })).status, 409)
     assert.equal((await call(`/packages/${draft.id}`, 'PATCH', { revision: generated.revision, content: generatedContent, editorialStatus: 'approved' })).status, 422)
     const confirmed = await call(`/packages/${draft.id}`, 'PATCH', { revision: generated.revision, editorialStatus: 'approved' })
-    assert.equal(confirmed.status, 200)
-    const ready = await confirmed.json()
-    assert.equal(ready.approval.method, 'creator-confirmed')
-    assert.equal(ready.approval.approvedBy, 'alice')
-    assert.equal(ready.independentReview ?? null, null)
-    const authorExport = await (await call(`/packages/${draft.id}/export`)).json()
-    assert.equal(authorExport.manifest.approvalMethod, 'creator-confirmed')
-    assert.equal(authorExport.manifest.reviewerId, undefined)
-    const reset = await (await call(`/packages/${draft.id}`, 'PATCH', { revision: ready.revision, editorialStatus: 'needs_review' })).json()
+    assert.equal(confirmed.status, 422)
+    const reset = await (await call(`/packages/${draft.id}`, 'PATCH', { revision: generated.revision, editorialStatus: 'needs_review' })).json()
     generated.revision = reset.revision
     assert.equal((await call(`/packages/${draft.id}/export`)).status, 409)
     assert.equal((await call(`/packages/${draft.id}/assign-reviewer`, 'POST', { revision: generated.revision, reviewerId: 'alice' })).status, 422)
     const assigned = await (await call(`/packages/${draft.id}/assign-reviewer`, 'POST', { revision: generated.revision, reviewerId: 'bob' })).json()
     assert.equal((await call(`/reviews/alice/${draft.id}`, 'GET', undefined, 'charlie')).status, 404)
     assert.equal((await call(`/reviews/alice/${draft.id}`, 'GET', undefined, 'bob')).status, 200)
-    const reviewBody = { revision: assigned.revision, claims: [{ id: 'C1', supported: true, note: 'The captured publisher passage supports the attributed announcement.' }], rightsConfirmed: true, promiseAligned: true, freshnessConfirmed: true, contradictionsResolved: true }
+    const reviewBody = { revision: assigned.revision, claims: [{ id: 'C1', supported: true, note: 'The captured publisher passage supports the attributed announcement.' }], rightsConfirmed: true, promiseAligned: true, freshnessConfirmed: true, contradictionsResolved: true, accessibilityConfirmed: true, scopeConfirmed: true, ratings: ratingsFixture() }
     assert.equal((await call(`/reviews/alice/${draft.id}`, 'POST', reviewBody)).status, 404)
     assert.equal((await call(`/reviews/alice/${draft.id}`, 'POST', { ...reviewBody, claims: [...reviewBody.claims, ...reviewBody.claims] }, 'bob')).status, 422)
     assert.equal((await call(`/reviews/alice/${draft.id}`, 'POST', { ...reviewBody, revision: assigned.revision - 1 }, 'bob')).status, 409)
@@ -137,7 +131,7 @@ test('studio preserves generation checks and lets the author confirm valid saved
     const reviewed = await reviewedResponse.json()
     assert.equal((await call(`/packages/${draft.id}`, 'PATCH', { revision: reviewed.revision, editorialStatus: 'approved' })).status, 200)
     const exportedResponse = await call(`/packages/${draft.id}/export`); assert.equal(exportedResponse.status, 200)
-    const exported = await exportedResponse.json(); assert.equal(exported.manifest.approvedBy, 'alice'); assert.equal(exported.manifest.reviewerId, undefined); assert.equal(exported.package.editorialStatus, 'approved')
+    const exported = await exportedResponse.json(); assert.equal(exported.manifest.approvedBy, 'alice'); assert.equal(exported.manifest.reviewerId, 'bob'); assert.equal(exported.manifest.quality.overall, 8); assert.equal(exported.package.editorialStatus, 'approved')
     assert.ok(exported.manifest.contentHash)
     assert.equal((await call(`/packages/${draft.id}/publish`, 'POST', {})).status, 403)
     admin = true

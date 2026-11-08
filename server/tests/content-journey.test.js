@@ -8,11 +8,12 @@ import { intelligenceRouter } from '../studio/intelligence.js'
 import { studioRouter } from '../studio/routes.js'
 import { generateContent } from './helpers/passage-model.js'
 import { runContentJob } from '../studio/job-worker.js'
+import { ratingsFixture } from './fixtures/finalization.js'
 
-for (const platform of ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']) test(`${platform}: queued research to selected-output export uses creator confirmation with automatic checks and workspace access`, async () => {
+for (const platform of ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']) test(`${platform}: queued research to selected-output export requires rated independent review, owner confirmation and workspace access`, async () => {
   const repository = createRepository(':memory:')
   const uid = `ws:${randomUUID()}`
-  const members = [{ uid: 'alice', role: 'owner' }, { uid: 'bob', role: 'editor' }]
+  const members = [{ uid: 'alice', role: 'owner' }, { uid: 'bob', role: 'editor' }, { uid: 'carol', role: 'reviewer' }]
   repository.studioPut('__workspace_control__', 'workspace', uid, { name: 'Journey', members }, 0)
   const source = { id: 'E1', url: 'https://example.com/release', title: 'Announcement', publisher: 'example.com', excerpt: 'The publisher announced a model preview with limited availability. Independent capability testing has not yet been published.', hash: 'original', limitations: ['Publisher claim only'], type: 'retrieved-source', retrievedAt: new Date().toISOString() }
   const topic = { title: 'A model preview', whatChanged: 'A preview was announced.', eventDate: null, verification: 'reported', whyItMatters: 'Developers can evaluate availability.', evidenceIds: ['E1'], positive: [], negative: [], audienceReaction: { status: 'insufficient-evidence', summary: 'No audience sample.', evidenceIds: [], limitations: 'No representative data.' }, angle: 'Explain preview limits.', hook: 'Preview is not proven.', counterpoint: 'Testing is missing.', opportunityReason: 'Useful context, not measured popularity.', keywords: ['preview'] }
@@ -30,7 +31,9 @@ for (const platform of ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']) te
   async function json(path, method, body, actor) { const response = await call(path, method, body, actor); assert.ok(response.ok, `${method || 'GET'} ${path}: ${response.status} ${response.ok ? '' : await response.text()}`); return response.json() }
   async function confirmForDownload(id) {
     const pack = await json(`/packages/${id}`)
-    return json(`/packages/${id}`, 'PATCH', { revision: pack.revision, editorialStatus: 'approved' }, 'bob')
+    const assigned = await json(`/packages/${id}/assign-reviewer`, 'POST', { revision: pack.revision, reviewerId: 'carol' })
+    const reviewed = await json(`/reviews/${encodeURIComponent(uid)}/${id}`, 'POST', { revision: assigned.revision, claims: pack.content.claims.map(claim => ({ id: claim.id, supported: true, note: 'The saved publisher passage supports the claim in context.' })), rightsConfirmed: true, promiseAligned: true, freshnessConfirmed: true, contradictionsResolved: true, accessibilityConfirmed: true, scopeConfirmed: true, ratings: ratingsFixture() }, 'carol')
+    return json(`/packages/${id}`, 'PATCH', { revision: reviewed.revision, editorialStatus: 'approved' }, 'bob')
   }
   try {
     const audit = await json('/intelligence/ideas/check', 'POST', { input: { topic: 'Science', brief: 'Explain new science announcements for readers.' }, requestId: randomUUID() })
@@ -52,10 +55,10 @@ for (const platform of ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']) te
     pack = await confirmForDownload(pack.id)
     let exported = await json(`/packages/${pack.id}/export`)
     assert.deepEqual(Object.keys(exported.package.content).sort(), ['claims', 'hooks', 'script', 'strategy'])
-    assert.equal(exported.manifest.approvedBy, 'bob'); assert.equal(exported.manifest.approvalMethod, 'creator-confirmed'); assert.equal(exported.manifest.reviewerId, undefined); assert.ok(exported.manifest.contentHash)
+    assert.equal(exported.manifest.approvedBy, 'bob'); assert.equal(exported.manifest.approvalMethod, 'independent-human'); assert.equal(exported.manifest.reviewerId, 'carol'); assert.ok(exported.manifest.contentHash)
     assert.equal((await call(`/packages/${pack.id}/export`, 'GET', undefined, 'outsider')).status, 403)
     const planned = await json('/planning/board', 'POST', { packageId: pack.id, status: 'ready' })
-    assert.equal(planned.status, 'ready', 'creator confirmation also unlocks planner readiness')
+    assert.equal(planned.status, 'ready', 'rated review and separate owner confirmation unlock planner readiness')
     let workspace = repository.studioGet('__workspace_control__', 'workspace', uid)
     repository.studioPut('__workspace_control__', 'workspace', uid, { ...workspace, members: [members[0]] }, workspace.revision)
     assert.equal((await call(`/packages/${pack.id}/export`)).status, 422)

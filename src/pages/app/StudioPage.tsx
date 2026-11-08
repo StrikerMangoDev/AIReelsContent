@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth-state'
-import { studioRead, studioRequest, type StudioConfig, type StudioContent, type StudioPackage, type StudioProfile, type OutputFormat } from '@/services/studio-api'
+import { qualityDimensions, studioRead, studioRequest, type StudioConfig, type StudioContent, type StudioPackage, type StudioProfile, type OutputFormat } from '@/services/studio-api'
+import { activeWorkspace } from '@/services/workspace-session'
 import { trackEvent } from '@/services/analytics'
 import type { Article } from '@/types/news'
 import { StudioMedia } from './StudioMedia'
@@ -75,6 +76,8 @@ function StudioWorkspace() {
   useEffect(() => { if (generationConfirmation) { confirmationPanel.current?.focus(); confirmationPanel.current?.scrollIntoView({ block: 'start', behavior: 'instant' }) } }, [generationConfirmation])
   const [job, setJob] = useState<{ id: string; status: string } | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
+  const [reviewNow, setReviewNow] = useState(Date.now())
+  useEffect(() => { const timer = window.setInterval(() => setReviewNow(Date.now()), 30000); return () => window.clearInterval(timer) }, [])
   useEffect(() => { studioRead<StudioConfig>('/config', false).then(setConfig).catch(cause => setError(message(cause))) }, [])
   useEffect(() => {
     if (!uid) return
@@ -161,11 +164,10 @@ function StudioWorkspace() {
     }) } finally { generationDispatch.current = false }
   }
   async function download(format: 'json' | 'md') {
-    if (!item || !content || busy || dirty || item.status === 'generating' || item.review?.issues.length || downloadDispatch.current) return
+    if (!item || !content || busy || dirty || item.status === 'generating' || item.review?.issues.length || !reviewReady || item.editorialStatus !== 'approved' || item.approval?.method !== 'independent-human' || downloadDispatch.current) return
     downloadDispatch.current = true
     try { await run('Preparing your download', async () => {
-      const ready = await studioRequest<StudioPackage>(`/packages/${item.id}`, { revision: item.revision, editorialStatus: 'approved' }, 'PATCH')
-      accept(ready)
+      const ready = item
       const exported = await studioRead<{ manifest: Record<string, unknown>; package: StudioPackage }>(`/packages/${item.id}/export`)
       const saved = exported.package
       if (!saved.content) throw new Error('Saved content is unavailable.')
@@ -181,7 +183,11 @@ function StudioWorkspace() {
   const needsSource = Boolean(item && !content && !item.evidence.some(source => source.excerpt.length >= 100))
   const canAddSource = needsSource && !item?.researchId && item?.status === 'draft' && !item.jobId && !item.sourceIds?.length && item.evidence.length < 12
   const generationHint = busy ? `${busy}...` : error || (needsSource ? (item?.researchId ? 'Reading the sources linked to your idea is required before generation. Retry if the publisher was unavailable.' : canAddSource ? 'Add and save a readable original article below before generating. This draft currently has only short headlines.' : 'This draft needs more source evidence. Start a new draft with a readable original article or approved library sources.') : !profile.platform ? 'Select at least one platform.' : !(profile.outputs || allOutputs).length ? 'Select at least one content format.' : !config?.capabilities.generation ? 'Generation is unavailable. Your choices are saved in this session.' : 'Sources are ready. Check the scope before generation starts.')
-  const exportDisabled = disabled || dirty || !content || Boolean(item?.review?.issues.length)
+  const quality = item?.independentReview?.quality
+  const reviewReady = Boolean(!dirty && item?.independentReview?.status === 'passed' && quality?.policyVersion === 'content-finalization-v1' && quality.eligible && item.independentReview.reviewerId === item.reviewerId && Date.parse(item.independentReview.expiresAt || '') > Math.max(reviewNow, Date.now()))
+  const finalized = reviewReady && item?.editorialStatus === 'approved' && item.approval?.method === 'independent-human'
+  const exportDisabled = disabled || dirty || !content || Boolean(item?.review?.issues.length) || !finalized
+  const reviewOwner = activeWorkspace() === 'personal' ? uid : activeWorkspace()
   if (loading) return <section className="studio content-workflow"><StudioLoading label="Checking your workspace" /></section>
   if (!identity) return <section className="studio"><header className="studio-heading"><span className="studio-eyebrow">Content studio</span><h1>Your next story starts here.</h1><p>Research a niche, create platform content and prepare your production team.</p></header>{configured ? <Link className="studio-button" to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`}>Sign in to continue</Link> : <p role="status">Account access is not configured yet.</p>} <Link className="studio-button" to="/">Explore the research desk</Link></section>
   if (packageId && !item && busy) return <section className="studio content-workflow studio-loading" aria-busy="true" role="status"><h1>Opening your draft…</h1><p>Loading your saved content and source checks.</p><div className="studio-loading-block" aria-hidden="true" /><div className="studio-loading-block" aria-hidden="true" /></section>
@@ -193,7 +199,7 @@ function StudioWorkspace() {
         <nav className="idea-breadcrumbs" aria-label="Breadcrumb"><Link to="/ideas">Topic Library</Link><span aria-hidden="true">/</span><Link to="/studio">Content Studio</Link><span aria-hidden="true">/</span><span>{item.title}</span></nav>
         <div className="studio-title-lockup">
           <h1 className="studio-main-title">{item.title}</h1>
-          <span className="studio-editorial-badge" data-status={dirty ? 'unsaved' : item.editorialStatus}>{dirty ? 'Unsaved changes' : item.editorialStatus === 'approved' ? 'Ready' : 'Draft'}</span>
+          <span className="studio-editorial-badge" data-status={dirty ? 'unsaved' : finalized ? 'approved' : 'needs_review'}>{dirty ? 'Unsaved changes' : finalized ? 'Ready' : item.editorialStatus === 'approved' ? 'Needs review' : 'Draft'}</span>
         </div>
         {item.researchContext && <div className="studio-research-strip">
           <button type="button" className="studio-research-pill" aria-expanded={showIdeaResearch} aria-controls="composer-research" onClick={() => setShowIdeaResearch(value => !value)}>
@@ -283,13 +289,28 @@ function StudioWorkspace() {
 
             <section className="studio-readable-section"><h3>Claim references</h3>{content.claims.map(claim => <article key={claim.id}><h3>{claim.id} · {claim.text}</h3><p>{claim.evidenceId}</p><blockquote>{claim.quote}</blockquote></article>)}</section>
             <button disabled={disabled || dirty} onClick={() => void run('Refreshing evidence', async () => { if (!window.confirm('Refresh the original sources now? This fetches each source again and may invalidate approval if evidence changed.')) return; accept(await studioRequest<StudioPackage>(`/packages/${item.id}/refresh-evidence`, { confirmed: true }, 'POST')); setNotice('Evidence refreshed. Regenerate if the source changed.') })}>Refresh original sources</button>
-            {identity.role === 'admin' && config?.capabilities.publishing && <button disabled={disabled || dirty || item.editorialStatus !== 'approved'} onClick={() => { if (window.confirm('Publish this approved article publicly on this website?')) void run('Publishing', async () => { const result = await studioRequest<{ id: string }>(`/packages/${item.id}/publish`, {}, 'POST'); navigate(`/insights/${result.id}`) }) }}>Publish website article</button>}
+            {identity.role === 'admin' && config?.capabilities.publishing && <button disabled={disabled || dirty || !finalized} onClick={() => { if (window.confirm('Publish this approved article publicly on this website?')) void run('Publishing', async () => { const result = await studioRequest<{ id: string }>(`/packages/${item.id}/publish`, {}, 'POST'); navigate(`/insights/${result.id}`) }) }}>Publish website article</button>}
           </></section>
           <section hidden={panel !== 'history'} className="studio-panel"><div className="studio-panel-back-row"><button type="button" className="studio-panel-back-btn" onClick={() => setPanel('write')}>← Back to Edit & preview</button></div>{panel === 'history' && <StudioHistory item={item} onRestore={accept} disabled={disabled || dirty} />}</section>
         </div>
 
 <section hidden={panel !== 'revise'} className="studio-panel"><div className="studio-panel-back-row"><button type="button" className="studio-panel-back-btn" onClick={() => setPanel('write')}>← Back to Edit & preview</button></div><h2>Ask AI to revise</h2><form className="refine-form" onSubmit={event => { event.preventDefault(); requestGeneration() }}><label>What would you like to change?<textarea maxLength={2000} required value={instruction} disabled={disabled || dirty} onChange={event => setInstruction(event.target.value)} placeholder="Make the hook more practical, explain the concern fairly, and use conversational Hinglish…" /></label><button disabled={disabled || dirty || !instruction.trim() || !config?.capabilities.generation}>Revise content</button><small>Previous versions are saved. Changes run through evidence checks automatically.</small></form></section>
-<section id="studio-download" hidden={panel !== 'download'} className="studio-panel studio-download-panel"><div><h2>Download your content</h2>{dirty ? <p role="status">Save your edits before downloading. <button type="button" onClick={() => setPanel('write')}>Return to editor</button></p> : item.review?.issues.length ? <p role="status">Fix the source or citation issues before downloading. <button type="button" onClick={() => setPanel('sources')}>View issues</button></p> : <p className="studio-muted">Automatic checks run before download. They check citations, not factual accuracy. Nothing is posted automatically.</p>}</div><div className="studio-toolbar"><button className="workflow-primary" disabled={exportDisabled} onClick={() => void download('md')}>Download content</button><button disabled={exportDisabled} onClick={() => void download('json')}>Download production file (JSON)</button></div></section>
+<section id="studio-download" hidden={panel !== 'download'} className="studio-panel studio-download-panel">
+  <div><h2>Finalize & download</h2><p>Independent evidence review → quality threshold → your final approval → download. Nothing is posted automatically.</p>
+    {dirty ? <p role="status">Save your edits before requesting review. <button type="button" onClick={() => setPanel('write')}>Return to editor</button></p> : Boolean(item.review?.issues.length) && <p role="status">Fix source or citation issues first. <button type="button" onClick={() => setPanel('sources')}>View issues</button></p>}
+  </div>
+  <section className="studio-readable-section"><h3>1. Assign an independent reviewer</h3><p>Choose a person who has not contributed to this package. The reviewer must sign in with that account; workspace reviewers must have review access.</p>
+    <form key={`${item.id}:${item.reviewerId || ''}`} onSubmit={event => { event.preventDefault(); const reviewerId = String(new FormData(event.currentTarget).get('reviewerId') || '').trim(); if (reviewerId) void run('Assigning reviewer', async () => { accept(await studioRequest<StudioPackage>(`/packages/${item.id}/assign-reviewer`, { revision: item.revision, reviewerId }, 'POST')); setNotice('Reviewer assigned. Share the review link with that person.') }) }}><label>Reviewer account ID<input name="reviewerId" required maxLength={128} defaultValue={item.reviewerId || ''} disabled={disabled || dirty} autoComplete="off" /></label><button disabled={disabled || dirty}>Assign reviewer</button></form>
+    {item.reviewerId && <p><Link to={`/studio-review/${encodeURIComponent(reviewOwner || '')}/${encodeURIComponent(item.id)}`} target="_blank" rel="noreferrer">Open assigned review ↗</Link> · Reviewer: {item.reviewerId}</p>}
+    <button type="button" disabled={disabled || dirty} onClick={() => void run('Checking review', async () => { accept(await studioRead<StudioPackage>(`/packages/${item.id}`)); setReviewNow(Date.now()); setNotice('Latest review loaded.') })}>Refresh review status</button>
+  </section>
+  <section className="studio-readable-section"><h3>2. Check the quality filter</h3><p>Average ≥8/10 · every dimension ≥6/10 · factual support ≥8/10. Missing evidence, unresolved rights, contradictions or accessibility issues block finalization regardless of score. These are editorial judgments, not a reach forecast.</p>
+    {!quality ? <p role="status">Unrated. An independent reviewer must record evidence and ratings for this saved version.</p> : <><p role="status">{reviewReady ? 'Quality review passed' : item.independentReview?.status === 'needs_revision' ? 'Needs revision' : 'Review needs renewal'} · Average {quality.overall.toFixed(2)}/10</p><details><summary>View ratings and evidence</summary>{(Object.entries(qualityDimensions) as [keyof typeof qualityDimensions, string][]).map(([key, label]) => { const rating = quality.ratings[key]; return <article className="studio-evidence" key={key}><h4>{label}: {rating ? `${rating.score}/10` : 'Unrated'}</h4>{rating && <><p>{rating.note}</p><p>Sources: {rating.evidenceIds.map(id => { const source = item.evidence.find(value => value.id === id); return source ? <a key={id} href={source.url} target="_blank" rel="noreferrer">{id} · {source.title} </a> : <span key={id}>{id} (unavailable) </span> })}</p></>}</article> })}</details><p>Review expires: {item.independentReview?.expiresAt ? new Date(item.independentReview.expiresAt).toLocaleString() : 'Unavailable'}. Content or source changes require a new review.</p></>}
+    {!reviewReady && <p>Revise any failing dimension, resolve blockers and obtain a current independent review before approval.</p>}
+  </section>
+  <section className="studio-readable-section"><h3>3. Approve this version</h3><p>This approves the saved writing and production directions. Rendered media needs its own checks before use.</p><button type="button" className="workflow-primary" disabled={disabled || dirty || !reviewReady || Boolean(item.review?.issues.length) || finalized || item.reviewerId === uid} onClick={() => void run('Approving saved version', async () => { accept(await studioRequest<StudioPackage>(`/packages/${item.id}`, { revision: item.revision, editorialStatus: 'approved' }, 'PATCH')); setNotice('This reviewed version is approved for download.') })}>Approve reviewed version</button>{item.reviewerId === uid && <p>The final approver must be a different person from the independent reviewer.</p>}{finalized && <p role="status">This version is approved for download.</p>}</section>
+  <div><h3>4. Download your content</h3>{exportDisabled && <p>Downloads become available after source checks, a current passing quality review and final approval.</p>}<div className="studio-toolbar"><button className="workflow-primary" disabled={exportDisabled} onClick={() => void download('md')}>Download content</button><button disabled={exportDisabled} onClick={() => void download('json')}>Download production file (JSON)</button></div></div>
+</section>
       </>}
     </> : <>
       <section id="studio-source-entry" hidden={!sourceEntry} className="studio-panel workflow-options"><h2>Start with your article</h2><p>Paste a public article link, then choose the content you need.</p>

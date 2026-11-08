@@ -23,8 +23,8 @@ export function planningRouter({ repository, auth }) {
     return value
   }
   async function isReady(uid, pack) {
-    const creatorConfirmed = pack.approval?.method === 'creator-confirmed'
-    if (uid.startsWith('ws:') && !(creatorConfirmed ? ['owner', 'editor'] : ['owner', 'editor', 'reviewer']).includes(await workspaceRole(repository, uid, creatorConfirmed ? pack.approval.approvedBy : pack.reviewerId))) return false
+    if (pack.reviewerId === uid) return false
+    if (uid.startsWith('ws:') && (!['owner', 'editor', 'reviewer'].includes(await workspaceRole(repository, uid, pack.reviewerId)) || !['owner', 'editor'].includes(await workspaceRole(repository, uid, pack.approval?.approvedBy)))) return false
     if (!approvedVersion(pack) || reviewContent(pack.content, pack.evidence, pack.settings).issues.length) return false
     for (const [index, sourceId] of (pack.sourceIds || []).entries()) {
       const source = await repository.studioGet(uid, 'library_source', sourceId)

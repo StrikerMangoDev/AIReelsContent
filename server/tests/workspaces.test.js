@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { createRepository } from '../storage/repository.js'
 import { workspaceRouter, workspaceAuth, ownerScope, requireWriteRole, workspaceRole } from '../studio/workspaces.js'
 import { studioRouter } from '../studio/routes.js'
+import { ratingsFixture } from './fixtures/finalization.js'
 
 async function fixture(run) {
   const repository = createRepository(':memory:')
@@ -77,7 +78,7 @@ test('invitations expire or revoke and the final owner cannot be removed or demo
   assert.equal((await (await call('/workspaces', { uid: 'bob' })).json()).invitations.length, 0)
 }))
 
-test('optional independent reviews reject contributors while creator-confirmed downloads do not depend on a reviewer', async () => fixture(async (repo, call) => {
+test('independent reviews reject contributors and revoked reviewers cannot authorize exports', async () => fixture(async (repo, call) => {
   const workspace = await (await call('/workspaces', { method: 'POST', body: { name: 'Independent review', requestId: randomUUID() } })).json()
   for (const [uid, role] of [['bob', 'editor'], ['carol', 'editor'], ['dave', 'reviewer']]) {
     const current = await (await call(`/workspaces/${workspace.id}`)).json()
@@ -93,7 +94,7 @@ test('optional independent reviews reject contributors while creator-confirmed d
     pack = await result.json()
   }
   assert.deepEqual(pack.contributorUids, ['alice', 'bob', 'carol'])
-  const review = revision => ({ revision, claims: [{ id: 'C1', supported: true, note: 'The captured passage supports this attributed announcement.' }], rightsConfirmed: true, promiseAligned: true, freshnessConfirmed: true, contradictionsResolved: true })
+  const review = revision => ({ revision, claims: [{ id: 'C1', supported: true, note: 'The captured passage supports this attributed announcement.' }], rightsConfirmed: true, promiseAligned: true, freshnessConfirmed: true, contradictionsResolved: true, accessibilityConfirmed: true, scopeConfirmed: true, ratings: ratingsFixture() })
   assert.equal((await call(`/studio/reviews/${workspace.id}/shared-draft`, { uid: 'bob', workspace: workspace.id, method: 'POST', body: review(pack.revision) })).status, 403)
   assert.equal((await call('/studio/packages/shared-draft/assign-reviewer', { workspace: workspace.id, method: 'POST', body: { revision: pack.revision, reviewerId: 'bob' } })).status, 422)
   pack = await (await call('/studio/packages/shared-draft/assign-reviewer', { workspace: workspace.id, method: 'POST', body: { revision: pack.revision, reviewerId: 'dave' } })).json()
@@ -103,6 +104,6 @@ test('optional independent reviews reject contributors while creator-confirmed d
   assert.equal((await call('/studio/packages/shared-draft/export', { workspace: workspace.id })).status, 200)
   const current = await (await call(`/workspaces/${workspace.id}`)).json()
   assert.equal((await call(`/workspaces/${workspace.id}/members/dave`, { method: 'DELETE', body: { revision: current.revision } })).status, 200)
-  assert.equal((await call('/studio/packages/shared-draft/export', { workspace: workspace.id })).status, 200)
+  assert.equal((await call('/studio/packages/shared-draft/export', { workspace: workspace.id })).status, 422)
   assert.equal((await call('/studio/packages/shared-draft', { uid: 'bob' })).status, 404)
 }))

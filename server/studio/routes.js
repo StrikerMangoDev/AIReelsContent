@@ -16,6 +16,7 @@ import { planningRouter } from './planning.js'
 import { categoryImageAssets } from './category-images.js'
 import { vertexFallbackAllowed } from '../providers/vertex-fallback.js'
 import { findAlternativeEvidence } from './alternative-evidence.js'
+import { ratingsSchema, assessQuality, finalizationPolicy } from './finalization.js'
 
 const requestId = z.string().regex(/^[a-zA-Z0-9_-]{8,100}$/)
 const createSchema = z.object({ reuseExisting: z.boolean().optional(), articleId: z.string().max(100).optional(), sourceUrl: z.string().url().max(2000).optional(), sourceIds: z.array(z.string().max(100)).min(1).max(5).optional(), researchId: z.string().max(100).optional(), opportunityIndex: z.number().int().min(0).max(11).optional(), settings: settingsSchema.optional(), requestId }).strict().refine(value => [value.articleId, value.sourceUrl, value.sourceIds, value.researchId].filter(Boolean).length === 1)
@@ -38,19 +39,16 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     }
   }
   const requireCurrentApproval = async (uid, value) => {
-    if (value.approval?.method === 'creator-confirmed') {
-      if (!approvedVersion(value)) throw fail(422, 'Confirm the current saved content before downloading.')
-      if (uid.startsWith('ws:') && !['owner', 'editor'].includes(await workspaceRole(repository, uid, value.approval.approvedBy))) throw fail(422, 'The person who confirmed this content no longer has editing access. Confirm it again.')
-      return
-    }
+    if (value.reviewerId === uid) throw fail(422, 'The content owner cannot independently review this package')
     if (!independentlyReviewed(value)) throw fail(422, 'A current independent review of this exact version is required. Reviews expire after 24 hours; recheck sources before reviewing again.')
     if (uid.startsWith('ws:') && !['owner', 'editor', 'reviewer'].includes(await workspaceRole(repository, uid, value.reviewerId))) throw fail(422, 'The reviewer no longer has workspace access. Assign a current reviewer.')
+    if (uid.startsWith('ws:') && value.approval && !['owner', 'editor'].includes(await workspaceRole(repository, uid, value.approval.approvedBy))) throw fail(422, 'The person who approved this content no longer has editing access. Approve it again.')
   }
   router.use('/workspaces', workspaceRouter({ repository, auth }))
   router.use('/library', createLibraryRouter({ repository, auth, fetchSource }))
   router.use('/planning', planningRouter({ repository, auth }))
   router.use('/intelligence', intelligenceRouter({ repository, auth, onResearchAdmitted }))
-  router.get('/config', (_req, res) => res.json({ industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: capabilityAllowed('generation') && Boolean(env.OPENROUTER_API_KEY), research: capabilityAllowed('research') && Boolean(env.OPENROUTER_API_KEY), media: false, publishing: false, researchScheduling: false, vertexFallback: vertexFallbackAllowed() }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS, creditCoverage: 'unconfirmed', paidBudget: vertexFallbackAllowed() ? null : 0 }))
+  router.get('/config', (_req, res) => res.json({ finalizationPolicy, industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: capabilityAllowed('generation') && Boolean(env.OPENROUTER_API_KEY), research: capabilityAllowed('research') && Boolean(env.OPENROUTER_API_KEY), media: false, publishing: false, researchScheduling: false, vertexFallback: vertexFallbackAllowed() }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS, creditCoverage: 'unconfirmed', paidBudget: vertexFallbackAllowed() ? null : 0 }))
   router.get('/publications', async (_req, res) => res.json({ publications: await Promise.all((await repository.studioList('public', 'publication')).map(publicationStatus)) }))
   router.get('/publications/:publicationId', async (req, res) => {
     const publication = await repository.studioGet('public', 'publication', req.params.publicationId)
@@ -72,15 +70,18 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
   }
   router.get('/reviews/:owner/:packageId', async (req, res) => res.json(await assignedReview(req)))
   router.post('/reviews/:owner/:packageId', async (req, res) => {
-    const input = z.object({ revision: z.number().int().positive(), claims: z.array(z.object({ id: z.string(), supported: z.literal(true), note: z.string().trim().min(10).max(1000) }).strict()).min(1).max(50), rightsConfirmed: z.literal(true), promiseAligned: z.literal(true), freshnessConfirmed: z.literal(true), contradictionsResolved: z.literal(true) }).strict().parse(req.body)
+    const input = z.object({ revision: z.number().int().positive(), claims: z.array(z.object({ id: z.string(), supported: z.literal(true), note: z.string().trim().min(10).max(1000) }).strict()).min(1).max(50), rightsConfirmed: z.literal(true), promiseAligned: z.literal(true), freshnessConfirmed: z.literal(true), contradictionsResolved: z.literal(true), accessibilityConfirmed: z.literal(true), scopeConfirmed: z.literal(true), ratings: ratingsSchema }).strict().parse(req.body)
     const current = await assignedReview(req)
     if (input.revision !== current.revision) throw fail(409, 'Review version changed')
     if (current.status === 'generating' || !current.content) throw fail(409, 'Content is not ready for review')
     const ids = input.claims.map(claim => claim.id)
     if (new Set(ids).size !== ids.length || current.content.claims.length !== ids.length || current.content.claims.some(claim => !ids.includes(claim.id))) throw fail(422, 'Review every claim exactly once')
     if (reviewContent(current.content, current.evidence, current.settings).issues.length) throw fail(422, 'Resolve citation and output issues before independent review')
+    const { ratings, ...attestations } = input
+    const quality = assessQuality(ratings, current.evidence)
+    if (!quality) throw fail(422, 'Each rating must cite sources attached to this version')
     const reviewedAt = Date.now()
-    const independentReview = { ...input, status: 'passed', reviewerId: req.identity.uid, contentHash: contentHash(current), reviewedAt: new Date(reviewedAt).toISOString(), expiresAt: new Date(reviewedAt + 86400000).toISOString(), method: 'independent-human' }
+    const independentReview = { ...attestations, quality, status: quality.eligible ? 'passed' : 'needs_revision', reviewerId: req.identity.uid, contentHash: contentHash(current), reviewedAt: new Date(reviewedAt).toISOString(), expiresAt: new Date(reviewedAt + 86400000).toISOString(), method: 'independent-human' }
     res.json(await repository.studioPut(req.params.owner, 'package', current.id, { ...current, independentReview, editorialStatus: 'needs_review', approval: null }, current.revision))
   })
   router.use(requireWriteRole)
@@ -211,7 +212,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     await requireCurrentLibrary(ownerScope(req), current)
     if (!approvedVersion(current) || reviewContent(current.content, current.evidence, current.settings).issues.length) throw fail(409, 'Save valid content and confirm this version before downloading.')
     await requireCurrentApproval(ownerScope(req), current)
-    res.json({ manifest: { packageId: current.id, revision: current.revision, contentHash: contentHash(current), approvedAt: current.approval.approvedAt, approvedBy: current.approval.approvedBy, approvalMethod: current.approval.method || 'independent-human', ...(current.approval.method !== 'creator-confirmed' ? { reviewerId: current.reviewerId } : {}), exportedAt: new Date().toISOString(), sources: current.evidence.map(({ id, url, retrievedAt, hash }) => ({ id, url, retrievedAt, hash })) }, package: current })
+    res.json({ manifest: { scope: 'text-package', mediaVerification: 'Production directions are not verification of rendered media or publishing readiness.', packageId: current.id, revision: current.revision, contentHash: contentHash(current), approvedAt: current.approval.approvedAt, approvedBy: current.approval.approvedBy, approvalMethod: current.approval.method, reviewerId: current.reviewerId, quality: current.independentReview.quality, exportedAt: new Date().toISOString(), sources: current.evidence.map(({ id, url, retrievedAt, hash }) => ({ id, url, retrievedAt, hash })) }, package: current })
   })
   router.patch('/packages/:id', async (req, res) => {
     const input = patchSchema.parse(req.body); const current = req.package
@@ -223,7 +224,11 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     if (input.editorialStatus === 'approved') await requireCurrentLibrary(ownerScope(req), current)
     if (input.editorialStatus === 'approved' && review.issues.length) throw fail(422, 'Resolve evidence review issues before approving')
     if (input.editorialStatus === 'approved' && changed) throw fail(422, 'Save your edits before confirming the current content.')
-    const approval = input.editorialStatus === 'approved' ? { contentHash: contentHash(current), approvedAt: new Date().toISOString(), approvedBy: req.identity.uid, method: 'creator-confirmed' } : null
+    if (input.editorialStatus === 'approved') {
+      await requireCurrentApproval(ownerScope(req), { ...current, approval: null })
+      if (req.identity.uid === current.reviewerId) throw fail(422, 'A different owner or editor must approve the independently reviewed version')
+    }
+    const approval = input.editorialStatus === 'approved' ? { contentHash: contentHash(current), approvedAt: new Date().toISOString(), approvedBy: req.identity.uid, method: 'independent-human' } : null
     res.json(await repository.studioPut(ownerScope(req), 'package', current.id, { ...current, content, settings, review, contributorUids: changed ? [...new Set([...contributors(current), req.identity.uid])] : contributors(current), independentReview: changed ? null : current.independentReview, approval, editorialStatus: content ? (input.editorialStatus || 'needs_review') : 'draft' }, current.revision))
   })
   router.post('/packages/:id/review', async (req, res) => {
@@ -238,16 +243,18 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     let evidence
     try { evidence = await Promise.all(current.evidence.map(async item => ({ ...await fetchSource(item.url), id: item.id }))) } catch { throw fail(422, 'Source refresh failed. Existing evidence was preserved.') }
     const changed = evidence.some((item, index) => item.hash !== current.evidence[index].hash)
+    const versionChanged = contentHash({ ...current, evidence }) !== contentHash(current)
     // Keep snapshots intact; public reads compare them with the latest fetched evidence.
     await repository.studioPut('public', 'publication_state', lineageId(ownerScope(req), current.id), { evidenceHash: evidenceHash(evidence), checkedAt: new Date().toISOString() })
-    res.json(await repository.studioPut(ownerScope(req), 'package', current.id, { ...current, evidence, editorialStatus: changed ? 'needs_review' : current.editorialStatus, evidenceChanged: changed, review: changed ? { issues: ['Source text changed. Review or regenerate content before approving again.'] } : current.review }, current.revision))
+    res.json(await repository.studioPut(ownerScope(req), 'package', current.id, { ...current, evidence, editorialStatus: versionChanged ? 'needs_review' : current.editorialStatus, independentReview: versionChanged ? null : current.independentReview, approval: versionChanged ? null : current.approval, evidenceChanged: changed, review: changed ? { issues: ['Source text changed. Review or regenerate content before approving again.'] } : current.review }, current.revision))
   })
   router.post('/packages/:id/publish', requireAdmin, async (req, res) => {
     assertCapability('publishing')
     const current = req.package
     if (!current.content?.website) throw fail(422, 'This package does not contain website content')
     await requireCurrentLibrary(ownerScope(req), current)
-    if (current.editorialStatus !== 'approved' || reviewContent(current.content, current.evidence, current.settings).issues.length) throw fail(422, 'Approve a complete, reviewed package before publishing')
+    if (!approvedVersion(current) || reviewContent(current.content, current.evidence, current.settings).issues.length) throw fail(422, 'Approve a complete, reviewed package before publishing')
+    await requireCurrentApproval(ownerScope(req), current)
     const id = createHash('sha256').update(`${ownerScope(req)}:${current.id}:${current.revision}`).digest('hex').slice(0, 32)
     const existing = await repository.studioGet('public', 'publication', id)
     if (existing) return res.json(existing)

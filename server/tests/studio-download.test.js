@@ -15,14 +15,14 @@ test('actual download creates Markdown and JSON only from server-approved export
   runInNewContext(ts.transpileModule(preview, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports, require: () => ({}) })
   const pack = { id: 'fixture', revision: 7, title: 'Reviewed fixture', content: { script: 'Saved server text [C1]', claims: [{ id: 'C1', text: 'Supported claim', evidenceId: 'E1', quote: 'Exact saved passage' }] }, evidence: [{ id: 'E1', title: 'Source', url: 'https://example.com/source', limitations: ['Fixture only'] }] }
   const exported = { package: pack, manifest: { contentHash: 'reviewed-hash', revision: 7, reviewerId: 'fixture-reviewer' } }
-  let blob; let denied = false; let changed = false; let approvalDenied = false; const approvals = []; const files = []; const urls = []
+  let blob; let denied = false; let changed = false; let reads = 0; const files = []; const urls = []
   const context = {
-    item: { id: 'fixture', revision: 7, editorialStatus: 'approved', approval: { method: 'creator-confirmed' } }, busy: '', downloadDispatch: { current: false }, content: { script: 'Unsaved browser text' }, dirty: false,
+    item: { id: 'fixture', revision: 7, editorialStatus: 'approved', approval: { method: 'independent-human' } }, reviewReady: true, busy: '', downloadDispatch: { current: false }, content: { script: 'Unsaved browser text' }, dirty: false,
     run: async (_label, action) => action(),
-    studioRead: async path => { assert.equal(path, '/packages/fixture/export'); if (denied) throw new Error('Review required'); return changed ? { ...exported, package: { ...pack, revision: 8 } } : exported },
+    studioRead: async path => { reads++; assert.equal(path, '/packages/fixture/export'); if (denied) throw new Error('Review required'); return changed ? { ...exported, package: { ...pack, revision: 8 } } : exported },
     contentMarkdown: exports.contentMarkdown, Blob,
     URL: { createObjectURL(value) { blob = value; return 'blob:test' }, revokeObjectURL(value) { urls.push(value) } },
-    setNotice() {}, accept() {}, studioRequest: async (path, body, method) => { approvals.push({ path, body, method }); assert.equal(method, 'PATCH'); assert.equal(body.revision, 7); assert.equal(body.editorialStatus, 'approved'); if (approvalDenied) throw new Error('Citation issue'); return pack }, document: { createElement() { const anchor = { click() { files.push(anchor.download) } }; return anchor } }, trackEvent() {},
+    setNotice() {}, studioRequest: async () => assert.fail('downloading must never approve content'), document: { createElement() { const anchor = { click() { files.push(anchor.download) } }; return anchor } }, trackEvent() {},
   }
   const code = ts.transpileModule(`${download}; download('md')`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
   await runInNewContext(code, context)
@@ -31,12 +31,18 @@ test('actual download creates Markdown and JSON only from server-approved export
   await runInNewContext(code.replace("download('md')", "download('json')"), context)
   assert.deepEqual(JSON.parse(await blob.text()), exported); assert.equal(blob.type, 'application/json')
   assert.deepEqual(files, ['content-fixture.md', 'content-fixture.json']); assert.equal(urls.length, 2)
-  assert.equal(approvals.length, 2)
+  assert.equal(reads, 2)
   changed = true; await assert.rejects(runInNewContext(code, context), /content changed/); assert.equal(files.length, 2); changed = false
-  approvalDenied = true; await assert.rejects(runInNewContext(code, context), /Citation issue/); assert.equal(files.length, 2); approvalDenied = false
   denied = true; await assert.rejects(runInNewContext(code, context), /Review required/); assert.equal(files.length, 2)
-  denied = false; const beforeDoubleClick = approvals.length
+  denied = false; const beforeDoubleClick = reads
   await Promise.all([runInNewContext(code, context), runInNewContext(code, context)])
-  assert.equal(approvals.length, beforeDoubleClick + 1); assert.equal(files.length, 3, 'double click confirms and downloads once')
+  assert.equal(reads, beforeDoubleClick + 1); assert.equal(files.length, 3, 'double click downloads once without approving')
   context.dirty = true; await runInNewContext(code, context); assert.equal(files.length, 3, 'unsaved edits cannot be downloaded')
+  context.dirty = false; context.reviewReady = false
+  const beforeBlocked = reads
+  await runInNewContext(code, context); assert.equal(reads, beforeBlocked, 'missing, rejected or expired quality review blocks before export')
+  context.reviewReady = true; context.item.editorialStatus = 'needs_review'
+  await runInNewContext(code, context); assert.equal(reads, beforeBlocked, 'review alone does not replace final approval')
+  context.item.editorialStatus = 'approved'; context.item.approval.method = 'creator-confirmed'
+  await runInNewContext(code, context); assert.equal(reads, beforeBlocked, 'legacy creator confirmation cannot bypass the review gate')
 })

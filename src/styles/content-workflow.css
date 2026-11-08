@@ -8,6 +8,11 @@
 .content-workflow .studio-choice-grid legend { padding: 0; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
 .content-workflow .workflow-options > p { margin: 8px 0 16px; color: var(--brand-muted); font-size: 14px; }
 .studio-download-panel { scroll-margin-top: 24px; }
+.workspace-shell .studio.content-workflow .studio-download-panel button.workflow-primary:disabled { color: var(--brand-ink); background: var(--brand-canvas); border-color: var(--brand-control); opacity: 1; }
+.studio-quality-review fieldset { min-inline-size: 0; }
+.studio-quality-review .studio-check { align-items: flex-start; min-height: 44px; }
+.studio-quality-review .studio-check input { flex-shrink: 0; margin-top: 3px; }
+.studio-quality-review label, .studio-download-panel label { font-size: 16px; }
 .generation-confirmation { scroll-margin-top:24px; max-width:760px; margin-inline:auto; }
 .content-workflow .generation-confirmation { border-top:4px solid var(--brand-primary); }
 .generation-confirmation p { overflow-wrap:anywhere; }

@@ -24,9 +24,10 @@ test('actual studio confirmation opens and cancels without requests, invalidates
     '@/services/studio-api': { studioRequest: async (path, body, method) => { requests.push({ path, body, method }); if (path === '/config') return { capabilities: { generation: true } }; if (path === '/profile') return holdProfile ? new Promise(resolve => { releaseProfile = () => resolve(settings) }) : settings; if (path === '/packages') return { packages: [pack] }; if (path.endsWith('/generate') || body?.editorialStatus === 'approved') return new Promise(resolve => { finish = resolve }); if (method === 'PATCH' && body?.content) return { ...pack, ...body, revision: body.revision + 1 }; return pack } },
     './StudioMedia': {}, './StudioLibrary': {}, './StudioHistory': {}, './ContentPreview': { cleanCopy: value => value.replace(/\s*\[C\d+\]/g, '').trim() }, './InstagramPreview': { InstagramPreview: 'InstagramPreview' }, '@/services/storyboard': {}, '@/styles/studio.css': {}, '@/styles/content-workflow.css': {},
   }
+  modules['@/services/studio-api'].qualityDimensions = { relevance: 'Relevance', originality: 'Originality', clarity: 'Clarity', hookStrength: 'Hook', brandFit: 'Brand', factualAccuracy: 'Facts', cta: 'CTA' }
   modules['@/services/studio-api'].studioRead = (path, authenticated = true) => modules['@/services/studio-api'].studioRequest(path, undefined, 'GET', authenticated)
   const exports = {}
-  runInNewContext(code, { exports, require: name => { assert.ok(name in modules, name); return modules[name] }, structuredClone, crypto: { randomUUID: () => 'request-1' }, document: { activeElement: trigger }, HTMLElement: Element, window: {}, URLSearchParams })
+  runInNewContext(code, { exports, require: name => { assert.ok(name in modules, name); return modules[name] }, structuredClone, crypto: { randomUUID: () => 'request-1' }, document: { activeElement: trigger }, HTMLElement: Element, window: { setInterval() { return 1 }, clearInterval() {} }, URLSearchParams })
   const workspace = exports.StudioPage().type
   const render = () => { cursor = 0; effects.length = 0; return workspace() }
   const flatten = node => !node ? [] : Array.isArray(node) ? node.flatMap(flatten) : typeof node === 'object' ? [node, ...flatten(node.props?.children)] : []
@@ -61,8 +62,25 @@ test('actual studio confirmation opens and cancels without requests, invalidates
   assert.ok(flatten(tree).filter(node => node.type === 'details').every(node => node.props.className.includes('studio-options')), 'only secondary actions use disclosure; content stays readable')
   assert.ok(flatten(tree).some(node => node.type === 'button' && /Sources.*checks/.test(labelText(node.props.children))), 'source validation remains available')
   assert.ok(button(tree, 'Add to Planner'), 'planning remains available in More options')
-  assert.equal(button(tree, 'Assign reviewer'), undefined)
-  assert.equal(button(tree, 'Download content').props.disabled, false, 'author downloads without an independent reviewer')
+  assert.ok(button(tree, 'Assign reviewer'))
+  assert.equal(button(tree, 'Download content').props.disabled, true, 'legacy unscored review cannot finalize content')
+  assert.equal(button(tree, 'Approve reviewed version').props.disabled, true)
+  const legacyReview = reviewed.independentReview
+  reviewed.reviewerId = 'bob'
+  reviewed.independentReview = { status: 'passed', reviewerId: 'bob', expiresAt: new Date(Date.now() + 60000).toISOString(), quality: { policyVersion: 'content-finalization-v1', eligible: true, overall: 8, ratings: Object.fromEntries(Object.keys(modules['@/services/studio-api'].qualityDimensions).map(key => [key, { score: 8, note: 'Checked the exact saved source and content.', evidenceIds: ['E1'] }])) } }
+  tree = render()
+  assert.equal(button(tree, 'Approve reviewed version').props.disabled, false, 'eligible review enables a separate final approval')
+  assert.equal(button(tree, 'Download content').props.disabled, true, 'eligible review alone cannot enable download')
+  reviewed.editorialStatus = 'approved'; reviewed.approval = { method: 'independent-human' }
+  tree = render(); assert.equal(button(tree, 'Download content').props.disabled, false)
+  reviewed.independentReview.expiresAt = new Date(Date.now() - 1000).toISOString()
+  tree = render(); assert.equal(button(tree, 'Download content').props.disabled, true, 'expired review blocks an otherwise approved package')
+  reviewed.independentReview.expiresAt = new Date(Date.now() + 60000).toISOString(); reviewed.independentReview.status = 'needs_revision'
+  tree = render(); assert.equal(button(tree, 'Download content').props.disabled, true, 'a rejected review blocks download')
+  reviewed.independentReview.status = 'passed'; reviewed.approval.method = 'creator-confirmed'
+  tree = render(); assert.equal(button(tree, 'Download content').props.disabled, true, 'legacy confirmation is not final approval')
+  reviewed.editorialStatus = 'needs_review'; delete reviewed.approval; delete reviewed.reviewerId; reviewed.independentReview = legacyReview
+  tree = render()
   const preview = flatten(tree).find(node => node.type === 'InstagramPreview')
   assert.equal(preview.props.content, reviewed.content)
   const editorNode = flatten(tree).find(node => typeof node.type === 'function' && node.type.name === 'DraftTextEditor')

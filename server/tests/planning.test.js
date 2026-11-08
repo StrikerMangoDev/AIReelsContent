@@ -5,6 +5,7 @@ import { once } from 'node:events'
 import { createRepository } from '../storage/repository.js'
 import { planningRouter } from '../studio/planning.js'
 import { contentHash } from '../studio/approval.js'
+import { reviewFixture } from './fixtures/finalization.js'
 import { settingsSchema } from '../studio/content.js'
 
 test('planning is owner-scoped, validates references, uses optimistic edits and requires current approval for Ready', async () => {
@@ -47,7 +48,7 @@ test('planning is owner-scoped, validates references, uses optimistic edits and 
     await call('/shortlist', 'POST', { reportId: 'report-a', index: 0 })
     assert.equal((await (await call()).json()).shortlist.length, 0)
     const hash = contentHash(pack); const reviewedAt = Date.now()
-    pack = repository.studioPut('alice', 'package', pack.id, { ...pack, editorialStatus: 'approved', independentReview: { status: 'passed', reviewerId: 'bob', contentHash: hash, freshnessConfirmed: true, contradictionsResolved: true, reviewedAt: new Date(reviewedAt).toISOString(), expiresAt: new Date(reviewedAt + 86400000).toISOString() }, approval: { contentHash: hash } }, pack.revision)
+    pack = repository.studioPut('alice', 'package', pack.id, { ...pack, editorialStatus: 'approved', independentReview: reviewFixture(pack), approval: { contentHash: hash, method: 'independent-human', approvedBy: 'alice', approvedAt: new Date(reviewedAt).toISOString() } }, pack.revision)
     assert.equal((await call(`/board/${card.id}`, 'PATCH', { revision: card.revision, status: 'ready' })).status, 200)
     assert.equal((await call(`/board/${card.id}`, 'PATCH', { revision: card.revision, status: 'idea' })).status, 409)
     assert.equal((await (await call()).json()).board[0].status, 'ready')

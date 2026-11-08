@@ -5,6 +5,7 @@ import { once } from 'node:events'
 import { createRepository } from '../storage/repository.js'
 import { studioRouter } from '../studio/routes.js'
 import { contentHash } from '../studio/approval.js'
+import { ratingsFixture } from './fixtures/finalization.js'
 
 const evidence = [{ id: 'E1', hash: 'source', excerpt: 'The publisher announced a preview. Availability is limited and the supplied source does not establish any performance claims or public reception.' }]
 const content = {
@@ -29,7 +30,7 @@ async function fixture(run) {
   try { await run(repository, call, () => calls) } finally { await new Promise(resolve => server.close(resolve)); repository.close() }
 }
 
-test('expired legacy review blocks export until the author confirms the valid saved content', async () => fixture(async (repo, call) => {
+test('expired legacy review blocks export and cannot be bypassed by author confirmation', async () => fixture(async (repo, call) => {
   const value = { settings: { platform: 'X' }, evidence, content, reviewerId: 'bob', status: 'completed', editorialStatus: 'approved' }
   const hash = contentHash(value)
   const reviewedAt = new Date(Date.now() - 86401000).toISOString()
@@ -37,11 +38,9 @@ test('expired legacy review blocks export until the author confirms the valid sa
   const pack = await repo.studioPut('alice', 'package', 'expired-review', { ...value, independentReview: { status: 'passed', contentHash: hash, reviewerId: 'bob', reviewedAt, expiresAt, freshnessConfirmed: true, contradictionsResolved: true }, approval: { contentHash: hash } }, 0)
   assert.equal((await call('/packages/expired-review/export', undefined, 'alice', 'GET')).status, 409)
   const confirmed = await call('/packages/expired-review', { revision: pack.revision, editorialStatus: 'approved' }, 'alice', 'PATCH')
-  assert.equal(confirmed.status, 200)
-  const ready = await confirmed.json()
-  assert.equal(ready.approval.method, 'creator-confirmed')
-  assert.equal(ready.independentReview.expiresAt, expiresAt, 'confirmation does not fabricate a new human review')
-  assert.equal((await call('/packages/expired-review/export', undefined, 'alice', 'GET')).status, 200)
+  assert.equal(confirmed.status, 422)
+  assert.equal((await repo.studioGet('alice', 'package', pack.id)).independentReview.expiresAt, expiresAt)
+  assert.equal((await call('/packages/expired-review/export', undefined, 'alice', 'GET')).status, 409)
 }))
 
 test('result persistence followed by job failure preserves output and blocks a new dispatch', async () => fixture(async (repo, call, calls) => {
@@ -66,7 +65,7 @@ test('future revisions cannot overwrite a snapshot or impersonate an assigned re
   const draft = await repo.studioPut('alice', 'package', 'draft', { settings: { platform: 'X' }, evidence, content, reviewerId: 'bob', status: 'completed' }, 0)
   assert.equal((await call('/packages/draft', { revision: draft.revision + 1, editorialStatus: 'needs_review' }, 'alice', 'PATCH')).status, 409)
   assert.equal((await call('/packages/draft/assign-reviewer', { revision: draft.revision + 1, reviewerId: 'carol' })).status, 409)
-  assert.equal((await call('/reviews/alice/draft', { revision: draft.revision + 1, claims: [{ id: 'C1', supported: true, note: 'The quoted passage supports this claim.' }], rightsConfirmed: true, promiseAligned: true, freshnessConfirmed: true, contradictionsResolved: true }, 'bob')).status, 409)
+  assert.equal((await call('/reviews/alice/draft', { revision: draft.revision + 1, claims: [{ id: 'C1', supported: true, note: 'The quoted passage supports this claim.' }], rightsConfirmed: true, promiseAligned: true, freshnessConfirmed: true, contradictionsResolved: true, accessibilityConfirmed: true, scopeConfirmed: true, ratings: ratingsFixture() }, 'bob')).status, 409)
   assert.equal((await call('/reviews/alice/draft', undefined, 'carol', 'GET')).status, 404)
   assert.equal((await repo.studioGet('alice', 'package', 'draft')).reviewerId, 'bob')
 }))
