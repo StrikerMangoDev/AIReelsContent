@@ -5,7 +5,7 @@ import { cleanCopy } from './ContentPreview'
 import '../../styles/instagram-preview.css'
 
 /** A draft composition, not a rendered or published Instagram asset. */
-export function InstagramPreview({ content, title = 'Your content', activeSlide, onSlideSelect, previewMode, onModeChange }: { content: StudioContent; title?: string; activeSlide?: number; onSlideSelect?: (index: number) => void; previewMode?: 'post' | 'carousel'; onModeChange?: (mode: 'post' | 'carousel') => void }) {
+export function InstagramPreview({ content, title = 'Your content', activeSlide, onSlideSelect, previewMode, onModeChange, selectedSection }: { content: StudioContent; title?: string; activeSlide?: number; onSlideSelect?: (index: number) => void; previewMode?: 'post' | 'carousel'; onModeChange?: (mode: 'post' | 'carousel') => void; selectedSection?: string }) {
   const [active, setActive] = useState(0)
   const [expanded, setExpanded] = useState(false)
   const [localMode, setLocalMode] = useState<'post' | 'carousel'>(content.scenes?.length ? 'carousel' : 'post')
@@ -18,13 +18,14 @@ export function InstagramPreview({ content, title = 'Your content', activeSlide,
   const count = mode === 'carousel' ? Math.max(1, scenes.length) : 1
   const index = Math.min(activeSlide ?? active, count - 1)
   const scene = mode === 'carousel' ? scenes[index] : undefined
-  const caption = cleanCopy(post ? [cleanCopy(post.body).startsWith(cleanCopy(post.hook)) ? '' : post.hook, post.body, post.cta, post.hashtags.join(' ')].filter(Boolean).join('\n\n') : content.captions?.reel || '')
+  const caption = cleanCopy(selectedSection === 'captions' ? content.captions?.reel || '' : post ? [cleanCopy(post.body).startsWith(cleanCopy(post.hook)) ? '' : post.hook, post.body, post.cta, post.hashtags.join(' ')].filter(Boolean).join('\n\n') : content.captions?.reel || '')
   const heading = cleanCopy(post?.headline || title)
-  if (content.website && !content.strategy?.platforms?.length && !content.captions && !scenes.length) return <section className="studio-panel" aria-label="Article preview">
+  if (content.website && (selectedSection === 'website' || !content.strategy?.platforms?.length && !content.captions && !scenes.length)) return <section className="studio-panel" aria-label="Article preview">
     <h2>Article preview</h2>
     <p className="studio-muted">Your website article as readers will see it.</p>
     <article><h3>{cleanCopy(content.website.title)}</h3><p className="preserve-lines">{cleanCopy(content.website.body)}</p></article>
   </section>
+  if (selectedSection === 'captions-linkedin' && content.captions) return <section className="studio-panel" aria-label="LinkedIn caption preview"><h2>LinkedIn caption preview</h2><p className="studio-muted">The text for your LinkedIn post.</p><p className="preserve-lines">{cleanCopy(content.captions.linkedin)}</p></section>
   return <section className="instagram-preview" aria-label="Instagram draft preview">
     <div className="instagram-preview-heading"><Camera size={20} aria-hidden="true" /><h2>Instagram preview</h2><span>Layout only</span></div>
     <p className="instagram-preview-note">Your text in context. No images have been generated.</p>
