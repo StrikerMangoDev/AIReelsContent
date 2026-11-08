@@ -20,6 +20,11 @@ export function InstagramPreview({ content, title = 'Your content', activeSlide,
   const scene = mode === 'carousel' ? scenes[index] : undefined
   const caption = cleanCopy(post ? [cleanCopy(post.body).startsWith(cleanCopy(post.hook)) ? '' : post.hook, post.body, post.cta, post.hashtags.join(' ')].filter(Boolean).join('\n\n') : content.captions?.reel || '')
   const heading = cleanCopy(post?.headline || title)
+  if (content.website && !content.strategy?.platforms?.length && !content.captions && !scenes.length) return <section className="studio-panel" aria-label="Article preview">
+    <h2>Article preview</h2>
+    <p className="studio-muted">Your website article as readers will see it.</p>
+    <article><h3>{cleanCopy(content.website.title)}</h3><p className="preserve-lines">{cleanCopy(content.website.body)}</p></article>
+  </section>
   return <section className="instagram-preview" aria-label="Instagram draft preview">
     <div className="instagram-preview-heading"><Camera size={20} aria-hidden="true" /><h2>Instagram preview</h2><span>Layout only</span></div>
     <p className="instagram-preview-note">Your text in context. No images have been generated.</p>
