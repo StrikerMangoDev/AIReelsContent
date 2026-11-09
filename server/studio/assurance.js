@@ -32,16 +32,16 @@ export function buildAssurance(value, { actorId = null, runId = null, checkedAt 
   add('content-validation', validation.issues.length === 0, validation.issues.length ? validation.issues.join(' ') : 'The saved content passed schema, citation and selected-format checks.', 'automatic')
   for (const [index, message] of validation.issues.entries()) issues.push({ code: `content-${index + 1}`, severity: 'blocker', field: 'content', evidenceIds, claimIds, status: 'open', rationale: message })
   const unsupportedNumbers = claims.filter(claim => {
-    const quoted = new Set([...String(claim.quote || '').matchAll(/\d+(?:\.\d+)?/g)].map(match => match[0]))
-    return [...String(claim.text || '').matchAll(/\d+(?:\.\d+)?/g)].some(match => !quoted.has(match[0]))
+    const quoted = new Set([...String(claim.quote || '').matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)].map(match => match[0]))
+    return [...String(claim.text || '').matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)].some(match => !quoted.has(match[0]))
   }).map(claim => claim.id)
   add('claim-numbers', unsupportedNumbers.length === 0, unsupportedNumbers.length ? 'Claims contain dates or numbers absent from their supporting passage.' : 'Claim dates and numbers occur in their cited passages; meaning still needs human review.', 'automatic', evidenceIds, unsupportedNumbers)
   const prose = [value.content?.script, value.content?.website?.title, value.content?.website?.body, ...Object.values(value.content?.captions || {}), ...(value.content?.hooks || []), ...(value.content?.scenes || []).map(scene => scene.narration), ...(value.content?.strategy?.platforms || []).flatMap(item => [item.headline, item.hook, item.body, item.alternativeHook])].filter(item => typeof item === 'string')
   const numbersSupported = prose.every(body => body.split(/(?<=[.!?])\s+/).every(sentence => {
     const ids = [...sentence.matchAll(/\[(C\d+)\]/g)].map(match => match[1])
     const support = ids.length ? claims.filter(claim => ids.includes(claim.id)) : claims
-    const quoted = new Set(support.flatMap(claim => [...String(claim.quote || '').matchAll(/\d+(?:\.\d+)?/g)].map(match => match[0])))
-    return [...sentence.replace(/\[C\d+\]/g, '').matchAll(/\d+(?:\.\d+)?/g)].every(match => quoted.has(match[0]))
+    const quoted = new Set(support.flatMap(claim => [...String(claim.quote || '').matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)].map(match => match[0])))
+    return [...sentence.replace(/\[C\d+\]/g, '').matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)].every(match => quoted.has(match[0]))
   }))
   add('output-numbers', numbersSupported, numbersSupported ? 'Dates and numbers in headline, hooks and delivery prose occur in supporting passages; semantic meaning still requires review.' : 'Headline, hook or delivery prose contains dates or numbers absent from supporting passages.', 'automatic')
   for (const [code, rationale] of [['semantic-support', 'Review every claim for semantic support, scope, dates and contradictions against the captured sources.'], ['creative-review', 'Review clarity, hook promise, brand fit, originality against an identified baseline, platform fit and CTA suitability.'], ['source-context', 'Confirm source freshness, rights and limitations; audience demand remains unknown without direct observations.']]) {

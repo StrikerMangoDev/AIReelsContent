@@ -82,3 +82,14 @@ test('future captures fail and changing the frozen research brief invalidates as
   value.evidence[0].retrievedAt = new Date(Date.now() + 86400000).toISOString()
   assert.ok(buildAssurance(value).issues.some(issue => issue.code === 'source-provenance'))
 })
+
+test('publisher names containing digits do not become numeric claims', () => {
+  const value = packageFixture()
+  value.content.claims[0].text = 'W3C announced a model'
+  value.content.website.body = 'W3C announced a model [C1].'
+  value.assurance = buildAssurance(value)
+  value.independentReview = reviewFixture(value)
+  assert.equal(assessAssurance(value).eligible, true)
+  value.content.website.body = 'W3C announced a model with 75% better performance [C1].'
+  assert.ok(buildAssurance(value).issues.some(issue => issue.code === 'output-numbers'))
+})
