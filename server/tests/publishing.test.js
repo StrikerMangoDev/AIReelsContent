@@ -4,7 +4,7 @@ import express from 'express'
 import { once } from 'node:events'
 import { randomUUID, createHash } from 'node:crypto'
 import { createRepository } from '../storage/repository.js'
-import { createPublishingRouter, approvedCaption } from '../publishing/router.js'
+import { createPublishingRouter, createPublishingService, approvedCaption } from '../publishing/router.js'
 import { createPostizProvider, publishingConfig } from '../publishing/provider.js'
 import { buildAssurance } from '../studio/assurance.js'
 import { contentHash } from '../studio/approval.js'
@@ -14,6 +14,7 @@ import { mediaManifest } from '../media/acceptance.js'
 import { platformSettings, xWeightedLength, renderSocialCaption, socialSourceUrls } from '../publishing/constraints.js'
 import { createApp } from '../http/app.js'
 import { postizContentMatches } from '../publishing/readback.js'
+import { setTimeout as delay } from 'node:timers/promises'
 
 test('publishing binds exact approved text/assets/account, dispatches once and requires matching provider readback', async () => {
   const repository = createRepository(':memory:')
@@ -151,4 +152,23 @@ test('Postiz readback decodes HTML entities without accepting changed prose, new
   assert.equal(postizContentMatches(caption, caption.replace('\n\n', '\n')), false)
   assert.equal(postizContentMatches(caption, `${caption}<script>doSomething()</script>`), false)
   assert.equal(postizContentMatches('A\nB', '<p>A<br>B</p>'), true)
+})
+
+test('concurrent accounts wait for the owner admission lease and retain cross-account request identity', async () => {
+  const repository = createRepository(':memory:'); const bytes = Buffer.from('controlled concurrency asset')
+  const pack = repository.studioPut('alice', 'package', 'concurrent-pack', { content: { captions: { linkedin: 'Supported source [C1]' }, claims: [{ id: 'C1', evidenceId: 'E1' }] }, evidence: [{ id: 'E1', url: 'https://example.com/actual-source' }] }, 0)
+  const asset = repository.studioPut('alice', 'asset', 'concurrent-asset', { packageId: pack.id, kind: 'image', status: 'completed', mime: 'image/png', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }, 0)
+  const actualPut = repository.studioPut
+  let firstAdmission = true; const created = []
+  repository.studioPut = async (...args) => { if (args[1] === 'social_publication' && args[4] === 0 && firstAdmission) { firstAdmission = false; await delay(60) } return actualPut(...args) }
+  const service = createPublishingService({ repository, config: () => ({ enabled: true, accounts: ['account-a', 'account-b'].map(accountId => ({ accountId, ownerScope: 'alice', platform: 'LinkedIn', provider: 'linkedin', name: accountId })) }), assessReady: async () => ({ eligible: true, issues: [], method: 'controlled-concurrency-fixture' }), readFile: async () => bytes, provider: { upload: async () => ({ id: 'uploaded', path: 'https://uploads.postiz.com/asset.png' }), create: async payload => { const accountId = payload.posts[0].integration.id; created.push(accountId); return { postId: `post-${accountId}`, integration: accountId } } } })
+  const input = { revision: pack.revision, platform: 'LinkedIn', mode: 'now', caption: approvedCaption(pack, 'LinkedIn'), assetIds: [asset.id], confirmed: true }
+  const requestA = randomUUID(); const requestB = randomUUID()
+  try {
+    const results = await Promise.all(['account-a', 'account-b'].map((accountId, index) => service.publish({ owner: 'alice', actorUid: 'alice', packageId: pack.id, input: { ...input, accountId, requestId: index === 0 ? requestA : requestB } })))
+    assert.deepEqual(results.map(result => result.status), [201, 201])
+    assert.deepEqual(created.sort(), ['account-a', 'account-b'])
+    await assert.rejects(service.publish({ owner: 'alice', actorUid: 'alice', packageId: pack.id, input: { ...input, accountId: 'account-b', requestId: requestA } }), { status: 409 })
+    assert.equal(created.length, 2)
+  } finally { repository.close() }
 })

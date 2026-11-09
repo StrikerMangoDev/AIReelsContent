@@ -10,6 +10,7 @@ import { costScopeHash } from '../budget/policy.js'
 import { createPostizProvider, publishingConfig } from './provider.js'
 import { platformSettings, renderSocialCaption, socialSourceUrls } from './constraints.js'
 import { postizContentMatches } from './readback.js'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const fail = (status, message) => Object.assign(new Error(message), { status, publicMessage: message })
 const inputSchema = z.object({ requestId: z.string().uuid(), revision: z.number().int().positive(), accountId: z.string().min(1).max(200), platform: z.string().min(1).max(80), mode: z.enum(['draft', 'schedule', 'now']), publishAt: z.iso.datetime().optional(), caption: z.string().trim().min(1).max(12000), assetIds: z.array(z.string().min(1).max(100)).min(1).max(10), confirmed: z.literal(true), automatic: z.boolean().default(false) }).strict()
@@ -52,7 +53,13 @@ export function createPublishingService({ repository, provider = createPostizPro
     const scope = { packageId: pack.id, contentHash: contentHash(pack), profileHash: profile ? costScopeHash(profile, null) : null, accountId: account.accountId, platform: account.platform, provider: account.provider, providerSettings, mode: input.mode, publishAt: input.publishAt || null, caption: input.caption, assets: assets.map(asset => ({ id: asset.id, sha256: asset.sha256 })), automatic: input.automatic }
     const scopeHash = costScopeHash(scope, null); const id = scopeHash.slice(0, 32)
     const leaseId = `social-publish:${owner}`; const leaseOwner = randomUUID()
-    if (!await repository.acquireLease(leaseId, leaseOwner, 30000)) throw fail(409, 'Another publication is being prepared; reload before retrying')
+    let acquired = false
+    for (let attempt = 0; attempt < 16; attempt++) {
+      acquired = await repository.acquireLease(leaseId, leaseOwner, 30000)
+      if (acquired) break
+      if (attempt < 15) await delay(1000)
+    }
+    if (!acquired) throw Object.assign(fail(409, 'Another publication is being prepared; no provider dispatch was started.'), { preDispatch: true })
     let receipt
     try {
       const priorReceipts = await repository.studioList(owner, 'social_publication')
