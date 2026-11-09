@@ -113,6 +113,8 @@ test('native-capable model uses the existing named-tool protocol only when expli
       assert.deepEqual(body.tool_choice, { type: 'function', function: { name: 'submit_json' } })
       assert.deepEqual(body.tools[0].function.parameters, schema)
       assert.equal(body.tools[0].function.strict, true)
+      assert.match(body.messages[0].content, /exactly ONE submit_json call containing the WHOLE schema data instance/)
+      assert.match(body.messages[0].content, /Never make a separate call per claim, field or section/)
       assert.deepEqual(body.provider.max_price, { prompt: 0, completion: 0, request: 0 })
       return Response.json({ choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name, arguments: '{"ok":true}' } }] } }] })
     } })

@@ -86,9 +86,9 @@ test('default HTTP generation queues without provider calls; worker claims once,
   const app = express(); app.use(express.json()); app.use(studioRouter({ repository, generate, auth: (req, res, next) => { if (!req.headers.authorization) return res.sendStatus(401); req.identity = { uid: req.headers.authorization, role: 'user' }; next() } }))
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening')
   const call = (path, body, uid = 'alice') => fetch(`http://127.0.0.1:${server.address().port}${path}`, { method: body ? 'POST' : 'GET', headers: { Authorization: uid, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) })
-  async function queue(id) {
-    const draft = await repository.studioPut('alice', 'package', id, { settings: { platform: 'X', outputs: ['script'] }, evidence, content: null, status: 'draft' }, 0)
-    const response = await call(`/packages/${id}/generate`, { requestId: `request-${id}`, revision: draft.revision, confirmed: true })
+  async function queue(id, previousContent = null, uid = 'alice') {
+    const draft = await repository.studioPut(uid, 'package', id, { settings: { platform: 'X', outputs: ['script'] }, evidence, content: previousContent, status: 'draft' }, 0)
+    const response = await call(`/packages/${id}/generate`, { requestId: `request-${id}`, revision: draft.revision, confirmed: true }, uid)
     assert.equal(response.status, 202)
     return response.json()
   }
@@ -150,6 +150,27 @@ test('default HTTP generation queues without provider calls; worker claims once,
     assert.equal(gateway.status, 'failed')
     assert.equal(repository.budgetGet('alice', 'request-gateway').status, 'dispatch_unknown', 'provider error is not a billing receipt or refund')
     assert.equal((await runContentJob({ repository, uid: 'alice', requestId: 'request-gateway' })).status, 'skipped')
+    const toolDiagnostics = { code: 'MODEL_INCOMPLETE', transportStatus: 200, finishReason: 'tool_calls', toolCallCount: 12, expectedTool: false }
+    for (const [index, patch] of [{}, { transportStatus: undefined }, { finishReason: undefined }, { toolCallCount: undefined }, { expectedTool: undefined }, { expectedTool: true }].entries()) {
+      const id = `invalid-tools-${index}`; const requestId = `request-${id}`
+      await queue(id, content, 'tool-owner')
+      let attempts = 0
+      const generate = async () => { attempts++; throw Object.assign(new Error('Private invalid tool envelope'), { ...toolDiagnostics, ...patch }) }
+      const outcome = await runContentJob({ repository, uid: 'tool-owner', requestId, generate })
+      assert.equal(outcome.status, index === 0 ? 'failed' : 'dispatch_unknown')
+      assert.deepEqual(repository.studioGet('tool-owner', 'package', id).content, content)
+      assert.equal(repository.budgetGet('tool-owner', requestId).status, 'dispatch_unknown', 'rejected content does not establish billing outcome')
+      assert.equal((await runContentJob({ repository, uid: 'tool-owner', requestId, generate })).status, 'skipped'); assert.equal(attempts, 1)
+    }
+    const legacyToolPack = repository.studioGet('tool-owner', 'package', 'invalid-tools-1')
+    const legacyToolRepository = { ...repository, studioJobGet: (uid, id) => {
+      const job = repository.studioJobGet(uid, id)
+      return job && id === legacyToolPack.jobId ? { ...job, error: `Existing content preserved. Diagnostics: ${JSON.stringify(toolDiagnostics)}` } : job
+    } }
+    const recoveredTools = await recoverRejectedGeneration({ repository: legacyToolRepository, uid: 'tool-owner', packageId: legacyToolPack.id, revision: legacyToolPack.revision, readFailure: async () => { throw new Error('Known rejection needs no additional provider request') } })
+    assert.equal(recoveredTools.status, 'failed'); assert.deepEqual(recoveredTools.content, content)
+    assert.equal(repository.studioJobGet('tool-owner', legacyToolPack.jobId).status, 'failed')
+    assert.equal(repository.budgetGet('tool-owner', legacyToolPack.jobId).status, 'dispatch_unknown')
     const invalidPack = repository.studioGet('alice', 'package', 'unknown')
     await assert.rejects(recoverRejectedGeneration({ repository, uid: 'alice', packageId: invalidPack.id, revision: invalidPack.revision }), /no confirmed validation rejection/)
     const vertexRepository = { ...repository, budgetGet: (uid, id) => id === 'vertex-request-unknown-0' ? { quote: { priceVersion: 'gemini-3.8-flash-global-2026-10-29' } } : repository.budgetGet(uid, id), studioJobGet: (uid, id) => {

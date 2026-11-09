@@ -13,7 +13,7 @@ import { generateVertexJson, vertexFallbackAllowed } from '../providers/vertex-f
 
 const failure = message => Object.assign(new Error(message), { code: 'JOB_BLOCKED', status: 409, publicMessage: message })
 const reportId = id => createHash('sha256').update(id).digest('hex').slice(0, 32)
-const rejectedGeneration = error => error?.code === 'EVIDENCE_VALIDATION' || (error?.code === 'MODEL_INCOMPLETE' && error.transportStatus === 200 && (['length', 'error'].includes(error.finishReason) || (Number.isInteger(error.providerErrorCode) && error.providerErrorCode >= 400 && error.providerErrorCode <= 599)))
+const rejectedGeneration = error => error?.code === 'EVIDENCE_VALIDATION' || (error?.code === 'MODEL_INCOMPLETE' && error.transportStatus === 200 && (['length', 'error'].includes(error.finishReason) || (error.finishReason === 'tool_calls' && Number.isInteger(error.toolCallCount) && error.toolCallCount >= 0 && error.toolCallCount <= 30 && error.expectedTool === false) || (Number.isInteger(error.providerErrorCode) && error.providerErrorCode >= 400 && error.providerErrorCode <= 599)))
 
 export function safeJobFailure(error) {
   const codes = ['JOB_BLOCKED', 'BUDGET_BLOCKED', 'STUDIO_CONFLICT', 'STUDIO_QUOTA', 'EVIDENCE_VALIDATION', 'MODEL_JSON_INVALID', 'MODEL_INCOMPLETE', 'MODEL_HTTP_ERROR', 'MODEL_TIMEOUT', 'VERTEX_REQUEST_FAILED']
