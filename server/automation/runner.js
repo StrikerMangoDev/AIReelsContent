@@ -2,12 +2,13 @@ import { randomUUID, createHash } from 'node:crypto'
 import { costScopeHash } from '../budget/policy.js'
 import { workspaceRole } from '../studio/workspaces.js'
 import { automaticTextPolicyVersion } from './review.js'
+import { contentHash } from '../studio/approval.js'
 
 export const automationRegistryOwner = '__automation_registry__'
 const digest = value => createHash('sha256').update(value).digest('hex')
 const dayInZone = (now, timezone) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 const requestId = value => { const hash = digest(value); return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}` }
-const stageRequestId = (unitId, phase, run) => requestId(`${unitId}:${phase}${phase === 'review' ? `:${automaticTextPolicyVersion}` : ''}${run.qualityRevision && phase !== 'research' ? ':quality:1' : run.replacements?.[phase] ? ':replacement:1' : ''}`)
+const stageRequestId = (unitId, phase, run) => requestId(`${unitId}:${phase}${phase === 'review' ? `:${automaticTextPolicyVersion}${run.contentHash ? `:content:${run.contentHash}` : ''}` : ''}${run.qualityRevision && phase !== 'research' ? ':quality:1' : run.replacements?.[phase] ? ':replacement:1' : ''}`)
 const phases = ['research', 'generate', 'review', 'render', 'publish']
 const held = status => !['blocked', 'skipped'].includes(status)
 
@@ -136,7 +137,7 @@ export async function runAccountAutomation({ repository, owner, profile, service
         if (phase === 'generate') {
           const pack = result.package || result.result || result
           if (!pack.id || !pack.content) { run = await repository.studioPut(owner, 'automation_run', unitId, { ...next, status: 'blocked', error: 'Generation returned no saved content package.' }, run.revision); break }
-          next.packageId = pack.id
+          next.packageId = pack.id; next.contentHash = contentHash(pack)
         }
         if (phase === 'render') {
           next.assetIds = (result.assets || []).map(asset => typeof asset === 'string' ? asset : asset.id)

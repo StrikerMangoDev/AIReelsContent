@@ -122,6 +122,7 @@ export function createAutomationServices(repository, { research = researchNiche,
       const id = hash(`${run.id}:package`).slice(0, 32)
       let pack = await repository.studioGet(owner, 'package', id)
       const quality = run.qualityRevision
+      let automaticReviewFeedback
       if (pack?.content && (!quality || (pack.jobId === requestId && pack.status === 'completed'))) return pack
       if (quality) {
         await checkConsent(context)
@@ -133,6 +134,7 @@ export function createAutomationServices(repository, { research = researchNiche,
         const actualReview = pack?.automaticReview
         const repairable = (actualReview?.status === 'needs_revision' && actualReview.result) || (actualReview?.status === 'blocked' && actualReview.preflightIssues?.length > 0)
         if (!pack?.content || pack.status !== 'completed' || quality.version !== 1 || !quality.instruction || quality.contentHash !== contentHash(pack) || actualReview?.policyVersion !== automaticTextPolicyVersion || actualReview?.runId !== quality.reviewId || !repairable || actualReview?.contentHash !== contentHash(pack)) throw blocked('Quality repair requires the actual completed review of this exact saved content.')
+        automaticReviewFeedback = { reviewId: actualReview.runId, contentHash: actualReview.contentHash, issues: [...new Set([...(actualReview.issues || []), ...(actualReview.preflightIssues || []), ...(actualReview.result?.issues || [])])], ratings: actualReview.result?.ratings || null, claims: (actualReview.result?.claims || []).map(({ id, verdict, reason }) => ({ id, verdict, reason })) }
       }
       if (!pack) {
         const report = await repository.studioGet(owner, 'research', run.researchId)
@@ -167,7 +169,7 @@ export function createAutomationServices(repository, { research = researchNiche,
         if (job?.status === 'reserved') await repository.studioJobUpdate(owner, requestId, { status: 'failed', error: 'Automatic generation admission was blocked before provider dispatch.' }, job.revision, 'reserved')
         throw Object.assign(error, { preDispatch: true })
       }
-      const outcome = await runContentJob({ repository, uid: owner, requestId, generate: (evidence, settings, details, unused, options) => write(evidence, settings, { ...details, outputConstraint: writingConstraint }, write === generateContent ? boundedGenerate : unused, { ...options, fallback: undefined, startWithFallback: false, beforeAttempt: async () => { await checkConsent(context); if (options.beforeAttempt) await options.beforeAttempt() } }) })
+      const outcome = await runContentJob({ repository, uid: owner, requestId, generate: (evidence, settings, details, unused, options) => write(evidence, settings, { ...details, outputConstraint: writingConstraint, ...(automaticReviewFeedback ? { automaticReviewFeedback } : {}) }, write === generateContent ? boundedGenerate : unused, { ...options, fallback: undefined, startWithFallback: false, beforeAttempt: async () => { await checkConsent(context); if (options.beforeAttempt) await options.beforeAttempt() } }) })
       return { ...outcome, package: outcome.result }
     },
     async review(context) {

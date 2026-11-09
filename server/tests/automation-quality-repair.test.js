@@ -34,13 +34,13 @@ test('one recorded quality failure defers repair, changes downstream IDs and nev
     assert.equal(failed.stage, 'generate'); assert.equal(failed.qualityRevision.version, 1)
     assert.match(failed.qualityRevision.instruction, /unsupported comparison/)
     assert.deepEqual(calls.map(call => call[0]), ['research', 'generate', 'review'])
-    const versionedReviewHash = createHash('sha256').update(`${failed.id}:review:${automaticTextPolicyVersion}`).digest('hex')
+    const versionedReviewHash = createHash('sha256').update(`${failed.id}:review:${automaticTextPolicyVersion}:content:${failed.contentHash}`).digest('hex')
     assert.equal(calls[2][1].replaceAll('-', ''), versionedReviewHash.slice(0, 32))
     await repository.studioPut('owner', 'automation_run', failed.id, { ...failed, assetIds: ['stale-asset'] }, failed.revision)
     const second = await runAccountAutomation({ repository, owner: 'owner', profile: p, services, now })
     assert.equal(second.results[0].status, 'completed')
     assert.notEqual(calls[1][1], calls[3][1]); assert.notEqual(calls[2][1], calls[4][1])
-    const repairedReviewHash = createHash('sha256').update(`${failed.id}:review:${automaticTextPolicyVersion}:quality:1`).digest('hex')
+    const repairedReviewHash = createHash('sha256').update(`${failed.id}:review:${automaticTextPolicyVersion}:content:${second.results[0].contentHash}:quality:1`).digest('hex')
     assert.equal(calls[4][1].replaceAll('-', ''), repairedReviewHash.slice(0, 32))
     assert.equal(calls[3][2].replacementOf, undefined)
     assert.equal(calls[6][2].run.assetIds[0], 'new-asset')
@@ -82,13 +82,14 @@ test('real generation replaces failed content with recorded feedback, keeps zero
   const services = createAutomationServices(repository, { write: async (_evidence, _settings, value) => { calls++; details = value; return content } })
   try {
     let pack = await repository.studioPut('owner', 'package', id, { content, evidence: [{ id: 'E1', hash: 'hash', url: 'https://example.com/update', excerpt, retrievedAt: now.toISOString() }], sourceIds: [], settings: settingsSchema.parse({ outputs: ['website'] }), status: 'completed', createdBy: 'owner', jobId: 'old-job' }, 0)
-    const actualReview = { policyVersion: automaticTextPolicyVersion, runId: 'actual-review', status: 'needs_revision', result: { issues: ['Keep the limited preview qualification.'] }, contentHash: contentHash(pack) }
+    const actualReview = { policyVersion: automaticTextPolicyVersion, runId: 'actual-review', status: 'needs_revision', issues: ['Ratings do not meet the release threshold.'], result: { issues: ['Keep the limited preview qualification.'], ratings: { factualAccuracy: { score: 5, rationale: 'The restriction was omitted.' } }, claims: [{ id: 'C1', verdict: 'unsupported', reason: 'The selected quotation restricts availability to the preview.' }] }, contentHash: contentHash(pack) }
     pack = await repository.studioPut('owner', 'package', id, { ...pack, automaticReview: actualReview }, pack.revision)
     const context = { owner: 'owner', profile: p, actorUid: 'owner', requestId: randomUUID(), freeOnly: true, paidBudgetMicros: 0, run: { ...run, qualityRevision: { version: 1, reviewId: actualReview.runId, contentHash: contentHash(pack), instruction: 'Keep the limited preview qualification.' } } }
     const result = await services.generate(context)
     assert.equal(result.status, 'completed'); assert.equal(calls, 1)
     assert.equal(details.revisionInstruction, context.run.qualityRevision.instruction)
     assert.deepEqual(details.previousContent, content)
+    assert.deepEqual(details.automaticReviewFeedback, { reviewId: actualReview.runId, contentHash: actualReview.contentHash, issues: [...actualReview.issues, ...actualReview.result.issues], ratings: actualReview.result.ratings, claims: actualReview.result.claims })
     const saved = await repository.studioGet('owner', 'package', id)
     assert.equal(saved.automaticReview, null); assert.equal(saved.jobId, context.requestId)
     const job = await repository.studioJobGet('owner', context.requestId)

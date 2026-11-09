@@ -2,6 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRepository } from '../storage/repository.js'
 import { planAccountWeek, runAccountAutomation, runRegisteredAutomation } from '../automation/runner.js'
+import { contentHash } from '../studio/approval.js'
+import { automaticTextPolicyVersion } from '../automation/review.js'
+import { createHash } from 'node:crypto'
 
 const now = new Date('2026-11-09T06:00:00.000Z')
 function profileFixture(repository, accountId = 'account-one') {
@@ -113,5 +116,54 @@ test('one-stage invocations persist the next stage and continue without repeatin
     }
     const repeat = await runAccountAutomation({ repository, owner: 'alice', profile, services, now, maxStages: 1 })
     assert.equal(repeat.results[0].status, 'completed'); assert.equal(repeat.deferred, false); assert.equal(calls.length, 5)
+  } finally { repository.close() }
+})
+
+test('review operation identity binds actual generated content and retains legacy reconciliation identity', async () => {
+  const repository = createRepository(':memory:'); const calls = []; const profile = profileFixture(repository)
+  const services = servicesFixture(repository, calls)
+  const execute = () => runAccountAutomation({ repository, owner: 'alice', profile, services, now, maxStages: 1 })
+  try {
+    await execute()
+    const generated = (await execute()).results[0]
+    const pack = repository.studioGet('alice', 'package', generated.packageId)
+    assert.equal(generated.contentHash, contentHash(pack))
+    let run = (await execute()).results[0]
+    const originalReviewId = calls.at(-1).requestId
+    run = repository.studioPut('alice', 'automation_run', run.id, { ...run, stage: 'review', status: 'pending' }, run.revision)
+    run = (await execute()).results[0]
+    assert.equal(calls.at(-1).requestId, originalReviewId, 'same content keeps its existing review operation identity')
+    const updated = repository.studioPut('alice', 'package', pack.id, { ...pack, content: { website: { title: 'A genuinely changed saved draft' } } }, pack.revision)
+    run = repository.studioPut('alice', 'automation_run', run.id, { ...run, stage: 'review', status: 'pending', contentHash: contentHash(updated), qualityRevision: { version: 1 } }, run.revision)
+    run = (await execute()).results[0]
+    const changedReviewId = calls.at(-1).requestId
+    assert.notEqual(changedReviewId, originalReviewId)
+    assert.equal(run.qualityRevision.version, 1, 'new review identity never resets the bounded quality revision')
+    repository.studioPut('alice', 'automation_run', run.id, { ...run, stage: 'review', status: 'pending', contentHash: contentHash(pack) }, run.revision)
+    run = (await execute()).results[0]
+    assert.notEqual(calls.at(-1).requestId, changedReviewId, 'content changes independently of the quality revision discriminator')
+    const legacy = { ...run, stage: 'review', status: 'dispatch_unknown' }; delete legacy.contentHash; delete legacy.qualityRevision
+    repository.studioPut('alice', 'automation_run', run.id, legacy, run.revision)
+    const hex = createHash('sha256').update(`${run.id}:review:${automaticTextPolicyVersion}`).digest('hex')
+    const legacyId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
+    let reconciled = 0
+    services.reconcile = async ctx => { reconciled++; assert.equal(ctx.requestId, legacyId); return { status: 'dispatch_unknown' } }
+    const before = calls.length
+    assert.equal((await execute()).results[0].status, 'dispatch_unknown')
+    assert.equal(calls.length, before); assert.equal(reconciled, 1)
+  } finally { repository.close() }
+})
+
+test('a changed content hash cannot redispatch an uncertain publication', async () => {
+  const repository = createRepository(':memory:'); const calls = []; const profile = profileFixture(repository)
+  const services = servicesFixture(repository, calls); let publishes = 0; let publicationRequestId
+  services.publish = async ctx => { publishes++; publicationRequestId = ctx.requestId; return { id: 'uncertain-receipt', status: 'dispatch_unknown' } }
+  services.reconcile = async ctx => { assert.equal(ctx.phase, 'publish'); assert.equal(ctx.requestId, publicationRequestId); return { status: 'dispatch_unknown' } }
+  try {
+    const first = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    const run = first.results[0]
+    repository.studioPut('alice', 'automation_run', run.id, { ...run, contentHash: 'different-content-hash' }, run.revision)
+    const next = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    assert.equal(next.results[0].status, 'dispatch_unknown'); assert.equal(publishes, 1)
   } finally { repository.close() }
 })
