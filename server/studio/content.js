@@ -1,4 +1,5 @@
 import { evidencePassages, resolvePassageClaims } from './evidence-passages.js'
+import { citationSentences } from './citation-sentences.js'
 import { z } from 'zod'
 import { generateJson, retainGenerationReceipt } from '../providers/llm.js'
 import { cleanCaption, xWeightedLength, renderSocialCaption } from '../publishing/constraints.js'
@@ -80,7 +81,7 @@ export function reviewContent(content, evidence, settings, context = {}) {
     if (!/\p{L}/u.test(body.replace(/\[C\d+\]/g, ''))) issues.push(`${field}: write actual content, not citation markers alone.`)
     if (!citations.length && (field !== 'website title' || /(?<![\p{L}\p{N}_])\d/u.test(body))) issues.push(`${field}: add inline claim references such as [C1].`)
     if (citations.some(id => !ids.has(id))) issues.push(`${field}: references an unknown claim.`)
-    for (const sentence of body.split(/(?<=[.!?])\s+/)) {
+    for (const sentence of citationSentences(body)) {
       const cited = [...sentence.matchAll(/\[(C\d+)\]/g)].map(match => parsed.data.claims.find(claim => claim.id === match[1])).filter(Boolean)
       const feedClaims = cited.filter(claim => evidence.find(source => source.id === claim.evidenceId)?.type === 'news-feed-excerpt')
       const sentenceNumbers = [...sentence.replace(/\[C\d+\]/g, '').matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)]

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { citationSentences } from './citation-sentences.js'
 import { contentHash, independentlyReviewed } from './approval.js'
 import { reviewContent, settingsSchema } from './content.js'
 import { costScopeHash } from '../budget/policy.js'
@@ -37,7 +38,7 @@ export function buildAssurance(value, { actorId = null, runId = null, checkedAt 
   }).map(claim => claim.id)
   add('claim-numbers', unsupportedNumbers.length === 0, unsupportedNumbers.length ? 'Claims contain dates or numbers absent from their supporting passage.' : 'Claim dates and numbers occur in their cited passages; meaning still needs human review.', 'automatic', evidenceIds, unsupportedNumbers)
   const prose = [value.content?.script, value.content?.website?.title, value.content?.website?.body, ...Object.values(value.content?.captions || {}), ...(value.content?.hooks || []), ...(value.content?.scenes || []).map(scene => scene.narration), ...(value.content?.strategy?.platforms || []).flatMap(item => [item.headline, item.hook, item.body, item.alternativeHook])].filter(item => typeof item === 'string')
-  const numbersSupported = prose.every(body => body.split(/(?<=[.!?])\s+/).every(sentence => {
+  const numbersSupported = prose.every(body => citationSentences(body).every(sentence => {
     const ids = [...sentence.matchAll(/\[(C\d+)\]/g)].map(match => match[1])
     const support = ids.length ? claims.filter(claim => ids.includes(claim.id)) : claims
     const quoted = new Set(support.flatMap(claim => [...String(claim.quote || '').matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)].map(match => match[0])))

@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { generateContent, reviewContent } from '../studio/content.js'
+import { citationSentences } from '../studio/citation-sentences.js'
 
 const evidence = [{ id: 'E1', type: 'article', excerpt: 'The publisher announced a limited developer preview. The preview is available to selected developers and does not establish broad deployment.' }]
 const claim = { id: 'C1', text: 'The publisher announced a limited developer preview', evidenceId: 'E1', quote: evidence[0].excerpt, status: 'attributed' }
@@ -60,6 +61,24 @@ test('a citation in a later sentence does not cover an uncited numeric sentence'
   assert.ok(reviewContent(content, evidence).issues.some(issue => issue.includes('numeric statements need their own valid claim marker')))
   const identifier = { ...base, website: { ...base.website, body: 'W3C announced a preview. The publisher announced limited access [C1].' } }
   assert.equal(reviewContent(identifier, evidence).issues.some(issue => issue.includes('numeric statements')), false)
+})
+
+test('immediately post-punctuation citations bind to their preceding sentence for inspection only', () => {
+  const source = [{ id: 'E1', type: 'article', excerpt: 'The publisher announced a developer preview on October 25, 2026.' }]
+  const claims = [{ ...claim, text: 'The preview was announced on October 25, 2026', quote: source[0].excerpt }]
+  for (const body of [
+    'The preview was announced on October 25, 2026 [C1].',
+    'The preview was announced on October 25, 2026. [C1]',
+    'The preview was announced on October 25, 2026.[C1] Selected developers have access [C1].',
+    'The preview was announced on October 25, 2026. [C1] [C1] Selected developers have access [C1].',
+  ]) {
+    const content = { claims, website: { title: 'Developer preview', body } }
+    assert.deepEqual(reviewContent(content, source).issues, [])
+    assert.equal(content.website.body, body)
+  }
+  assert.deepEqual(citationSentences('A numeric claim 2026.[C1] A different claim 99 [C2].'), ['A numeric claim 2026 [C1].', 'A different claim 99 [C2].'])
+  const unrelated = { claims, website: { title: 'Developer preview', body: 'The preview has a 1% failure rate. Selected developers have access [C1].' } }
+  assert.ok(reviewContent(unrelated, source).issues.some(issue => issue.includes('own valid claim marker')))
 })
 
 test('automation bounds total claim words, website length, headlines and X body independently of manual limits', () => {

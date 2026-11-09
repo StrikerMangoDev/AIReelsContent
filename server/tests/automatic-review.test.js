@@ -109,3 +109,29 @@ test('numeric delivery claims cannot borrow another claim or omit their own mark
   assert.equal((await reviewAutomaticText(pack, profile, { now, generate: async () => { calls++; return result } })).status, 'blocked')
   assert.equal(calls, 0)
 })
+
+test('evaluator failures retain safe schema or unknown-transport provenance without becoming repair input', async () => {
+  const { pack, profile, result } = fixture()
+  const malformed = structuredClone(result)
+  malformed.ratings.factualAccuracy.score = 'private-secret-value'
+  const schemaFailure = await reviewAutomaticText(pack, profile, { now, generate: async () => malformed })
+  assert.equal(schemaFailure.status, 'blocked'); assert.equal(schemaFailure.result, null)
+  assert.equal(schemaFailure.responseFailure.code, 'MODEL_SCHEMA_INVALID')
+  assert.equal(schemaFailure.responseFailure.outcome, 'invalid_response')
+  assert.equal(schemaFailure.responseFailure.issueCount, 1)
+  assert.deepEqual(schemaFailure.responseFailure.schemaIssues, [{ path: 'ratings.factualAccuracy.score', code: 'invalid_type' }])
+  assert.equal(schemaFailure.preflightIssues, undefined)
+  const timeout = await reviewAutomaticText(pack, profile, { now, generate: async () => { throw Object.assign(new Error('private credential and raw output'), { code: 'MODEL_TIMEOUT', generationId: 'gen-123-timeout', completionTokens: 6000, reasoningTokens: 0, outputChars: 100, rawOutput: 'private-secret-value' }) } })
+  assert.equal(timeout.responseFailure.code, 'MODEL_TIMEOUT'); assert.equal(timeout.responseFailure.outcome, 'transport_unknown')
+  assert.equal(timeout.responseFailure.generationId, 'gen-123-timeout'); assert.equal(timeout.responseFailure.completionTokens, 6000)
+  assert.equal(timeout.responseFailure.reasoningTokens, 0); assert.equal(timeout.responseFailure.outputChars, 100)
+  assert.equal(timeout.status, 'blocked'); assert.equal(timeout.result, null); assert.equal(timeout.preflightIssues, undefined)
+  const http = await reviewAutomaticText(pack, profile, { now, generate: async () => { throw Object.assign(new Error('private provider body'), { code: 'MODEL_HTTP_ERROR', status: 429 }) } })
+  assert.equal(http.responseFailure.httpStatus, 429); assert.equal(http.responseFailure.outcome, 'provider_error')
+  const invalidJson = await reviewAutomaticText(pack, profile, { now, generate: async () => { throw Object.assign(new SyntaxError('private model text'), { code: 'MODEL_JSON_INVALID' }) } })
+  assert.equal(invalidJson.responseFailure.code, 'MODEL_JSON_INVALID'); assert.equal(invalidJson.responseFailure.outcome, 'invalid_response')
+  for (const record of [schemaFailure, timeout, http, invalidJson]) {
+    assert.equal(JSON.stringify(record).includes('private'), false)
+    assert.equal(assessAutomaticText({ ...pack, automaticReview: record }, profile, { now }).eligible, false)
+  }
+})
