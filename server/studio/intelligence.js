@@ -337,7 +337,7 @@ export function intelligenceRouter({ repository, auth, research = researchNiche,
   })
   router.get('/reports', async (req, res) => res.json(await history(req)))
   router.get('/niches/:id/image', async (req, res) => {
-    const id = z.string().uuid().parse(req.params.id)
+    const id = z.guid().parse(req.params.id)
     const niche = await repository.studioGet(ownerScope(req), 'niche', id)
     if (!niche) return res.status(404).json({ error: 'Category not found' })
     const result = await ensureCategoryImage(repository, ownerScope(req), niche, { search: imageSearch })
@@ -349,7 +349,7 @@ export function intelligenceRouter({ repository, auth, research = researchNiche,
     res.json({ ...report, refreshAvailableAt: refreshAvailableAt(report) })
   })
   router.post('/niches', async (req, res) => {
-    const input = z.object({ niche: nicheSchema, id: z.string().uuid().optional(), revision: z.number().int().min(1).optional() }).strict().parse(req.body)
+    const input = z.object({ niche: nicheSchema, id: z.guid().optional(), revision: z.number().int().min(1).optional() }).strict().parse(req.body)
     if (!validCountry(input.niche)) return res.status(400).json({ error: 'Choose a country for national coverage.' })
     if (input.id && !input.revision) return res.status(400).json({ error: 'A revision is required to update a niche.' })
     const uid = ownerScope(req)
@@ -369,7 +369,7 @@ export function intelligenceRouter({ repository, auth, research = researchNiche,
     } finally { await repository.releaseLease(lease, owner) }
   })
   router.post('/research', async (req, res) => {
-    const { nicheId, requestId, nicheRevision, refresh } = z.object({ nicheId: z.string().uuid(), requestId: z.string().uuid(), nicheRevision: z.number().int().min(1), confirmed: z.literal(true), refresh: z.boolean().default(false) }).strict().parse(req.body)
+    const { nicheId, requestId, nicheRevision, refresh } = z.object({ nicheId: z.guid(), requestId: z.string().uuid(), nicheRevision: z.number().int().min(1), confirmed: z.literal(true), refresh: z.boolean().default(false) }).strict().parse(req.body)
     const uid = ownerScope(req)
     const niche = await repository.studioGet(uid, 'niche', nicheId)
     if (!niche) return res.status(404).json({ error: 'Niche not found' })

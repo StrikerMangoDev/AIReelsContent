@@ -13,6 +13,36 @@ const source = { id: 'E1', url: 'https://example.com/release', title: 'Announcem
 const topic = { title: 'A model preview', whatChanged: 'A preview was announced.', eventDate: null, verification: 'reported', whyItMatters: 'Developers can evaluate availability.', evidenceIds: ['E1'], positive: [{ text: 'Preview access', evidenceIds: ['E1'] }], negative: [], audienceReaction: { status: 'insufficient-evidence', summary: 'No audience sample.', evidenceIds: [], limitations: 'No representative discussion data.' }, angle: 'Explain what preview means.', hook: 'Preview does not mean proven.', counterpoint: 'Independent testing is missing.', opportunityReason: 'Useful context, not measured popularity.', keywords: ['model preview'] }
 const briefing = { summary: 'A supported announcement.', opportunities: [topic], unknowns: ['Independent results'], evidence: [source], researchedAt: new Date(Date.now() - 86400000).toISOString(), searchQueries: ['model preview'], searchEntryPoint: '', methodology: 'Qualitative research' }
 
+test('persisted opaque category GUIDs support settings, image lookup and refresh while request UUIDs and owner scope remain strict', async () => {
+  const repository = createRepository(':memory:'); const app = express(); app.use(express.json())
+  const id = 'a06bb613-1bf3-11d0-3ee8-42a8309f8afc'
+  const fields = nicheSchema.parse({ name: 'AI for LinkedIn', brief: 'Explain verified AI developments for professionals.' })
+  const niche = repository.studioPut('alice', 'niche', id, fields, 0)
+  let imageCalls = 0; let dispatches = 0
+  const auth = (req, _res, next) => { req.identity = { uid: req.headers.authorization, role: 'user' }; next() }
+  app.use('/intelligence', intelligenceRouter({ repository, auth, research: async () => briefing, imageSearch: async () => { imageCalls++; return null }, onResearchAdmitted: () => { dispatches++ } }))
+  const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve))
+  const call = (path, body, uid = 'alice') => fetch(`http://127.0.0.1:${server.address().port}/intelligence${path}`, { method: body ? 'POST' : 'GET', headers: { authorization: uid, 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) })
+  try {
+    const saved = await call('/niches', { id, revision: niche.revision, niche: fields })
+    assert.equal(saved.status, 200); assert.equal((await saved.json()).id, id)
+    assert.equal((await call(`/niches/${id}/image`)).status, 200); assert.equal(imageCalls, 1)
+    assert.equal((await call(`/niches/${id}/image`, undefined, 'bob')).status, 404)
+    const command = { nicheId: id, nicheRevision: niche.revision, requestId: randomUUID(), confirmed: true, refresh: true }
+    assert.equal((await call('/research', command, 'bob')).status, 404)
+    assert.equal((await call('/research', { ...command, nicheId: '../injected' })).status, 400)
+    assert.equal((await call('/research', { ...command, requestId: id })).status, 400)
+    assert.equal((await call('/niches', { id: '../injected', revision: 1, niche: fields })).status, 400)
+    assert.equal((await call('/niches/not-a-guid/image')).status, 400)
+    const refreshed = await call('/research', command)
+    assert.equal(refreshed.status, 202)
+    assert.equal((await refreshed.json()).nicheId, id)
+    assert.equal(repository.studioJobGet('alice', command.requestId).scope.nicheId, id)
+    assert.equal(repository.studioJobGet('bob', command.requestId), null)
+    assert.equal(dispatches, 1)
+  } finally { await new Promise(resolve => server.close(resolve)); repository.close() }
+})
+
 test('approved research fallback preserves sources after a free-provider authentication failure and remains bounded', async () => {
   let freeCalls = 0; let fallbackCalls = 0
   const read = async () => [{ url: source.url, title: source.title, excerpt: source.excerpt, publishedAt: new Date().toISOString() }]
