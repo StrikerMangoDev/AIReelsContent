@@ -78,7 +78,7 @@ export function createAutomationServices(repository, { research = researchNiche,
     const current = await repository.studioGet(context.owner, 'account_profile', context.profile.id)
     if (!current?.enabled || !current.automationConsent || costScopeHash(current, null) !== costScopeHash(context.profile, null) || await workspaceRole(repository, context.owner, context.actorUid) !== 'owner') throw Object.assign(blocked('The account plan or owner consent changed before dispatch.'), { code: 'JOB_BLOCKED' })
   }
-  const boundedGenerate = request => generateJson({ ...request, maxTokens: Math.min(request.maxTokens || 8000, 6000) }, { request: (url, init) => fetch(url, { ...init, signal: AbortSignal.any([init.signal, AbortSignal.timeout(110000)]) }) })
+  const boundedGenerate = request => generateJson({ ...request, maxTokens: Math.min(request.maxTokens || 8000, 6000) }, { acceptCompleteJsonAtLength: Boolean(request.schema?.properties?.claims), request: (url, init) => fetch(url, { ...init, signal: AbortSignal.any([init.signal, AbortSignal.timeout(110000)]) }) })
   return {
     async research(context) {
       const { owner, profile, slot, requestId, actorUid } = context

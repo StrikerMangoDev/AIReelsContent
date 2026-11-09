@@ -8,7 +8,7 @@ import { workspaceRole } from './workspaces.js'
 import { dispatchFreeOperation } from '../budget/free-operation.js'
 import { costScopeHash } from '../budget/policy.js'
 import { assertCapability } from '../policy.js'
-import { readFreeGenerationReceipt } from '../providers/llm.js'
+import { readFreeGenerationReceipt, generationReceipt } from '../providers/llm.js'
 import { generateVertexJson, vertexFallbackAllowed } from '../providers/vertex-fallback.js'
 
 const failure = message => Object.assign(new Error(message), { code: 'JOB_BLOCKED', status: 409, publicMessage: message })
@@ -35,6 +35,7 @@ export function safeJobFailure(error) {
     ...Object.fromEntries(['promptTokens', 'completionTokens', 'reasoningTokens'].filter(key => Number.isSafeInteger(error?.[key]) && error[key] >= 0 && error[key] <= 1000000000).map(key => [key, error[key]])),
     ...Object.fromEntries(['outputChars', 'outputNonWhitespaceChars'].filter(key => Number.isSafeInteger(error?.[key]) && error[key] >= 0 && error[key] <= 10000000).map(key => [key, error[key]])),
     ...(typeof error?.startsSchemaDefinition === 'boolean' ? { startsSchemaDefinition: error.startsSchemaDefinition } : {}),
+    ...(typeof error?.providerReportedCost === 'number' && Number.isFinite(error.providerReportedCost) && error.providerReportedCost >= 0 && error.providerReportedCost <= 1000000 ? { providerReportedCost: error.providerReportedCost } : {}),
   }
 }
 
@@ -85,7 +86,7 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
       const content = await generate(pack.evidence, pack.settings, { ...pack.researchContext, revisionInstruction: scope.instruction || null, previousContent: scope.instruction ? pack.content : null }, undefined, { beforeAttempt, fallback, startWithFallback: scope.generationProvider === 'vertex-fallback' })
       const review = reviewContent(content, pack.evidence, pack.settings)
       if (review.issues.length) throw Object.assign(new Error('Generated output failed validation'), { code: 'EVIDENCE_VALIDATION', issues: review.issues, issueCount: review.issues.length })
-      const completed = { ...pack, content, review, status: 'completed', editorialStatus: 'needs_review', independentReview: null, approval: null }
+      const completed = { ...pack, content, review, providerReceipt: generationReceipt(content) || null, status: 'completed', editorialStatus: 'needs_review', independentReview: null, approval: null }
       completed.assurance = buildAssurance(completed, { actorId: scope.actorUid, runId: job.id, stage: 'generation' })
       result = await repository.studioPut(uid, 'package', pack.id, completed, pack.revision)
     } else {

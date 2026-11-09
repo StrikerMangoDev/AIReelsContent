@@ -1,6 +1,6 @@
 import { evidencePassages, resolvePassageClaims } from './evidence-passages.js'
 import { z } from 'zod'
-import { generateJson } from '../providers/llm.js'
+import { generateJson, retainGenerationReceipt } from '../providers/llm.js'
 import { cleanCaption, xWeightedLength, renderSocialCaption } from '../publishing/constraints.js'
 import { readFileSync } from 'node:fs'
 const managerPrompt = readFileSync(new URL('../prompts/social-manager.md', import.meta.url), 'utf8')
@@ -138,7 +138,7 @@ export async function generateContent(evidence, settings, context = {}, generate
   for (let attempt = 0; attempt < 2; attempt++) {
     if (beforeAttempt) await beforeAttempt()
     let draft
-    try { draft = await (useFallback ? fallback(request, attempt) : generate(request)) }
+    try { draft = await (useFallback ? fallback(request, attempt) : generate(request, generate === generateJson ? { acceptCompleteJsonAtLength: true } : undefined)) }
     catch (error) {
       if (fallback && !useFallback && attempt === 0 && ['MODEL_TIMEOUT', 'MODEL_HTTP_ERROR', 'MODEL_INCOMPLETE', 'MODEL_JSON_INVALID'].includes(error.code)) { useFallback = true; continue }
       if (error.code !== 'MODEL_JSON_INVALID') throw error
@@ -159,7 +159,7 @@ export async function generateContent(evidence, settings, context = {}, generate
     catch { issues = ['Select only supplied passageIds with their matching evidenceId.']; request.input = { evidence, passages, settings, context, corrections: issues }; if (fallback && !useFallback) useFallback = true; continue }
     if (content.scenes) content.script = content.scenes.map(scene => scene.narration).join(' ')
     issues = reviewContent(content, evidence, settings).issues
-    if (!issues.length) return content
+    if (!issues.length) return retainGenerationReceipt(content, draft)
     if (fallback && !useFallback) useFallback = true
     request.input = { evidence, passages, settings, context, draft: { ...content, claims: parsed.data.claims }, corrections: issues,
       instruction: 'Fix every listed validation issue. Put [C1] or another supported claim marker in EVERY hook, scene narration, caption, website body, platform headline, platform hook, platform alternativeHook and platform body. Copy scene narrations in order separated by spaces to form script EXACTLY. Retain valid passageId and matching evidenceId for each claim; never return a quote field. Return only the requested output sections in the corrected JSON package.' }

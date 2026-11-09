@@ -1,5 +1,16 @@
 import { env } from '../config/env.js'
 import { assertCapability } from '../policy.js'
+import { z } from 'zod'
+
+const receipts = new WeakMap()
+const tokenCount = z.number().int().min(0).max(1000000000)
+export const providerReceiptSchema = z.object({ method: z.literal('native-json-complete-at-length-v1'), model: z.string().regex(/^nvidia\/[a-z0-9.-]+:free$/), generationId: z.string().regex(/^gen-[A-Za-z0-9-]{1,100}$/), finishReason: z.literal('length'), transportStatus: z.literal(200), acceptedCompleteJsonAtLength: z.literal(true), schemaValidated: z.boolean(), billingVerified: z.literal(false), receivedAt: z.string().datetime(), promptTokens: tokenCount.optional(), completionTokens: tokenCount.optional(), reasoningTokens: tokenCount.optional(), outputChars: z.number().int().min(0).max(10000000), outputNonWhitespaceChars: z.number().int().min(0).max(10000000), startsSchemaDefinition: z.literal(false), providerReportedCost: z.number().min(0).max(1000000).optional() }).strict()
+export const generationReceipt = value => receipts.get(value)
+export function retainGenerationReceipt(target, source) {
+  const receipt = generationReceipt(source)
+  if (receipt) receipts.set(target, Object.freeze({ ...receipt, schemaValidated: true }))
+  return target
+}
 
 export async function readFreeGenerationReceipt(id, { config = env, request = fetch } = {}) {
   assertCapability('generation', config)
@@ -12,7 +23,7 @@ export async function readFreeGenerationReceipt(id, { config = env, request = fe
 }
 
 // This free adapter never routes to paid models; separately approved Vertex calls use the monetary ledger.
-export async function generateJson({ system, input, schema, maxTokens = 8000 }, { config = env, request = fetch } = {}) {
+export async function generateJson({ system, input, schema, maxTokens = 8000 }, { config = env, request = fetch, acceptCompleteJsonAtLength = false } = {}) {
   assertCapability('generation', config)
   if (!config.OPENROUTER_API_KEY) throw new Error('Free generation provider is not configured')
   if (!/^nvidia\/[a-z0-9.-]+:free$/.test(config.LLM_MODEL)) throw new Error('Only free NVIDIA models are allowed')
@@ -57,6 +68,18 @@ export async function generateJson({ system, input, schema, maxTokens = 8000 }, 
     ...Object.fromEntries([['promptTokens', result.usage?.prompt_tokens], ['completionTokens', result.usage?.completion_tokens], ['reasoningTokens', result.usage?.completion_tokens_details?.reasoning_tokens]].filter(([, value]) => Number.isSafeInteger(value) && value >= 0 && value <= 1000000000)),
     outputChars: Math.min(diagnosticOutput.length, 10000000), outputNonWhitespaceChars: Math.min(diagnosticOutput.replace(/\s/g, '').length, 10000000),
     startsSchemaDefinition: /^\s*\{\s*"(?:\$schema|type|properties|additionalProperties)"\s*:/.test(diagnosticOutput),
+    ...(typeof result.usage?.cost === 'number' && Number.isFinite(result.usage.cost) && result.usage.cost >= 0 && result.usage.cost <= 1000000 ? { providerReportedCost: result.usage.cost } : {}),
+  }
+  if (acceptCompleteJsonAtLength === true && nativeJson && choice?.finish_reason === 'length' && !result.error && !calls?.length && typeof choice?.message?.content === 'string' && receipt.generationId && receipt.transportStatus === 200 && !diagnostics.startsSchemaDefinition) {
+    try {
+      const data = JSON.parse(choice.message.content)
+      const keys = Object.keys(schema.properties || {}).sort()
+      if (data && typeof data === 'object' && !Array.isArray(data) && keys.length && keys.every(key => !['$schema', 'type', 'properties', 'required', 'additionalProperties'].includes(key)) && JSON.stringify(Object.keys(data).sort()) === JSON.stringify(keys)) {
+        const audit = providerReceiptSchema.parse({ ...receipt, ...diagnostics, method: 'native-json-complete-at-length-v1', model: config.LLM_MODEL, acceptedCompleteJsonAtLength: true, schemaValidated: false, billingVerified: false, receivedAt: new Date().toISOString() })
+        receipts.set(data, Object.freeze(audit))
+        return data
+      }
+    } catch { /* Partial JSON, trailing prose and invalid receipt metadata remain rejected. */ }
   }
   const output = choice?.finish_reason === 'stop' || (choice?.finish_reason === 'tool_calls' && !calls?.length) ? choice?.message?.content : choice?.finish_reason === 'tool_calls' ? argumentsJson : undefined
   if (result.error || typeof output !== 'string' || !output.trim()) throw Object.assign(new Error('Free model returned incomplete content'), { code: 'MODEL_INCOMPLETE', ...receipt, ...diagnostics, toolCallCount: Array.isArray(calls) ? calls.length : 0, expectedTool: Boolean(expectedCall), argumentKind: typeof submitted })

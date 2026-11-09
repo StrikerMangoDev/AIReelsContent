@@ -1,10 +1,28 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { generateJson, readFreeGenerationReceipt } from '../providers/llm.js'
+import { generateJson, readFreeGenerationReceipt, generationReceipt } from '../providers/llm.js'
 import { researchNiche } from '../studio/intelligence.js'
 import { generateMedia } from '../media/provider.js'
 import { generateContent } from './helpers/passage-model.js'
 import { safeJobFailure } from '../studio/job-worker.js'
+
+test('native complete JSON at length is opt-in, preserves truthful receipt and never repairs partial output', async () => {
+  const config = { CONTENT_LIVE_FREE_CALLS: 'true', OPENROUTER_API_KEY: 'test-only', LLM_MODEL: 'nvidia/nemotron-3.5-super-vl:free' }
+  const input = { system: 'JSON', input: {}, schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false } }
+  const response = content => async () => Response.json({ id: 'gen-123-complete', choices: [{ finish_reason: 'length', message: { content } }], usage: { prompt_tokens: 12, completion_tokens: 6000, completion_tokens_details: { reasoning_tokens: 0 }, cost: 0 } })
+  const full = '{"ok":true}   \n\t'
+  await assert.rejects(generateJson(input, { config, request: response(full) }), { code: 'MODEL_INCOMPLETE' })
+  const value = await generateJson(input, { config, request: response(full), acceptCompleteJsonAtLength: true })
+  assert.deepEqual(value, { ok: true })
+  const receipt = generationReceipt(value)
+  assert.equal(receipt.finishReason, 'length'); assert.equal(receipt.acceptedCompleteJsonAtLength, true); assert.equal(receipt.schemaValidated, false)
+  assert.equal(receipt.generationId, 'gen-123-complete'); assert.equal(receipt.completionTokens, 6000); assert.equal(receipt.providerReportedCost, 0); assert.equal(receipt.billingVerified, false)
+  assert.equal(JSON.stringify(value).includes('generationId'), false)
+  for (const content of ['{"ok":', '{"ok":true} extra', 'null', '[]', '{}', '{"ok":true,"extra":false}', '{"$schema":"private"}', '{"type":"object","properties":{}}', '```json\n{"ok":true}\n```']) {
+    await assert.rejects(generateJson(input, { config, request: response(content), acceptCompleteJsonAtLength: true }), { code: 'MODEL_INCOMPLETE' })
+  }
+  await assert.rejects(generateJson(input, { config: { ...config, LLM_MODEL: 'nvidia/nemotron-3.5-lightning:free' }, request: response(full), acceptCompleteJsonAtLength: true }), { code: 'MODEL_INCOMPLETE' })
+})
 
 test('truncated native JSON records bounded usage and output-shape diagnostics without retaining content', async () => {
   const config = { CONTENT_LIVE_FREE_CALLS: 'true', OPENROUTER_API_KEY: 'test-only', LLM_MODEL: 'nvidia/nemotron-3.5-super-vl:free' }

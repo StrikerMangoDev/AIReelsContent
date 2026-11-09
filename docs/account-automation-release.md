@@ -20,4 +20,6 @@ The real account demonstration exposed shared research admission contention and 
 
 Independent validation of the bounded replacement release passed 242 tests on Node 24 in a clean test environment; targeted lint also passed.
 
+The final provider JSON handling release passed 248 tests, TypeScript, the production Vite build and targeted ESLint independently. Production free admission capacity is 30 to cover five-account research/writing plus bounded corrections. Native JSON responses marked `length` are eligible only for a whole-object parse, exact requested top-level keys and full downstream schemas/evidence checks; the original finish reason and explicitly unverified billing remain in the server audit. Partial output is never repaired or accepted. Final social delivery acceptance remains a separate live check.
+
 Production configuration uses server-only Vercel secrets and an owner-scoped account allowlist. Never copy credentials into this document, browser code, logs or source control.

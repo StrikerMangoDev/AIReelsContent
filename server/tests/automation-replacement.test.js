@@ -199,9 +199,14 @@ test('actual automatic model adapter caps writing output at 6000 tokens and reta
       assert.deepEqual(body.provider.max_price, { prompt: 0, completion: 0, request: 0 })
       const input = JSON.parse(body.messages[1].content)
       const generated = { website: content.website, claims: [{ id: 'C1', text: content.claims[0].text, evidenceId: 'E1', passageId: input.passages[0].id, status: 'attributed' }] }
-      return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(generated) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ id: 'gen-123-schema-accepted', choices: [{ finish_reason: 'length', message: { content: JSON.stringify(generated) + '  \n' } }], usage: { completion_tokens: 6000, cost: 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
     const outcome = await createAutomationServices(repository).generate({ owner: 'alice', actorUid: 'alice', profile, run, requestId: randomUUID() })
     assert.equal(outcome.status, 'completed'); assert.equal(calls, 1)
+    assert.equal(outcome.package.providerReceipt.finishReason, 'length')
+    assert.equal(outcome.package.providerReceipt.schemaValidated, true)
+    assert.equal(outcome.package.providerReceipt.billingVerified, false)
+    const job = await repository.studioJobGet('alice', outcome.jobId)
+    assert.equal(job.result.providerReceipt.generationId, 'gen-123-schema-accepted')
   } finally { globalThis.fetch = priorFetch; env.OPENROUTER_API_KEY = saved.key; env.LLM_MODEL = saved.model; env.CONTENT_LIVE_FREE_CALLS = saved.capability; repository.close() }
 })
