@@ -204,6 +204,7 @@ test('actual automatic model adapter caps writing output at 6000 tokens and reta
         assert.equal(body.response_format, undefined)
         assert.equal(body.tool_choice.function.name, 'submit_json')
         assert.equal(body.tools[0].function.name, 'submit_json')
+        assert.equal(body.tools[0].function.strict, true)
         assert.ok(body.tools[0].function.parameters.properties.claims)
         return Response.json({ choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'submit_json', arguments: JSON.stringify(generated) } }] } }] })
       }

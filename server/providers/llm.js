@@ -38,7 +38,7 @@ export async function generateJson({ system, input, schema, maxTokens = 8000 }, 
     body: JSON.stringify({ model: config.LLM_MODEL,
       messages: [{ role: 'system', content: `${system}\nReturn a JSON DATA INSTANCE, never the JSON Schema itself. The top-level data keys are: ${Object.keys(schema.properties || {}).join(", ") || "as specified below"}. Fill these fields with actual requested content. ${nativeJson ? 'Return the populated JSON object directly.' : 'Submit the populated data through submit_json.'} Do not return schema-definition keys such as $schema, type, properties, required or additionalProperties.` }, { role: 'user', content: JSON.stringify(input) }],
       ...(nativeJson ? { response_format: { type: 'json_schema', json_schema: { name: 'content_result', strict: true, schema } } } : {
-        tools: [{ type: 'function', function: { name: 'submit_json', description: 'Submit the requested structured result. This does not execute an external action.', parameters: schema } }],
+        tools: [{ type: 'function', function: { name: 'submit_json', description: 'Submit the requested structured result. This does not execute an external action.', parameters: schema, ...(preferTools === true ? { strict: true } : {}) } }],
         tool_choice: { type: 'function', function: { name: 'submit_json' } },
       }),
       temperature: 0.2, max_tokens: maxTokens, reasoning: { enabled: false, effort: 'none' },

@@ -54,6 +54,7 @@ test('automatic evaluator persists a schema-validated length receipt without inv
       const body = JSON.parse(init.body)
       assert.equal(body.response_format, undefined)
       assert.equal(body.tool_choice.function.name, 'submit_json')
+      assert.equal(body.tools[0].function.strict, true)
       assert.ok(body.tools[0].function.parameters.properties.ratings)
       assert.deepEqual(body.provider.max_price, { prompt: 0, completion: 0, request: 0 })
       return Response.json({ choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'submit_json', arguments: JSON.stringify(reviewData) } }] } }] })
