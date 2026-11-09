@@ -5,7 +5,8 @@ import { createRepository } from '../storage/repository.js'
 import { createAutomationServices } from '../automation/services.js'
 import { runAccountAutomation } from '../automation/runner.js'
 import { freeTextReplacementJob, createResearch, nicheSchema, researchNiche } from '../studio/intelligence.js'
-import { settingsSchema } from '../studio/content.js'
+import { settingsSchema, generateContent } from '../studio/content.js'
+import { generateJson } from '../providers/llm.js'
 import { runContentJob } from '../studio/job-worker.js'
 import { env } from '../config/env.js'
 
@@ -199,14 +200,27 @@ test('actual automatic model adapter caps writing output at 6000 tokens and reta
       assert.deepEqual(body.provider.max_price, { prompt: 0, completion: 0, request: 0 })
       const input = JSON.parse(body.messages[1].content)
       const generated = { website: content.website, claims: [{ id: 'C1', text: content.claims[0].text, evidenceId: 'E1', passageId: input.passages[0].id, status: 'attributed' }] }
+      if (body.tools) {
+        assert.equal(body.response_format, undefined)
+        assert.equal(body.tool_choice.function.name, 'submit_json')
+        assert.equal(body.tools[0].function.name, 'submit_json')
+        assert.ok(body.tools[0].function.parameters.properties.claims)
+        return Response.json({ choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'submit_json', arguments: JSON.stringify(generated) } }] } }] })
+      }
+      assert.equal(body.response_format.type, 'json_schema')
       return new Response(JSON.stringify({ id: 'gen-123-schema-accepted', choices: [{ finish_reason: 'length', message: { content: JSON.stringify(generated) + '  \n' } }], usage: { completion_tokens: 6000, cost: 0 } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }
     const outcome = await createAutomationServices(repository).generate({ owner: 'alice', actorUid: 'alice', profile, run, requestId: randomUUID() })
     assert.equal(outcome.status, 'completed'); assert.equal(calls, 1)
-    assert.equal(outcome.package.providerReceipt.finishReason, 'length')
-    assert.equal(outcome.package.providerReceipt.schemaValidated, true)
-    assert.equal(outcome.package.providerReceipt.billingVerified, false)
-    const job = await repository.studioJobGet('alice', outcome.jobId)
+    assert.equal(outcome.package.providerReceipt, null)
+    const nativeRun = { id: 'explicit-native-audit' }; await draft(repository, nativeRun)
+    const nativeServices = createAutomationServices(repository, { write: (evidence, settings, details, _unused, options) => generateContent(evidence, settings, details, request => generateJson({ ...request, maxTokens: 6000 }, { acceptCompleteJsonAtLength: true }), options) })
+    const native = await nativeServices.generate({ owner: 'alice', actorUid: 'alice', profile, run: nativeRun, requestId: randomUUID() })
+    assert.equal(native.status, 'completed')
+    assert.equal(native.package.providerReceipt.finishReason, 'length')
+    assert.equal(native.package.providerReceipt.schemaValidated, true)
+    assert.equal(native.package.providerReceipt.billingVerified, false)
+    const job = await repository.studioJobGet('alice', native.jobId)
     assert.equal(job.result.providerReceipt.generationId, 'gen-123-schema-accepted')
   } finally { globalThis.fetch = priorFetch; env.OPENROUTER_API_KEY = saved.key; env.LLM_MODEL = saved.model; env.CONTENT_LIVE_FREE_CALLS = saved.capability; repository.close() }
 })

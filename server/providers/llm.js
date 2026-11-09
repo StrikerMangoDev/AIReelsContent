@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 const receipts = new WeakMap()
 const tokenCount = z.number().int().min(0).max(1000000000)
-export const providerReceiptSchema = z.object({ method: z.literal('native-json-complete-at-length-v1'), model: z.string().regex(/^nvidia\/[a-z0-9.-]+:free$/), generationId: z.string().regex(/^gen-[A-Za-z0-9-]{1,100}$/), finishReason: z.literal('length'), transportStatus: z.literal(200), acceptedCompleteJsonAtLength: z.literal(true), schemaValidated: z.boolean(), billingVerified: z.literal(false), receivedAt: z.string().datetime(), promptTokens: tokenCount.optional(), completionTokens: tokenCount.optional(), reasoningTokens: tokenCount.optional(), outputChars: z.number().int().min(0).max(10000000), outputNonWhitespaceChars: z.number().int().min(0).max(10000000), startsSchemaDefinition: z.literal(false), providerReportedCost: z.number().min(0).max(1000000).optional() }).strict()
+export const providerReceiptSchema = z.object({ method: z.literal('native-json-complete-at-length-v1'), model: z.string().regex(/^nvidia\/[a-z0-9.-]+:free$/), generationId: z.string().regex(/^gen-[A-Za-z0-9-]{1,100}$/), finishReason: z.literal('length'), transportStatus: z.literal(200), acceptedCompleteJsonAtLength: z.literal(true), schemaValidated: z.boolean(), billingVerified: z.literal(false), receivedAt: z.string().datetime(), promptTokens: tokenCount.optional(), completionTokens: tokenCount.optional(), reasoningTokens: tokenCount.optional(), outputChars: z.number().int().min(0).max(10000000), outputNonWhitespaceChars: z.number().int().min(0).max(10000000), startsSchemaDefinition: z.literal(false), wholeJsonObject: z.boolean().optional(), fullFence: z.boolean().optional(), missingExpectedFieldCount: z.number().int().min(0).max(1000).optional(), extraFieldCount: z.number().int().min(0).max(1000).optional(), providerReportedCost: z.number().min(0).max(1000000).optional() }).strict()
 export const generationReceipt = value => receipts.get(value)
 export function retainGenerationReceipt(target, source) {
   const receipt = generationReceipt(source)
@@ -23,11 +23,11 @@ export async function readFreeGenerationReceipt(id, { config = env, request = fe
 }
 
 // This free adapter never routes to paid models; separately approved Vertex calls use the monetary ledger.
-export async function generateJson({ system, input, schema, maxTokens = 8000 }, { config = env, request = fetch, acceptCompleteJsonAtLength = false } = {}) {
+export async function generateJson({ system, input, schema, maxTokens = 8000 }, { config = env, request = fetch, acceptCompleteJsonAtLength = false, preferTools = false } = {}) {
   assertCapability('generation', config)
   if (!config.OPENROUTER_API_KEY) throw new Error('Free generation provider is not configured')
   if (!/^nvidia\/[a-z0-9.-]+:free$/.test(config.LLM_MODEL)) throw new Error('Only free NVIDIA models are allowed')
-  const nativeJson = config.LLM_MODEL === 'nvidia/nemotron-3.5-super-vl:free'
+  const nativeJson = config.LLM_MODEL === 'nvidia/nemotron-3.5-super-vl:free' && preferTools !== true
   const timeoutMs = maxTokens > 3000 ? 180000 : 90000
   const signal = AbortSignal.timeout(timeoutMs)
   const timeoutError = () => Object.assign(new Error('Free model request exceeded its time limit'), { name: 'TimeoutError', code: 'MODEL_TIMEOUT' })
@@ -64,10 +64,15 @@ export async function generateJson({ system, input, schema, maxTokens = 8000 }, 
   const submitted = expectedCall ? calls[0].function.arguments : undefined
   const argumentsJson = submitted && typeof submitted === 'object' && !Array.isArray(submitted) ? JSON.stringify(submitted) : submitted
   const diagnosticOutput = typeof choice?.message?.content === 'string' ? choice.message.content : typeof argumentsJson === 'string' ? argumentsJson : ''
+  let completeObject
+  try { const parsed = JSON.parse(diagnosticOutput); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) completeObject = parsed } catch { /* Shape diagnostics never repair or retain model text. */ }
+  const expectedKeys = Object.keys(schema.properties || {})
   const diagnostics = {
     ...Object.fromEntries([['promptTokens', result.usage?.prompt_tokens], ['completionTokens', result.usage?.completion_tokens], ['reasoningTokens', result.usage?.completion_tokens_details?.reasoning_tokens]].filter(([, value]) => Number.isSafeInteger(value) && value >= 0 && value <= 1000000000)),
     outputChars: Math.min(diagnosticOutput.length, 10000000), outputNonWhitespaceChars: Math.min(diagnosticOutput.replace(/\s/g, '').length, 10000000),
     startsSchemaDefinition: /^\s*\{\s*"(?:\$schema|type|properties|additionalProperties)"\s*:/.test(diagnosticOutput),
+    wholeJsonObject: Boolean(completeObject), fullFence: /^\s*```(?:json)?\s*\n[\s\S]*\n```\s*$/i.test(diagnosticOutput),
+    ...(completeObject ? { missingExpectedFieldCount: Math.min(expectedKeys.filter(key => !Object.hasOwn(completeObject, key)).length, 1000), extraFieldCount: Math.min(Object.keys(completeObject).filter(key => !expectedKeys.includes(key)).length, 1000) } : {}),
     ...(typeof result.usage?.cost === 'number' && Number.isFinite(result.usage.cost) && result.usage.cost >= 0 && result.usage.cost <= 1000000 ? { providerReportedCost: result.usage.cost } : {}),
   }
   if (acceptCompleteJsonAtLength === true && nativeJson && choice?.finish_reason === 'length' && !result.error && !calls?.length && typeof choice?.message?.content === 'string' && receipt.generationId && receipt.transportStatus === 200 && !diagnostics.startsSchemaDefinition) {

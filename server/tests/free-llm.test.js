@@ -22,6 +22,12 @@ test('native complete JSON at length is opt-in, preserves truthful receipt and n
     await assert.rejects(generateJson(input, { config, request: response(content), acceptCompleteJsonAtLength: true }), { code: 'MODEL_INCOMPLETE' })
   }
   await assert.rejects(generateJson(input, { config: { ...config, LLM_MODEL: 'nvidia/nemotron-3.5-lightning:free' }, request: response(full), acceptCompleteJsonAtLength: true }), { code: 'MODEL_INCOMPLETE' })
+  await assert.rejects(generateJson(input, { config, request: response('{"other":true}'), acceptCompleteJsonAtLength: true }), error => {
+    const diagnostic = safeJobFailure(error)
+    assert.equal(diagnostic.wholeJsonObject, true); assert.equal(diagnostic.missingExpectedFieldCount, 1); assert.equal(diagnostic.extraFieldCount, 1); assert.equal(diagnostic.fullFence, false)
+    assert.equal(JSON.stringify(diagnostic).includes('other'), false)
+    return true
+  })
 })
 
 test('truncated native JSON records bounded usage and output-shape diagnostics without retaining content', async () => {
@@ -92,6 +98,23 @@ test('native JSON-capable free model receives the exact schema with the same zer
     return Response.json({ choices: [{ finish_reason: 'stop', message: { content: '{"ok":true}' } }] })
   } })
   assert.deepEqual(result, { ok: true })
+})
+
+test('native-capable model uses the existing named-tool protocol only when explicitly preferred', async () => {
+  const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'], additionalProperties: false }
+  const config = { CONTENT_LIVE_FREE_CALLS: 'true', OPENROUTER_API_KEY: 'test-only', LLM_MODEL: 'nvidia/nemotron-3.5-super-vl:free' }
+  for (const name of ['submit_json', 'unrequested_action']) {
+    const call = generateJson({ system: 'JSON', input: {}, schema }, { config, preferTools: true, request: async (_url, init) => {
+      const body = JSON.parse(init.body)
+      assert.equal(body.response_format, undefined)
+      assert.deepEqual(body.tool_choice, { type: 'function', function: { name: 'submit_json' } })
+      assert.deepEqual(body.tools[0].function.parameters, schema)
+      assert.deepEqual(body.provider.max_price, { prompt: 0, completion: 0, request: 0 })
+      return Response.json({ choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name, arguments: '{"ok":true}' } }] } }] })
+    } })
+    if (name === 'submit_json') assert.deepEqual(await call, { ok: true })
+    else await assert.rejects(call, { code: 'MODEL_INCOMPLETE' })
+  }
 })
 
 test('HTTP200 provider errors retain only bounded numeric diagnostics without retrying or leaking metadata', async () => {

@@ -4,6 +4,7 @@ import { generateJson } from '../providers/llm.js'
 import { generateContent, settingsSchema } from '../studio/content.js'
 import { reviewAutomaticText, assessAutomaticText } from '../automation/review.js'
 import { ratingsFixture } from './fixtures/finalization.js'
+import { env } from '../config/env.js'
 
 const config = { CONTENT_LIVE_FREE_CALLS: 'true', OPENROUTER_API_KEY: 'test-only', LLM_MODEL: 'nvidia/nemotron-3.5-super-vl:free' }
 const excerpt = 'The publisher announced a limited developer preview for text and images. Availability remains restricted and independent outcomes are not established.'
@@ -45,4 +46,19 @@ test('automatic evaluator persists a schema-validated length receipt without inv
   assert.equal(assessAutomaticText(pack, profile).eligible, false)
   const rejected = await reviewAutomaticText(pack, profile, { generate: adapter(() => ({ ...reviewData, ratings: {} })) })
   assert.equal(rejected.status, 'blocked'); assert.equal(rejected.providerReceipt, undefined)
+  const previousFetch = globalThis.fetch
+  const previousConfig = { key: env.OPENROUTER_API_KEY, model: env.LLM_MODEL, capability: env.CONTENT_LIVE_FREE_CALLS }
+  try {
+    env.OPENROUTER_API_KEY = 'controlled-test-only'; env.LLM_MODEL = config.LLM_MODEL; env.CONTENT_LIVE_FREE_CALLS = 'true'
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(init.body)
+      assert.equal(body.response_format, undefined)
+      assert.equal(body.tool_choice.function.name, 'submit_json')
+      assert.ok(body.tools[0].function.parameters.properties.ratings)
+      assert.deepEqual(body.provider.max_price, { prompt: 0, completion: 0, request: 0 })
+      return Response.json({ choices: [{ finish_reason: 'tool_calls', message: { tool_calls: [{ type: 'function', function: { name: 'submit_json', arguments: JSON.stringify(reviewData) } }] } }] })
+    }
+    const toolReviewed = await reviewAutomaticText(pack, profile)
+    assert.equal(toolReviewed.status, 'passed'); assert.equal(toolReviewed.providerReceipt, undefined)
+  } finally { globalThis.fetch = previousFetch; env.OPENROUTER_API_KEY = previousConfig.key; env.LLM_MODEL = previousConfig.model; env.CONTENT_LIVE_FREE_CALLS = previousConfig.capability }
 })

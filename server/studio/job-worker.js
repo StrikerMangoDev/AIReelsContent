@@ -36,6 +36,8 @@ export function safeJobFailure(error) {
     ...Object.fromEntries(['outputChars', 'outputNonWhitespaceChars'].filter(key => Number.isSafeInteger(error?.[key]) && error[key] >= 0 && error[key] <= 10000000).map(key => [key, error[key]])),
     ...(typeof error?.startsSchemaDefinition === 'boolean' ? { startsSchemaDefinition: error.startsSchemaDefinition } : {}),
     ...(typeof error?.providerReportedCost === 'number' && Number.isFinite(error.providerReportedCost) && error.providerReportedCost >= 0 && error.providerReportedCost <= 1000000 ? { providerReportedCost: error.providerReportedCost } : {}),
+    ...Object.fromEntries(['wholeJsonObject', 'fullFence'].filter(key => typeof error?.[key] === 'boolean').map(key => [key, error[key]])),
+    ...Object.fromEntries(['missingExpectedFieldCount', 'extraFieldCount'].filter(key => Number.isSafeInteger(error?.[key]) && error[key] >= 0 && error[key] <= 1000).map(key => [key, error[key]])),
   }
 }
 

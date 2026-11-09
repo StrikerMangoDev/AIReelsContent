@@ -138,7 +138,7 @@ export async function generateContent(evidence, settings, context = {}, generate
   for (let attempt = 0; attempt < 2; attempt++) {
     if (beforeAttempt) await beforeAttempt()
     let draft
-    try { draft = await (useFallback ? fallback(request, attempt) : generate(request, generate === generateJson ? { acceptCompleteJsonAtLength: true } : undefined)) }
+    try { draft = await (useFallback ? fallback(request, attempt) : generate(request, generate === generateJson ? { acceptCompleteJsonAtLength: true, preferTools: true } : undefined)) }
     catch (error) {
       if (fallback && !useFallback && attempt === 0 && ['MODEL_TIMEOUT', 'MODEL_HTTP_ERROR', 'MODEL_INCOMPLETE', 'MODEL_JSON_INVALID'].includes(error.code)) { useFallback = true; continue }
       if (error.code !== 'MODEL_JSON_INVALID') throw error
