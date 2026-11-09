@@ -10,6 +10,7 @@ import { ratingsFixture } from './fixtures/finalization.js'
 import { contentHash } from '../studio/approval.js'
 import { createHash, randomUUID } from 'node:crypto'
 import { costScopeHash } from '../budget/policy.js'
+import { env } from '../config/env.js'
 
 test('automation route queues owner-consented account runs, isolates owners and does not invent execution', async () => {
   const repository = createRepository(':memory:'); const app = express(); app.use(express.json())
@@ -143,5 +144,21 @@ test('concurrent account research waits only for owner admission contention and 
       assert.equal(results[index].status, 'blocked', 'empty genuine research is blocked rather than inventing topics')
       assert.ok(results[index].reportId)
     }
+  } finally { repository.close() }
+})
+
+test('automatic generation quota rejection is known pre-dispatch and leaves no new job or cost', async () => {
+  const repository = createRepository(':memory:'); let calls = 0
+  const services = createAutomationServices(repository, { write: async () => { calls++; throw new Error('Quota must prevent dispatch') } })
+  try {
+    for (let index = 0; index < env.STUDIO_DAILY_GENERATIONS; index++) await repository.studioJobReserve('owner', randomUUID(), 'a'.repeat(64), env.STUDIO_DAILY_GENERATIONS, { operation: 'generation' })
+    const run = { id: 'quota-unit' }; const requestId = randomUUID()
+    const packageId = createHash('sha256').update(`${run.id}:package`).digest('hex').slice(0, 32)
+    const draft = await repository.studioPut('owner', 'package', packageId, { settings: settingsSchema.parse({ outputs: ['website'] }), evidence: [], content: null, status: 'draft' })
+    await assert.rejects(services.generate({ owner: 'owner', profile: {}, actorUid: 'owner', requestId, run }), { code: 'STUDIO_QUOTA', preDispatch: true })
+    assert.equal(calls, 0)
+    assert.equal(await repository.studioJobGet('owner', requestId), null)
+    assert.equal(await repository.budgetGet('owner', requestId), null)
+    assert.equal((await repository.studioGet('owner', 'package', packageId)).revision, draft.revision)
   } finally { repository.close() }
 })

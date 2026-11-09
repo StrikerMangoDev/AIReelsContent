@@ -128,7 +128,9 @@ export function createAutomationServices(repository, { research = researchNiche,
         pack = await repository.studioPut(owner, 'package', id, { title: topic.title, content: null, evidence, settings, createdBy: actorUid, contributorUids: [actorUid], sourceIds: [], researchId: report.id, opportunityIndex: run.topic.index, researchContext: { brief: profile.weeklyBrief, opportunity: topic, researchedAt: report.researchedAt, methodology: report.methodology, automationAccountId: profile.accountId, outputConstraint: 'Use a factual title under 65 characters and at least one complete supported claim under 45 words, suitable for a readable vertical card.' }, status: 'draft', editorialStatus: 'draft', review: null }, 0)
       }
       const scope = { operation: 'generation', packageId: pack.id, revision: pack.revision, instruction: '', actorUid, contentHash: contentHash(pack), generationProvider: 'free' }
-      const admission = await repository.studioJobReserve(owner, requestId, hash(JSON.stringify(scope)), env.STUDIO_DAILY_GENERATIONS, scope)
+      let admission
+      try { admission = await repository.studioJobReserve(owner, requestId, hash(JSON.stringify(scope)), env.STUDIO_DAILY_GENERATIONS, scope) }
+      catch (error) { throw Object.assign(error, { preDispatch: true }) }
       if (!admission.reserved) return { status: admission.job.status, jobId: requestId, package: admission.job.result }
       let cost
       try {

@@ -198,7 +198,7 @@ export async function createResearch({ repository, uid, niche, requestId, actorU
   const parsed = nicheSchema.parse(Object.fromEntries(Object.keys(nicheSchema.shape).map(key => [key, niche[key]])))
   const scope = { operation: 'research', freeOnly: automatic || !vertexFallbackAllowed(), automatic, nicheId: niche.id, revision: niche.revision, niche: parsed, actorUid, ...(refresh ? { refresh: true } : {}) }
   const scopeHash = digest(JSON.stringify(scope))
-  const conflict = message => Object.assign(new Error(message), { status: 409 })
+  const conflict = message => Object.assign(new Error(message), { status: 409, preDispatch: true })
   const previous = await repository.studioJobGet(uid, requestId)
   if (previous) {
     if (previous.scopeHash !== scopeHash) throw conflict('Request identifier already belongs to another research scope.')
@@ -251,7 +251,7 @@ export async function createResearch({ repository, uid, niche, requestId, actorU
   } catch (error) {
     if (cost?.status === 'reserved') await repository.budgetTransition(uid, cost.id, cost.revision, 'cancel')
     if (job) await repository.studioJobUpdate(uid, job.id, { status: 'failed', error: 'Research admission failed before dispatch' }, job.revision, 'reserved')
-    throw error
+    throw Object.assign(error, { preDispatch: true })
   } finally { await repository.releaseLease(lock, owner) }
   if (dispatchMode === 'inline') {
     const outcome = await runContentJob({ repository, uid, requestId, research })

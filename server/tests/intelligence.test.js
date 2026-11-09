@@ -97,7 +97,7 @@ test('research default allowance remains ten shared attempts and does not notify
     for (let i = 0; i < 10; i++) repository.studioJobReserve('quota-owner', `generation-${i}`, 'a'.repeat(64), 10, { operation: 'generation' })
     const niche = repository.studioPut('quota-owner', 'niche', randomUUID(), { name: 'Science', brief: 'Explain science developments.' })
     let notifications = 0
-    await assert.rejects(createResearch({ repository, uid: 'quota-owner', niche, requestId: randomUUID(), research: async () => briefing, onResearchAdmitted: () => { notifications++ } }), { code: 'STUDIO_QUOTA' })
+    await assert.rejects(createResearch({ repository, uid: 'quota-owner', niche, requestId: randomUUID(), research: async () => briefing, onResearchAdmitted: () => { notifications++ } }), { code: 'STUDIO_QUOTA', preDispatch: true })
     assert.equal(notifications, 0)
   } finally { repository.close() }
 })
