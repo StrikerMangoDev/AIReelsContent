@@ -32,6 +32,9 @@ export function safeJobFailure(error) {
     ...(Number.isInteger(error?.toolCallCount) && error.toolCallCount >= 0 && error.toolCallCount <= 30 ? { toolCallCount: error.toolCallCount } : {}),
     ...(typeof error?.expectedTool === 'boolean' ? { expectedTool: error.expectedTool } : {}),
     ...(['string', 'object', 'undefined'].includes(error?.argumentKind) ? { argumentKind: error.argumentKind } : {}),
+    ...Object.fromEntries(['promptTokens', 'completionTokens', 'reasoningTokens'].filter(key => Number.isSafeInteger(error?.[key]) && error[key] >= 0 && error[key] <= 1000000000).map(key => [key, error[key]])),
+    ...Object.fromEntries(['outputChars', 'outputNonWhitespaceChars'].filter(key => Number.isSafeInteger(error?.[key]) && error[key] >= 0 && error[key] <= 10000000).map(key => [key, error[key]])),
+    ...(typeof error?.startsSchemaDefinition === 'boolean' ? { startsSchemaDefinition: error.startsSchemaDefinition } : {}),
   }
 }
 

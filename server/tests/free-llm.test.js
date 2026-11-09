@@ -4,6 +4,35 @@ import { generateJson, readFreeGenerationReceipt } from '../providers/llm.js'
 import { researchNiche } from '../studio/intelligence.js'
 import { generateMedia } from '../media/provider.js'
 import { generateContent } from './helpers/passage-model.js'
+import { safeJobFailure } from '../studio/job-worker.js'
+
+test('truncated native JSON records bounded usage and output-shape diagnostics without retaining content', async () => {
+  const config = { CONTENT_LIVE_FREE_CALLS: 'true', OPENROUTER_API_KEY: 'test-only', LLM_MODEL: 'nvidia/nemotron-3.5-super-vl:free' }
+  const cases = [
+    { text: '   \n\t', reasoning: 6000, schema: false },
+    { text: '{"$schema":"private schema payload"', reasoning: 0, schema: true },
+    { text: '{"website":{"title":"private truncated content"', reasoning: 37, schema: false },
+  ]
+  for (const item of cases) {
+    let calls = 0
+    await assert.rejects(generateJson({ system: 'JSON', input: {}, schema: {}, maxTokens: 6000 }, { config, request: async () => {
+      calls++
+      return Response.json({ id: 'gen-123-diagnostics', choices: [{ finish_reason: 'length', message: { content: item.text, reasoning: 'private hidden reasoning' } }], usage: { prompt_tokens: 2500, completion_tokens: 6000, completion_tokens_details: { reasoning_tokens: item.reasoning }, private_metadata: 'private' } })
+    } }), error => {
+      assert.equal(error.code, 'MODEL_INCOMPLETE'); assert.equal(error.finishReason, 'length')
+      assert.equal(error.promptTokens, 2500); assert.equal(error.completionTokens, 6000); assert.equal(error.reasoningTokens, item.reasoning)
+      assert.equal(error.outputChars, item.text.length); assert.equal(error.outputNonWhitespaceChars, item.text.replace(/\s/g, '').length)
+      assert.equal(error.startsSchemaDefinition, item.schema)
+      const safe = safeJobFailure(error)
+      assert.equal(safe.reasoningTokens, item.reasoning); assert.equal(safe.outputChars, item.text.length); assert.equal(safe.startsSchemaDefinition, item.schema)
+      assert.equal(JSON.stringify(error).includes('private'), false); assert.equal(JSON.stringify(safe).includes('private'), false)
+      return true
+    })
+    assert.equal(calls, 1, 'diagnostics do not retry or accept truncated JSON')
+  }
+  const safe = safeJobFailure({ code: 'MODEL_INCOMPLETE', promptTokens: -1, completionTokens: '6000', reasoningTokens: { secret: true }, outputChars: 10000001, outputNonWhitespaceChars: 1.5, startsSchemaDefinition: 'private' })
+  for (const key of ['promptTokens', 'completionTokens', 'reasoningTokens', 'outputChars', 'outputNonWhitespaceChars', 'startsSchemaDefinition']) assert.equal(safe[key], undefined)
+})
 
 test('recovery accepts only matching terminal zero-cost NVIDIA receipts, never unknown or paid outcomes', async () => {
   const config = { CONTENT_LIVE_FREE_CALLS: 'true', OPENROUTER_API_KEY: 'test-only' }
@@ -41,6 +70,7 @@ test('native JSON-capable free model receives the exact schema with the same zer
     assert.deepEqual(body.response_format.json_schema.schema, schema)
     assert.equal(body.response_format.json_schema.strict, true)
     assert.deepEqual(body.provider.max_price, { prompt: 0, completion: 0, request: 0 })
+    assert.deepEqual(body.reasoning, { enabled: false, effort: 'none' })
     return Response.json({ choices: [{ finish_reason: 'stop', message: { content: '{"ok":true}' } }] })
   } })
   assert.deepEqual(result, { ok: true })
@@ -92,6 +122,7 @@ test('free model requests enforce zero pricing and never retry or use a paid/Gem
     assert.deepEqual(body.provider.max_price, { prompt: 0, completion: 0, request: 0 })
     assert.equal(body.response_format, undefined); assert.equal(body.provider.require_parameters, true)
     assert.equal(body.model, config.LLM_MODEL)
+    assert.deepEqual(body.reasoning, { enabled: false, effort: 'none' })
     assert.match(body.messages[0].content, /JSON DATA INSTANCE, never the JSON Schema itself/)
     assert.match(body.messages[0].content, /top-level data keys are: ok/ )
     assert.deepEqual(body.tools[0].function.parameters, input.schema)

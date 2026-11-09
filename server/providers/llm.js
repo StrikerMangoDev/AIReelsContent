@@ -30,7 +30,7 @@ export async function generateJson({ system, input, schema, maxTokens = 8000 }, 
         tools: [{ type: 'function', function: { name: 'submit_json', description: 'Submit the requested structured result. This does not execute an external action.', parameters: schema } }],
         tool_choice: { type: 'function', function: { name: 'submit_json' } },
       }),
-      temperature: 0.2, max_tokens: maxTokens, reasoning: { enabled: false },
+      temperature: 0.2, max_tokens: maxTokens, reasoning: { enabled: false, effort: 'none' },
       provider: { require_parameters: true, max_price: { prompt: 0, completion: 0, request: 0 } },
     }),
   }) } catch (error) {
@@ -52,8 +52,14 @@ export async function generateJson({ system, input, schema, maxTokens = 8000 }, 
   const expectedCall = calls?.length === 1 && (calls[0].type === undefined || calls[0].type === 'function') && calls[0].function?.name === 'submit_json'
   const submitted = expectedCall ? calls[0].function.arguments : undefined
   const argumentsJson = submitted && typeof submitted === 'object' && !Array.isArray(submitted) ? JSON.stringify(submitted) : submitted
+  const diagnosticOutput = typeof choice?.message?.content === 'string' ? choice.message.content : typeof argumentsJson === 'string' ? argumentsJson : ''
+  const diagnostics = {
+    ...Object.fromEntries([['promptTokens', result.usage?.prompt_tokens], ['completionTokens', result.usage?.completion_tokens], ['reasoningTokens', result.usage?.completion_tokens_details?.reasoning_tokens]].filter(([, value]) => Number.isSafeInteger(value) && value >= 0 && value <= 1000000000)),
+    outputChars: Math.min(diagnosticOutput.length, 10000000), outputNonWhitespaceChars: Math.min(diagnosticOutput.replace(/\s/g, '').length, 10000000),
+    startsSchemaDefinition: /^\s*\{\s*"(?:\$schema|type|properties|additionalProperties)"\s*:/.test(diagnosticOutput),
+  }
   const output = choice?.finish_reason === 'stop' || (choice?.finish_reason === 'tool_calls' && !calls?.length) ? choice?.message?.content : choice?.finish_reason === 'tool_calls' ? argumentsJson : undefined
-  if (result.error || typeof output !== 'string' || !output.trim()) throw Object.assign(new Error('Free model returned incomplete content'), { code: 'MODEL_INCOMPLETE', ...receipt, toolCallCount: Array.isArray(calls) ? calls.length : 0, expectedTool: Boolean(expectedCall), argumentKind: typeof submitted })
+  if (result.error || typeof output !== 'string' || !output.trim()) throw Object.assign(new Error('Free model returned incomplete content'), { code: 'MODEL_INCOMPLETE', ...receipt, ...diagnostics, toolCallCount: Array.isArray(calls) ? calls.length : 0, expectedTool: Boolean(expectedCall), argumentKind: typeof submitted })
   const raw = output.trim()
   const fenced = /^```(?:json)?\s*\n([\s\S]*?)\n```$/i.exec(raw)
   try { return JSON.parse(fenced ? fenced[1] : raw) }
