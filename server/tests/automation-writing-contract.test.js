@@ -100,3 +100,20 @@ test('repeated automation contract violations stop after the existing two-attemp
   }), error => error.code === 'EVIDENCE_VALIDATION' && error.issues.some(issue => issue.includes('65 characters')))
   assert.equal(calls, 2)
 })
+
+test('noncompact automation previous content is omitted while valid manual prose remains available', async () => {
+  const previousContent = { ...base, claims: Array.from({ length: 4 }, (_, index) => ({ ...claim, id: `C${index + 1}` })) }
+  for (const automation of [true, false]) {
+    let calls = 0
+    await generateContent(evidence, { outputs: ['website'] }, { ...(automation ? context : {}), previousContent }, async request => {
+      calls++
+      if (automation) assert.equal(request.input.context.previousContent, null)
+      else {
+        assert.deepEqual(request.input.context.previousContent, { website: base.website })
+        assert.equal(request.input.context.previousContent.claims, undefined)
+      }
+      return draft(request)
+    })
+    assert.equal(calls, 1)
+  }
+})

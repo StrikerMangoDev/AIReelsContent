@@ -135,7 +135,7 @@ export async function generateContent(evidence, settings, context = {}, generate
   // Prior prose guides revisions; its claim/quote pairs are not fresh source evidence.
   if (context.previousContent) {
     const prose = { ...context.previousContent }; delete prose.claims
-    context = { ...context, previousContent: reviewContent(context.previousContent, evidence, settings).issues.length ? null : prose }
+    context = { ...context, previousContent: reviewContent(context.previousContent, evidence, settings, context).issues.length ? null : prose }
   }
   if (selectedOutputs(settings).includes('script')) schema = schema.extend({ hooks: z.array(text.regex(/^[\s\S]*\[C\d+\][\s\S]*$/, 'Every hook must contain an individual claim marker such as [C1].')).min(1).max(5) })
   if (selectedOutputs(settings).includes('captions')) {
