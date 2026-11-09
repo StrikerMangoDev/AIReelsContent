@@ -7,13 +7,14 @@ import { planningRouter } from '../studio/planning.js'
 import { contentHash } from '../studio/approval.js'
 import { reviewFixture } from './fixtures/finalization.js'
 import { settingsSchema } from '../studio/content.js'
+import { buildAssurance } from '../studio/assurance.js'
 
 test('planning is owner-scoped, validates references, uses optimistic edits and requires current approval for Ready', async () => {
   const repository = createRepository(':memory:')
   const settings = settingsSchema.parse({ platform: 'Instagram' })
   const text = 'The publisher announced a preview [C1].'
   const content = { hooks: [text], script: text, scenes: [{ timing: '0-15', narration: text, onScreen: text, visualPrompt: 'Illustrative preview', voiceDirection: 'Clear' }], captions: { reel: text, linkedin: text }, website: { title: text, body: text }, claims: [{ id: 'C1', text: 'The publisher announced a preview', evidenceId: 'E1', quote: 'The publisher announced a preview', status: 'attributed' }], strategy: { angle: 'An attributed preview', audience: 'Readers', whyNow: 'Recent publication', factCheck: 'Independent review', language: 'English', languageReason: 'Requested', voice: 'Female', voiceReason: 'Creative choice', delivery: 'Clear', keywords: ['preview'], platforms: [{ platform: 'Instagram', headline: text, hook: text, body: text, cta: 'Read the source', hashtags: [], thumbnail: 'Illustrative preview', format: 'Reel', retentionPlan: 'Explain the preview', alternativeHook: text, testPlan: 'Observe results' }], production: { videoPrompt: 'Illustrative', audioPrompt: 'Clear', musicDirection: 'None', subtitleStyle: 'Readable', editingNotes: 'Keep attribution' }, experiments: [{ variable: 'Hook', variantA: 'A', variantB: 'B', metric: 'Observed engagement', decisionRule: 'Compare equal exposure' }] } }
-  let pack = repository.studioPut('alice', 'package', 'package-a', { title: 'Saved preview', settings, content, evidence: [{ id: 'E1', excerpt: 'The publisher announced a preview today.', hash: 'source1' }], editorialStatus: 'draft', reviewerId: 'bob' }, 0)
+  let pack = repository.studioPut('alice', 'package', 'package-a', { title: 'Saved preview', settings, content, evidence: [{ id: 'E1', url: 'https://example.com/preview', retrievedAt: new Date().toISOString(), excerpt: 'The publisher announced a preview today. Independent capability testing is not included in the publisher announcement.', hash: 'source1' }], editorialStatus: 'draft', reviewerId: 'bob' }, 0)
   repository.studioPut('alice', 'research', 'report-a', { opportunities: [{ title: 'Saved topic' }] }, 0)
   const app = express(); app.use(express.json()); app.use('/planning', planningRouter({ repository, auth: (req, res, next) => { if (!req.headers.authorization) return res.sendStatus(401); req.identity = { uid: req.headers.authorization }; next() } }))
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening')
@@ -48,7 +49,7 @@ test('planning is owner-scoped, validates references, uses optimistic edits and 
     await call('/shortlist', 'POST', { reportId: 'report-a', index: 0 })
     assert.equal((await (await call()).json()).shortlist.length, 0)
     const hash = contentHash(pack); const reviewedAt = Date.now()
-    pack = repository.studioPut('alice', 'package', pack.id, { ...pack, editorialStatus: 'approved', independentReview: reviewFixture(pack), approval: { contentHash: hash, method: 'independent-human', approvedBy: 'alice', approvedAt: new Date(reviewedAt).toISOString() } }, pack.revision)
+    pack = repository.studioPut('alice', 'package', pack.id, { ...pack, assurance: buildAssurance(pack, { actorId: 'fixture-validator', runId: 'planning-fixture-validation' }), editorialStatus: 'approved', independentReview: reviewFixture(pack), approval: { contentHash: hash, method: 'independent-human', approvedBy: 'alice', approvedAt: new Date(reviewedAt).toISOString() } }, pack.revision)
     assert.equal((await call(`/board/${card.id}`, 'PATCH', { revision: card.revision, status: 'ready' })).status, 200)
     assert.equal((await call(`/board/${card.id}`, 'PATCH', { revision: card.revision, status: 'idea' })).status, 409)
     assert.equal((await (await call()).json()).board[0].status, 'ready')

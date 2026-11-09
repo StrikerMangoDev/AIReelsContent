@@ -2,7 +2,7 @@ import { runContentJob, cancelContentJob, recoverRejectedGeneration } from './jo
 import { reserveFreeOperation } from '../budget/free-operation.js'
 import { Router } from 'express'
 import { z } from 'zod'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { env } from '../config/env.js'
 import { articleEvidence, fetchEvidence } from './evidence.js'
 import { contentSchema, settingsSchema, generateContent, reviewContent } from './content.js'
@@ -10,7 +10,9 @@ import { createLibraryRouter } from './library.js'
 import { requireAdmin } from '../auth/firebase.js'
 import { intelligenceRouter } from './intelligence.js'
 import { assertCapability, capabilityAllowed } from '../policy.js'
-import { contentHash, independentlyReviewed, approvedVersion, contributors } from './approval.js'
+import { contentHash, approvedVersion, contributors } from './approval.js'
+import { buildAssurance, assessAssurance, assurancePolicyVersion } from './assurance.js'
+import { assessRelease } from './release.js'
 import { workspaceRouter, workspaceAuth, requireWriteRole, ownerScope, workspaceRole } from './workspaces.js'
 import { planningRouter } from './planning.js'
 import { categoryImageAssets } from './category-images.js'
@@ -38,17 +40,15 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
       if (!source || source.reviewStatus !== 'approved' || source.evidence.hash !== value.evidence[index].hash) throw fail(409, 'A library source changed or is no longer approved. Review the source and create a fresh package.')
     }
   }
-  const requireCurrentApproval = async (uid, value) => {
-    if (value.reviewerId === uid) throw fail(422, 'The content owner cannot independently review this package')
-    if (!independentlyReviewed(value)) throw fail(422, 'A current independent review of this exact version is required. Reviews expire after 24 hours; recheck sources before reviewing again.')
-    if (uid.startsWith('ws:') && !['owner', 'editor', 'reviewer'].includes(await workspaceRole(repository, uid, value.reviewerId))) throw fail(422, 'The reviewer no longer has workspace access. Assign a current reviewer.')
-    if (uid.startsWith('ws:') && value.approval && !['owner', 'editor'].includes(await workspaceRole(repository, uid, value.approval.approvedBy))) throw fail(422, 'The person who approved this content no longer has editing access. Approve it again.')
+  const requireCurrentApproval = async (uid, value, requireApproval = true) => {
+    const assessment = await assessRelease(repository, uid, value, { requireApproval })
+    if (!assessment.eligible) throw fail(422, assessment.issues.join(' '))
   }
   router.use('/workspaces', workspaceRouter({ repository, auth }))
   router.use('/library', createLibraryRouter({ repository, auth, fetchSource }))
   router.use('/planning', planningRouter({ repository, auth }))
   router.use('/intelligence', intelligenceRouter({ repository, auth, onResearchAdmitted }))
-  router.get('/config', (_req, res) => res.json({ finalizationPolicy, industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: capabilityAllowed('generation') && Boolean(env.OPENROUTER_API_KEY), research: capabilityAllowed('research') && Boolean(env.OPENROUTER_API_KEY), media: false, publishing: false, researchScheduling: false, vertexFallback: vertexFallbackAllowed() }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS, creditCoverage: 'unconfirmed', paidBudget: vertexFallbackAllowed() ? null : 0 }))
+  router.get('/config', (_req, res) => res.json({ finalizationPolicy, assurancePolicyVersion, industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: capabilityAllowed('generation') && Boolean(env.OPENROUTER_API_KEY), research: capabilityAllowed('research') && Boolean(env.OPENROUTER_API_KEY), media: false, publishing: false, researchScheduling: false, vertexFallback: vertexFallbackAllowed() }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS, creditCoverage: 'unconfirmed', paidBudget: vertexFallbackAllowed() ? null : 0 }))
   router.get('/publications', async (_req, res) => res.json({ publications: await Promise.all((await repository.studioList('public', 'publication')).map(publicationStatus)) }))
   router.get('/publications/:publicationId', async (req, res) => {
     const publication = await repository.studioGet('public', 'publication', req.params.publicationId)
@@ -70,18 +70,26 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
   }
   router.get('/reviews/:owner/:packageId', async (req, res) => res.json(await assignedReview(req)))
   router.post('/reviews/:owner/:packageId', async (req, res) => {
-    const input = z.object({ revision: z.number().int().positive(), claims: z.array(z.object({ id: z.string(), supported: z.literal(true), note: z.string().trim().min(10).max(1000) }).strict()).min(1).max(50), rightsConfirmed: z.literal(true), promiseAligned: z.literal(true), freshnessConfirmed: z.literal(true), contradictionsResolved: z.literal(true), accessibilityConfirmed: z.literal(true), scopeConfirmed: z.literal(true), ratings: ratingsSchema }).strict().parse(req.body)
+    const input = z.object({ revision: z.number().int().positive(), claims: z.array(z.object({ id: z.string(), supported: z.literal(true), note: z.string().trim().min(10).max(1000), conflictNote: z.string().trim().min(20).max(1000).optional() }).strict()).min(1).max(50), issueResolutions: z.array(z.object({ code: z.enum(['semantic-support', 'creative-review', 'source-context']), note: z.string().trim().min(20).max(1500), evidenceIds: z.array(z.string()).min(1).max(12) }).strict()).max(3).optional(), rightsConfirmed: z.literal(true), promiseAligned: z.literal(true), freshnessConfirmed: z.literal(true), contradictionsResolved: z.literal(true), accessibilityConfirmed: z.literal(true), scopeConfirmed: z.literal(true), ratings: ratingsSchema }).strict().parse(req.body)
     const current = await assignedReview(req)
     if (input.revision !== current.revision) throw fail(409, 'Review version changed')
     if (current.status === 'generating' || !current.content) throw fail(409, 'Content is not ready for review')
     const ids = input.claims.map(claim => claim.id)
     if (new Set(ids).size !== ids.length || current.content.claims.length !== ids.length || current.content.claims.some(claim => !ids.includes(claim.id))) throw fail(422, 'Review every claim exactly once')
     if (reviewContent(current.content, current.evidence, current.settings).issues.length) throw fail(422, 'Resolve citation and output issues before independent review')
+    const automatic = assessAssurance(current)
+    if (automatic.checks.length === 0 || automatic.checks.some(check => check.method === 'deterministic' && check.status !== 'passed') || current.assurance?.contentHash !== contentHash(current)) throw fail(422, 'Run and resolve the automatic assurance checks before independent review')
+    if (input.issueResolutions && (new Set(input.issueResolutions.map(item => item.code)).size !== input.issueResolutions.length || input.issueResolutions.some(item => item.evidenceIds.some(id => !current.evidence.some(source => source.id === id))))) throw fail(422, 'Resolve each issue once using attached evidence')
     const { ratings, ...attestations } = input
     const quality = assessQuality(ratings, current.evidence)
     if (!quality) throw fail(422, 'Each rating must cite sources attached to this version')
     const reviewedAt = Date.now()
-    const independentReview = { ...attestations, quality, status: quality.eligible ? 'passed' : 'needs_revision', reviewerId: req.identity.uid, contentHash: contentHash(current), reviewedAt: new Date(reviewedAt).toISOString(), expiresAt: new Date(reviewedAt + 86400000).toISOString(), method: 'independent-human' }
+    const assuranceResolutions = (input.issueResolutions || [
+      { code: 'semantic-support', note: input.claims.map(claim => `${claim.id}: ${claim.note}${claim.conflictNote ? ` Conflict: ${claim.conflictNote}` : ''}`).join('\n'), evidenceIds: [...new Set(current.content.claims.map(claim => claim.evidenceId))] },
+      { code: 'creative-review', note: Object.entries(ratings).map(([key, rating]) => `${key}: ${rating.note}`).join('\n'), evidenceIds: [...new Set(Object.values(ratings).flatMap(rating => rating.evidenceIds))] },
+      { code: 'source-context', note: 'Reviewer confirmed freshness, rights, contradictions, scope and accessibility for the saved evidence and text.', evidenceIds: current.evidence.map(source => source.id) },
+    ]).map(resolution => ({ ...resolution, resolverId: req.identity.uid, resolvedAt: new Date(reviewedAt).toISOString(), contentHash: contentHash(current) }))
+    const independentReview = { ...attestations, assuranceResolutions, quality, status: quality.eligible ? 'passed' : 'needs_revision', reviewerId: req.identity.uid, contentHash: contentHash(current), reviewedAt: new Date(reviewedAt).toISOString(), expiresAt: new Date(reviewedAt + 86400000).toISOString(), method: 'independent-human' }
     res.json(await repository.studioPut(req.params.owner, 'package', current.id, { ...current, independentReview, editorialStatus: 'needs_review', approval: null }, current.revision))
   })
   router.use(requireWriteRole)
@@ -152,6 +160,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     req.package = value; next()
   })
   router.get('/packages/:id', (req, res) => res.json(req.package))
+  router.get('/packages/:id/assurance', async (req, res) => res.json({ assurance: req.package.assurance || null, releaseAssessment: await assessRelease(repository, ownerScope(req), req.package) }))
   router.post('/packages/:id/prepare-sources', async (req, res) => {
     const current = req.package; const uid = ownerScope(req)
     if (!current.researchId || current.content || current.jobId || current.status !== 'draft') return res.json(current)
@@ -212,7 +221,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     await requireCurrentLibrary(ownerScope(req), current)
     if (!approvedVersion(current) || reviewContent(current.content, current.evidence, current.settings).issues.length) throw fail(409, 'Save valid content and confirm this version before downloading.')
     await requireCurrentApproval(ownerScope(req), current)
-    res.json({ manifest: { scope: 'text-package', mediaVerification: 'Production directions are not verification of rendered media or publishing readiness.', packageId: current.id, revision: current.revision, contentHash: contentHash(current), approvedAt: current.approval.approvedAt, approvedBy: current.approval.approvedBy, approvalMethod: current.approval.method, reviewerId: current.reviewerId, quality: current.independentReview.quality, exportedAt: new Date().toISOString(), sources: current.evidence.map(({ id, url, retrievedAt, hash }) => ({ id, url, retrievedAt, hash })) }, package: current })
+    res.json({ manifest: { scope: 'text-package', assurance: { ...current.assurance, assessment: assessAssurance(current) }, mediaVerification: 'Production directions are not verification of rendered media or publishing readiness.', packageId: current.id, revision: current.revision, contentHash: contentHash(current), approvedAt: current.approval.approvedAt, approvedBy: current.approval.approvedBy, approvalMethod: current.approval.method, reviewerId: current.reviewerId, quality: current.independentReview.quality, exportedAt: new Date().toISOString(), sources: current.evidence.map(({ id, url, retrievedAt, hash }) => ({ id, url, retrievedAt, hash })) }, package: current })
   })
   router.patch('/packages/:id', async (req, res) => {
     const input = patchSchema.parse(req.body); const current = req.package
@@ -225,16 +234,16 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     if (input.editorialStatus === 'approved' && review.issues.length) throw fail(422, 'Resolve evidence review issues before approving')
     if (input.editorialStatus === 'approved' && changed) throw fail(422, 'Save your edits before confirming the current content.')
     if (input.editorialStatus === 'approved') {
-      await requireCurrentApproval(ownerScope(req), { ...current, approval: null })
+      await requireCurrentApproval(ownerScope(req), { ...current, approval: null }, false)
       if (req.identity.uid === current.reviewerId) throw fail(422, 'A different owner or editor must approve the independently reviewed version')
     }
     const approval = input.editorialStatus === 'approved' ? { contentHash: contentHash(current), approvedAt: new Date().toISOString(), approvedBy: req.identity.uid, method: 'independent-human' } : null
-    res.json(await repository.studioPut(ownerScope(req), 'package', current.id, { ...current, content, settings, review, contributorUids: changed ? [...new Set([...contributors(current), req.identity.uid])] : contributors(current), independentReview: changed ? null : current.independentReview, approval, editorialStatus: content ? (input.editorialStatus || 'needs_review') : 'draft' }, current.revision))
+    res.json(await repository.studioPut(ownerScope(req), 'package', current.id, { ...current, content, settings, review, assurance: changed ? buildAssurance({ ...current, content, settings, independentReview: null, approval: null }, { actorId: req.identity.uid, runId: randomUUID(), stage: 'validation' }) : current.assurance, contributorUids: changed ? [...new Set([...contributors(current), req.identity.uid])] : contributors(current), independentReview: changed ? null : current.independentReview, approval, editorialStatus: content ? (input.editorialStatus || 'needs_review') : 'draft' }, current.revision))
   })
   router.post('/packages/:id/review', async (req, res) => {
     const current = req.package
     if (current.status === 'generating') throw fail(409, 'Generation is in progress')
-    res.json(await repository.studioPut(ownerScope(req), 'package', current.id, { ...current, review: reviewContent(current.content, current.evidence), editorialStatus: 'needs_review' }, current.revision))
+    res.json(await repository.studioPut(ownerScope(req), 'package', current.id, { ...current, assurance: buildAssurance(current, { actorId: req.identity.uid, runId: randomUUID(), stage: 'validation' }), independentReview: null, approval: null, review: reviewContent(current.content, current.evidence, current.settings), editorialStatus: 'needs_review' }, current.revision))
   })
   router.post('/packages/:id/refresh-evidence', async (req, res) => {
     z.object({ confirmed: z.literal(true) }).strict().parse(req.body)

@@ -97,7 +97,7 @@ test('studio preserves generation checks and requires evidence-rated independent
   const auth = (req, res, next) => { if (!req.headers.authorization) return res.sendStatus(401); req.identity = { uid: req.headers.authorization, role: admin ? 'admin' : 'user' }; next() }
   let calls = 0; let sourceHash = 'original'
   const generatedContent = withPlatforms(['Instagram'])
-  app.use('/api/studio', studioRouter({ repository, dispatchMode: 'inline', auth, generate: async () => { calls++; return generatedContent }, fetchSource: async () => ({ id: 'E1', title: 'Example', url: 'https://example.com', excerpt, hash: sourceHash, limitations: [] }) }))
+  app.use('/api/studio', studioRouter({ repository, dispatchMode: 'inline', auth, generate: async () => { calls++; return generatedContent }, fetchSource: async () => ({ id: 'E1', title: 'Example', url: 'https://example.com', excerpt, hash: sourceHash, retrievedAt: new Date().toISOString(), limitations: [] }) }))
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}/api/studio`
   const call = (path, method = 'GET', body, owner = 'alice') => fetch(base + path, { method, headers: { Authorization: owner, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })

@@ -85,7 +85,7 @@ test('independent reviews reject contributors and revoked reviewers cannot autho
     const invite = await (await call(`/workspaces/${workspace.id}/invitations`, { method: 'POST', body: { targetUid: uid, role, revision: current.revision } })).json()
     assert.equal((await call(`/workspaces/${workspace.id}/invitations/${invite.id}/accept`, { uid, method: 'POST', body: {} })).status, 200)
   }
-  const evidence = [{ id: 'E1', url: 'https://example.com', title: 'Publisher', excerpt: 'The publisher announced a preview with limited availability.', hash: 'fixture', limitations: [] }]
+  const evidence = [{ id: 'E1', url: 'https://example.com', title: 'Publisher', excerpt: 'The publisher announced a preview with limited availability. Independent capability testing has not yet been published.', hash: 'fixture', retrievedAt: new Date().toISOString(), limitations: [] }]
   const content = { website: { title: 'Preview', body: 'The publisher announced a preview [C1].' }, claims: [{ id: 'C1', text: 'Preview announced', evidenceId: 'E1', quote: 'The publisher announced a preview', status: 'attributed' }] }
   let pack = await repo.studioPut(workspace.id, 'package', 'shared-draft', { settings: { platform: 'X', outputs: ['website'] }, content, evidence, status: 'completed', editorialStatus: 'needs_review', createdBy: 'alice', generatedBy: 'alice', reviewerId: 'bob', contributorUids: ['alice'] }, 0)
   for (const uid of ['bob', 'carol']) {

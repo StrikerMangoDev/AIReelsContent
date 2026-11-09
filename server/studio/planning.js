@@ -1,9 +1,9 @@
-import { workspaceAuth, requireWriteRole, ownerScope, workspaceRole } from './workspaces.js'
+import { workspaceAuth, requireWriteRole, ownerScope } from './workspaces.js'
 import { Router } from 'express'
 import { createHash, randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { settingsSchema, reviewContent } from './content.js'
-import { approvedVersion } from './approval.js'
+import { settingsSchema } from './content.js'
+import { assessRelease } from './release.js'
 
 const id = z.string().trim().min(1).max(100)
 const revision = z.number().int().positive()
@@ -23,14 +23,7 @@ export function planningRouter({ repository, auth }) {
     return value
   }
   async function isReady(uid, pack) {
-    if (pack.reviewerId === uid) return false
-    if (uid.startsWith('ws:') && (!['owner', 'editor', 'reviewer'].includes(await workspaceRole(repository, uid, pack.reviewerId)) || !['owner', 'editor'].includes(await workspaceRole(repository, uid, pack.approval?.approvedBy)))) return false
-    if (!approvedVersion(pack) || reviewContent(pack.content, pack.evidence, pack.settings).issues.length) return false
-    for (const [index, sourceId] of (pack.sourceIds || []).entries()) {
-      const source = await repository.studioGet(uid, 'library_source', sourceId)
-      if (!source || source.reviewStatus !== 'approved' || source.evidence.hash !== pack.evidence[index]?.hash) return false
-    }
-    return true
+    return (await assessRelease(repository, uid, pack)).eligible
   }
   router.get('/', async (req, res) => {
     const uid = ownerScope(req)

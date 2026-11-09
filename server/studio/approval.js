@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { assessQuality, finalizationPolicy } from './finalization.js'
 
-export const contentHash = value => createHash('sha256').update(JSON.stringify({ content: value.content, settings: value.settings, evidence: value.evidence })).digest('hex')
+export const contentHash = value => createHash('sha256').update(JSON.stringify({ content: value.content, settings: value.settings, evidence: value.evidence, researchContext: value.researchContext, brandVersion: value.brandVersion }, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)).digest('hex')
 export const contributors = value => [...new Set([...(value.contributorUids || []), value.createdBy, value.generatedBy, value.lastEditedBy].filter(Boolean))]
 
 export function independentlyReviewed(value, now = Date.now()) {

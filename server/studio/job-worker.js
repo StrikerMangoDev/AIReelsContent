@@ -2,6 +2,7 @@ import { researchChanges } from './research-changes.js'
 import { createHash } from 'node:crypto'
 import { generateContent, reviewContent } from './content.js'
 import { contentHash } from './approval.js'
+import { buildAssurance } from './assurance.js'
 import { workspaceRole } from './workspaces.js'
 import { dispatchFreeOperation } from '../budget/free-operation.js'
 import { costScopeHash } from '../budget/policy.js'
@@ -78,8 +79,10 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
       const fallback = generate === generateContent && vertexFallbackAllowed() ? (request, attempt) => generateVertexJson(request, { repository, owner: uid, requestId: `vertex-${job.id}-${attempt}`, beforeAttempt }) : undefined
       const content = await generate(pack.evidence, pack.settings, { ...pack.researchContext, revisionInstruction: scope.instruction || null, previousContent: scope.instruction ? pack.content : null }, undefined, { beforeAttempt, fallback, startWithFallback: scope.generationProvider === 'vertex-fallback' })
       const review = reviewContent(content, pack.evidence, pack.settings)
-      if (review.issues.length) throw Object.assign(new Error('Generated output failed validation'), { code: 'EVIDENCE_VALIDATION' })
-      result = await repository.studioPut(uid, 'package', pack.id, { ...pack, content, review, status: 'completed', editorialStatus: 'needs_review', independentReview: null, approval: null }, pack.revision)
+      if (review.issues.length) throw Object.assign(new Error('Generated output failed validation'), { code: 'EVIDENCE_VALIDATION', issues: review.issues, issueCount: review.issues.length })
+      const completed = { ...pack, content, review, status: 'completed', editorialStatus: 'needs_review', independentReview: null, approval: null }
+      completed.assurance = buildAssurance(completed, { actorId: scope.actorUid, runId: job.id, stage: 'generation' })
+      result = await repository.studioPut(uid, 'package', pack.id, completed, pack.revision)
     } else {
       const { researchNiche, validateIntelligence } = await import('./intelligence.js')
       const fallback = !scope.freeOnly && !scope.automatic && !research && vertexFallbackAllowed() ? (request, attempt) => generateVertexJson(request, { repository, owner: uid, requestId: `vertex-${job.id}-${attempt}`, beforeAttempt, kind: 'research' }) : undefined

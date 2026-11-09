@@ -29,9 +29,10 @@ test('finalization records below-threshold review, blocks bypasses and exports o
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening')
   const call = (path, method = 'GET', body, actor = 'alice') => fetch(`http://127.0.0.1:${server.address().port}${path}`, { method, headers: { Authorization: actor, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
   try {
-    const evidence = [{ id: 'E1', url: 'https://example.com/release', hash: 'source', excerpt: 'The publisher announced a limited preview.', limitations: [], retrievedAt: new Date().toISOString() }]
+    const evidence = [{ id: 'E1', url: 'https://example.com/release', hash: 'source', excerpt: 'The publisher announced a limited preview. Independent capability testing is not included in the publisher announcement.', limitations: [], retrievedAt: new Date().toISOString() }]
     const content = { website: { title: 'Limited preview [C1]', body: 'The publisher announced a limited preview [C1].' }, claims: [{ id: 'C1', text: 'The publisher announced a limited preview', quote: evidence[0].excerpt, evidenceId: 'E1', status: 'attributed' }] }
     let pack = repository.studioPut('alice', 'package', 'rated', { title: 'Preview', settings: { outputs: ['website'], platform: 'X' }, content, evidence, createdBy: 'alice', reviewerId: 'bob', status: 'completed', editorialStatus: 'needs_review' }, 0)
+    pack = await (await call('/packages/rated/review', 'POST', {})).json()
     const approve = () => call('/packages/rated', 'PATCH', { revision: pack.revision, editorialStatus: 'approved' })
     const review = () => ({ revision: pack.revision, claims: [{ id: 'C1', supported: true, note: 'The exact source passage supports the limited preview announcement.' }], rightsConfirmed: true, promiseAligned: true, freshnessConfirmed: true, contradictionsResolved: true, accessibilityConfirmed: true, scopeConfirmed: true, ratings: ratingsFixture() })
     assert.equal((await approve()).status, 422)
