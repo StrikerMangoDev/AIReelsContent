@@ -8,7 +8,7 @@ import { contentHash } from '../studio/approval.js'
 import { costScopeHash } from '../budget/policy.js'
 import { settingsSchema } from '../studio/content.js'
 
-test('scoped demo writes fresh content into a distinct durable job and a changed profile blocks paid review', async () => {
+for (const provider of ['vertex', 'openrouter']) test(`${provider} scoped demo preserves actual provider/model provenance and changed profiles block paid review`, async () => {
   const repository = createRepository(':memory:'); const owner = demoOwner
   const runId = 'a'.repeat(32); const packageId = createHash('sha256').update(`${runId}:package`).digest('hex').slice(0, 32)
   const excerpt = 'The publisher announced a limited developer preview. Availability remains restricted and independent deployment results have not been established.'
@@ -25,7 +25,8 @@ test('scoped demo writes fresh content into a distinct durable job and a changed
     repository.studioJobUpdate(owner, old.job.id, { status: 'dispatch_unknown' }, running.revision, 'running')
     let run = repository.studioPut(owner, 'automation_run', runId, { packageId, accountId: profile.accountId, profileHash: costScopeHash(profile, null), demoAuthorizationId: 'controlled-demo', demoSourceContentHash: contentHash(pack), contentHash: contentHash(pack), status: 'generate_running', stage: 'generate' }, 0)
     const binding = { runId, accountId: profile.accountId, profileId: profile.id, profileHash: costScopeHash(profile, null), packageId, sourceContentHash: contentHash(pack) }
-    repository.studioPut(owner, 'automation_demo', run.demoAuthorizationId, { version: 'five-account-paid-demo-v1', status: 'active', owner, actorUid: owner, currency: 'USD', totalLimitMicros: 5000000, projectId: 'ai-vertical-495712', model: 'gemini-3.8-flash', authorizedAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(), allowedStages: ['generate', 'review'], runs: [binding, ...['b', 'c', 'd', 'e'].map(key => ({ ...binding, runId: key.repeat(32), accountId: `account-${key}` }))] }, 0)
+    const model = provider === 'openrouter' ? 'google/gemini-3.8-flash' : 'gemini-3.8-flash'
+    repository.studioPut(owner, 'automation_demo', run.demoAuthorizationId, { version: 'five-account-paid-demo-v1', status: 'active', owner, actorUid: owner, currency: 'USD', totalLimitMicros: 5000000, projectId: 'ai-vertical-495712', ...(provider === 'openrouter' ? { provider, priceExpiresAt: new Date(Date.now() + 1800000).toISOString() } : {}), model, authorizedAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(), allowedStages: ['generate', 'review'], runs: [binding, ...['b', 'c', 'd', 'e'].map(key => ({ ...binding, runId: key.repeat(32), accountId: `account-${key}` }))] }, 0)
     repository.budgetConfigure('USD', demoBudgetOwner(owner, run.demoAuthorizationId), 5000000, 5000000)
     const context = { owner, actorUid: owner, profile, run, requestId: demoStageRequestId(run, 'generate') }
     const result = await services.generate(context)
@@ -33,11 +34,15 @@ test('scoped demo writes fresh content into a distinct durable job and a changed
     assert.equal(result.package.content.website.title, 'Developer preview')
     assert.notEqual(result.jobId, old.job.id)
     assert.equal(repository.studioJobGet(owner, old.job.id).status, 'dispatch_unknown')
-    assert.equal(repository.studioJobGet(owner, result.jobId).scope.generationProvider, 'vertex-demo')
+    assert.equal(repository.studioJobGet(owner, result.jobId).scope.generationProvider, `${provider}-demo`)
+    assert.equal(repository.studioJobGet(owner, result.jobId).scope.model, model)
     assert.equal(repository.budgetGet(owner, result.jobId), null, 'paid writing has no misleading free-only monetary reservation')
     run = repository.studioPut(owner, 'automation_run', run.id, { ...run, contentHash: contentHash(result.package), status: 'review_running', stage: 'review' }, run.revision)
+    const reviewed = await services.review({ ...context, run, requestId: demoStageRequestId(run, 'review') })
+    assert.equal(reviewed.status, 'blocked', 'the controlled invalid evaluator payload never approves release')
+    assert.equal(repository.studioGet(owner, 'package', packageId).automaticReview.model, model)
     repository.studioPut(owner, 'account_profile', profile.id, { ...profile, tone: 'Changed after authorization' }, profile.revision)
     await assert.rejects(services.review({ ...context, run, requestId: demoStageRequestId(run, 'review') }), error => error.preDispatch === true)
-    assert.equal(paidCalls, 1)
+    assert.equal(paidCalls, 2)
   } finally { repository.close() }
 })

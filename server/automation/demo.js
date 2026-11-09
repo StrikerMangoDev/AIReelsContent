@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { env } from '../config/env.js'
 import { budgetError, costScopeHash } from '../budget/policy.js'
 import { generateVertexJson, vertexDemoCallUpperBoundMicros } from '../providers/vertex-fallback.js'
+import { generateOpenRouterDemoJson, openRouterDemoModel, openRouterDemoCallUpperBoundMicros } from '../providers/openrouter-demo.js'
 import { contentHash } from '../studio/approval.js'
 import { workspaceRole } from '../studio/workspaces.js'
 import { automaticTextPolicyVersion } from './review.js'
@@ -10,7 +11,7 @@ export const demoOwner = 'W8eI22SdAsZa2LGz6VZxWQkXsyj1'
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 export const demoAuthorizationSchema = z.object({
   version: z.literal('five-account-paid-demo-v1'), status: z.enum(['active', 'blocked', 'revoked']), owner: z.literal(demoOwner), actorUid: z.literal(demoOwner),
-  currency: z.literal('USD'), totalLimitMicros: z.literal(5000000), projectId: z.literal('ai-vertical-495712'), model: z.literal('gemini-3.8-flash'),
+  currency: z.literal('USD'), totalLimitMicros: z.literal(5000000), projectId: z.literal('ai-vertical-495712'), provider: z.enum(['vertex', 'openrouter']).default('vertex'), model: z.enum(['gemini-3.8-flash', openRouterDemoModel]), priceExpiresAt: z.string().datetime().optional(),
   authorizedAt: z.string().datetime(), expiresAt: z.string().datetime(), allowedStages: z.tuple([z.literal('generate'), z.literal('review')]),
   runs: z.array(z.object({ runId: z.string().regex(/^[a-f0-9]{32}$/), accountId: z.string().min(1).max(200), profileId: z.string().min(1).max(200), profileHash: hash, packageId: z.string().regex(/^[a-f0-9]{32}$/), sourceContentHash: hash }).strict()).length(5).refine(runs => new Set(runs.map(run => run.runId)).size === 5 && new Set(runs.map(run => run.accountId)).size === 5, 'Use exactly five distinct authorized runs and accounts'),
 }).strict()
@@ -30,6 +31,7 @@ export async function assertDemoAuthorization({ repository, owner, actorUid, run
   if (!parsed.success) throw blocked('The paid demonstration authorization is missing or invalid.')
   const authorization = parsed.data
   const start = Date.parse(authorization.authorizedAt); const end = Date.parse(authorization.expiresAt)
+  if (authorization.provider === 'vertex' ? authorization.model !== 'gemini-3.8-flash' : authorization.model !== openRouterDemoModel || !authorization.priceExpiresAt || Date.parse(authorization.priceExpiresAt) <= now || Date.parse(authorization.priceExpiresAt) > end) throw blocked('The demonstration provider, model or frozen price approval does not match.')
   if (authorization.status !== 'active' || start > now || end <= now || end > start + 86400000 || now >= Date.parse('2027-01-01T00:00:00Z')) throw blocked('The paid demonstration authorization is inactive or expired.')
   const binding = authorization.runs.find(value => value.runId === run.id)
   const currentRun = await repository.studioGet(owner, 'automation_run', run.id)
@@ -43,7 +45,7 @@ export async function assertDemoAuthorization({ repository, owner, actorUid, run
   const budgetOwner = demoBudgetOwner(owner, run.demoAuthorizationId)
   const budget = await repository.budgetSummary(budgetOwner, 'USD')
   if (budget.limitMicros !== authorization.totalLimitMicros) throw blocked('The paid demonstration needs its own exact shared five-dollar budget.')
-  return { authorization, budgetOwner, model: authorization.model, projectId: authorization.projectId, requiredQuoteMicros: vertexDemoCallUpperBoundMicros }
+  return { authorization, budgetOwner, model: authorization.model, projectId: authorization.projectId, requiredQuoteMicros: authorization.provider === 'openrouter' ? openRouterDemoCallUpperBoundMicros : vertexDemoCallUpperBoundMicros }
 }
 
 export function createDemoGenerator(context, { beforeAttempt, config = env, request } = {}) {
@@ -61,12 +63,13 @@ export function createDemoGenerator(context, { beforeAttempt, config = env, requ
     const requestId = `demo:${demoStageRequestId(context.run, context.phase)}:${attempt}`
     const scopedConfig = { ...config, CONTENT_VERTEX_FALLBACK: 'true', VERTEX_FALLBACK_PROJECT: admitted.projectId, VERTEX_FALLBACK_MODEL: admitted.model, VERTEX_FALLBACK_APPROVED_UNTIL: admitted.authorization.expiresAt }
     try {
+      if (admitted.authorization.provider === 'openrouter') return await generateOpenRouterDemoJson(input, { repository: context.repository, owner: admitted.budgetOwner, requestId, config, priceExpiresAt: admitted.authorization.priceExpiresAt, ...(request ? { request } : {}), beforeAttempt: async () => { await assertDemoAuthorization(context); if (beforeAttempt) await beforeAttempt() } })
       if (!scopedConfig.VERTEX_FALLBACK_CREDENTIALS && !scopedConfig.GOOGLE_SERVICE_ACCOUNT_JSON) throw Object.assign(blocked('Approved Vertex credentials are unavailable for this demonstration.'), { configurationFailure: true })
       return await generateVertexJson(input, { repository: context.repository, owner: admitted.budgetOwner, requestId, config: scopedConfig, worstCaseModelBound: true, timeoutMs: 110000, ...(request ? { request } : {}), beforeAttempt: async () => { await assertDemoAuthorization(context); if (beforeAttempt) await beforeAttempt() } })
     } catch (error) {
-      if ([401, 403].includes(error.status) || error.configurationFailure === true) {
+      if ([401, 402, 403].includes(error.status) || error.configurationFailure === true) {
         const current = await context.repository.studioGet(context.owner, 'automation_demo', context.run.demoAuthorizationId)
-        if (current?.status === 'active') await context.repository.studioPut(context.owner, 'automation_demo', current.id, { ...current, status: 'blocked', failureCode: error.configurationFailure ? 'VERTEX_CONFIG_INVALID' : 'VERTEX_ACCESS_REJECTED' }, current.revision)
+        if (current?.status === 'active') await context.repository.studioPut(context.owner, 'automation_demo', current.id, { ...current, status: 'blocked', failureCode: admitted.authorization.provider === 'openrouter' ? error.configurationFailure ? 'OPENROUTER_CONFIG_INVALID' : 'OPENROUTER_ACCESS_REJECTED' : error.configurationFailure ? 'VERTEX_CONFIG_INVALID' : 'VERTEX_ACCESS_REJECTED' }, current.revision)
       }
       if (error.code === 'BUDGET_BLOCKED') error.preDispatch = true
       throw error
