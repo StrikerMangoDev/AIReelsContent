@@ -77,6 +77,9 @@ test('generation prompt treats misleading research summaries as leads and preser
     assert.match(request.system, /daily item must not be called weekly or grouped into a weekly set/)
     assert.match(request.system, /preserve the dates, period, population and scope of each cited claim/)
     assert.match(request.system, /citation marker does not permit prose that contradicts its claim/)
+    assert.match(request.system, /For research briefings only, aim for 10 to 12/)
+    assert.match(request.system, /This request writes one saved source-backed topic, not a research briefing/)
+    assert.match(request.system, /Do not create a ten-topic collection or apply research-only topic-count targets/)
     assert.match(request.system, /Do not infer publisher categories, mechanisms, consensus or causal explanations/)
     assert.deepEqual(request.input.evidence, evidence)
     assert.equal(request.input.context.opportunity.whatChanged, context.opportunity.whatChanged)
@@ -203,11 +206,13 @@ test('free model requests enforce zero pricing and never retry or use a paid/Gem
 test('research uses dated news evidence and stops before inference when no sources exist', async () => {
   const niche = { name: 'AI', brief: 'Recent AI announcements', windowDays: 1 }
   let calls = 0
-  const generate = async ({ input }) => {
+  const generate = async ({ input, system }) => {
     calls++
     assert.equal(input.evidence.length, 1)
     assert.equal(input.evidence[0].type, 'news-feed-excerpt')
     assert.equal(input.evidence[0].excerpt, 'A new model was announced')
+    assert.match(system, /For research briefings only, aim for 10 to 12/)
+    assert.equal(system.includes('This request writes one saved source-backed topic'), false)
     return { summary: 'An announcement', opportunities: [], unknowns: ['Full article not retrieved'] }
   }
   const article = { url: 'https://news.google.com/rss/articles/test', title: 'A new model was announced', publishedAt: new Date().toISOString() }
