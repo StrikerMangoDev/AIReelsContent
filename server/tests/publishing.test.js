@@ -172,3 +172,25 @@ test('concurrent accounts wait for the owner admission lease and retain cross-ac
     assert.equal(created.length, 2)
   } finally { repository.close() }
 })
+
+test('automatic hash GUIDs dispatch once while pre-provider failures are classified without weakening manual IDs', async () => {
+  const repository = createRepository(':memory:'); const bytes = Buffer.from('controlled automatic GUID fixture')
+  const pack = repository.studioPut('alice', 'package', 'guid-pack', { content: { captions: { linkedin: 'Supported source [C1]' }, claims: [{ id: 'C1', evidenceId: 'E1' }] }, evidence: [{ id: 'E1', url: 'https://example.com/actual-source' }] }, 0)
+  const asset = repository.studioPut('alice', 'asset', 'guid-asset', { packageId: pack.id, kind: 'image', status: 'completed', mime: 'image/png', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }, 0)
+  repository.studioPut('alice', 'account_profile', createHash('sha256').update('guid-account').digest('hex').slice(0, 32), { enabled: true, automationConsent: true, automaticPolicy: { consentedBy: 'alice' }, maxDailyPosts: 1 }, 0)
+  let enabled = false; let uploads = 0; let creates = 0
+  const service = createPublishingService({ repository, config: () => ({ enabled, accounts: [{ ownerScope: 'alice', accountId: 'guid-account', platform: 'LinkedIn', provider: 'linkedin' }] }), assessReady: async () => ({ eligible: true, issues: [] }), readFile: async () => bytes, provider: { upload: async () => { uploads++; return { id: 'uploaded', path: 'https://uploads.postiz.com/guid.png' } }, create: async () => { creates++; return { postId: 'guid-post', integration: 'guid-account' } } } })
+  const input = { requestId: '864a148f-c0ca-5976-ff2a-db8e18b0e03d', revision: pack.revision, accountId: 'guid-account', platform: 'LinkedIn', mode: 'now', caption: approvedCaption(pack, 'LinkedIn'), assetIds: [asset.id], confirmed: true, automatic: true }
+  const publish = changes => service.publish({ owner: 'alice', actorUid: 'alice', packageId: pack.id, input: { ...input, ...changes } })
+  try {
+    await assert.rejects(publish({}), { status: 503, preDispatch: true })
+    await assert.rejects(publish({ automatic: false }), error => error.name === 'ZodError' && error.preDispatch === true)
+    enabled = true
+    await assert.rejects(publish({ accountId: 'other-account' }), { status: 422, preDispatch: true })
+    await assert.rejects(publish({ caption: 'Changed unreviewed text' }), { status: 422, preDispatch: true })
+    assert.equal(uploads, 0); assert.equal(creates, 0); assert.equal(repository.studioList('alice', 'social_publication').length, 0)
+    assert.equal((await publish({})).status, 201)
+    assert.equal((await publish({})).status, 200)
+    assert.equal(uploads, 1); assert.equal(creates, 1)
+  } finally { repository.close() }
+})

@@ -13,7 +13,9 @@ import { postizContentMatches } from './readback.js'
 import { setTimeout as delay } from 'node:timers/promises'
 
 const fail = (status, message) => Object.assign(new Error(message), { status, publicMessage: message })
-const inputSchema = z.object({ requestId: z.string().uuid(), revision: z.number().int().positive(), accountId: z.string().min(1).max(200), platform: z.string().min(1).max(80), mode: z.enum(['draft', 'schedule', 'now']), publishAt: z.iso.datetime().optional(), caption: z.string().trim().min(1).max(12000), assetIds: z.array(z.string().min(1).max(100)).min(1).max(10), confirmed: z.literal(true), automatic: z.boolean().default(false) }).strict()
+const inputSchema = z.object({ requestId: z.guid(), revision: z.number().int().positive(), accountId: z.string().min(1).max(200), platform: z.string().min(1).max(80), mode: z.enum(['draft', 'schedule', 'now']), publishAt: z.iso.datetime().optional(), caption: z.string().trim().min(1).max(12000), assetIds: z.array(z.string().min(1).max(100)).min(1).max(10), confirmed: z.literal(true), automatic: z.boolean().default(false) }).strict().superRefine((input, ctx) => {
+  if (!input.automatic && !z.uuid().safeParse(input.requestId).success) ctx.addIssue({ code: 'custom', path: ['requestId'], message: 'Manual publication requires a UUID request identifier' })
+})
 const profileSchema = z.object({ accountId: z.string().min(1).max(200), weeklyBrief: z.string().trim().min(15).max(4000), audience: z.string().trim().min(1).max(500), tone: z.string().trim().min(1).max(200), contentPillars: z.array(z.string().trim().min(1).max(200)).min(1).max(12), weeklyCadence: z.number().int().min(0).max(14), dailyNews: z.boolean(), maxDailyPosts: z.number().int().min(1).max(10), timezone: z.string().max(100).default('Asia/Calcutta').refine(value => { try { new Intl.DateTimeFormat('en', { timeZone: value }); return true } catch { return false } }), enabled: z.boolean(), automationConsent: z.boolean().default(false), revision: z.number().int().min(0) }).strict()
 
 export function approvedCaption(pack, platform) {
@@ -33,6 +35,8 @@ export function createPublishingService({ repository, provider = createPostizPro
   async function packFor(owner, id) { const pack = await repository.studioGet(owner, 'package', id); if (!pack) throw fail(404, 'Content package not found'); return pack }
   async function actorCanWrite(owner, actor) { if (!['owner', 'editor'].includes(await workspaceRole(repository, owner, actor))) throw fail(403, 'Publishing access changed before dispatch') }
   return { async publish({ owner, actorUid, packageId, input: rawInput }) {
+    let externalAttempted = false
+    try {
     const input = inputSchema.parse(rawInput); await actorCanWrite(owner, actorUid)
     if (!config().enabled) throw fail(503, 'Social publishing is not configured')
     const account = accountFor(owner, input.accountId, input.platform)
@@ -83,6 +87,7 @@ export function createPublishingService({ repository, provider = createPostizPro
         await actorCanWrite(owner, actorUid)
         const bytes = await readFile(asset.id)
         if (createHash('sha256').update(bytes).digest('hex') !== asset.sha256 || bytes.length !== asset.bytes) throw fail(409, 'Stored media differs from the accepted asset')
+        externalAttempted = true
         const upload = await provider.upload(bytes, asset); media.push(upload)
         receipt = await repository.studioPut(owner, 'social_publication', id, { ...receipt, uploadedMedia: [...media] }, receipt.revision)
       }
@@ -96,6 +101,7 @@ export function createPublishingService({ repository, provider = createPostizPro
       await actorCanWrite(owner, actorUid)
       receipt = await repository.studioPut(owner, 'social_publication', id, { ...receipt, status: 'dispatching', dispatchedAt: new Date().toISOString() }, receipt.revision)
       dispatched = true
+      externalAttempted = true
       const result = await provider.create({ type: input.mode, date: input.publishAt || new Date().toISOString(), shortLink: false, tags: [], posts: [{ integration: { id: account.accountId }, value: [{ content: input.caption, image: media }], settings: scope.providerSettings }] })
       if (result.integration !== account.accountId) throw new Error('Provider returned a different account receipt')
       receipt = await repository.studioPut(owner, 'social_publication', id, { ...receipt, status: 'submitted', providerPostId: result.postId, submittedAt: new Date().toISOString() }, receipt.revision)
@@ -103,6 +109,10 @@ export function createPublishingService({ repository, provider = createPostizPro
     } catch {
       receipt = await repository.studioPut(owner, 'social_publication', id, { ...receipt, status: dispatched ? 'dispatch_unknown' : 'blocked', error: dispatched ? 'Provider outcome is uncertain. Refresh status; do not create a second post.' : 'Publication preparation failed. No post dispatch was attempted.' }, receipt.revision)
       return { status: 502, receipt }
+    }
+    } catch (error) {
+      if (!externalAttempted) error.preDispatch = true
+      throw error
     }
   }, async refresh({ owner, actorUid, id }) {
     await actorCanWrite(owner, actorUid); const receipt = await repository.studioGet(owner, 'social_publication', id)
