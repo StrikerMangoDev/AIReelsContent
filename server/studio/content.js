@@ -1,6 +1,7 @@
 import { evidencePassages, resolvePassageClaims } from './evidence-passages.js'
 import { z } from 'zod'
 import { generateJson } from '../providers/llm.js'
+import { cleanCaption, xWeightedLength, renderSocialCaption } from '../publishing/constraints.js'
 import { readFileSync } from 'node:fs'
 const managerPrompt = readFileSync(new URL('../prompts/social-manager.md', import.meta.url), 'utf8')
 
@@ -97,6 +98,8 @@ export function reviewContent(content, evidence, settings) {
       if (actual.length !== expected.length || expected.some(platform => !actual.includes(platform))) issues.push(`Provide exactly the selected platforms: ${expected.join(', ')}.`)
     }
     for (const item of content.strategy.platforms || []) {
+      if (item.platform === 'X' && xWeightedLength(renderSocialCaption({ content, evidence }, 'X')) > 280) issues.push('X: keep the saved post and its cited source link within the 280-character allowance; do not generate an article for X.')
+      if (item.platform === 'YouTube' && [...cleanCaption(item.headline)].length > 100) issues.push('YouTube: keep the approved headline within 100 characters.')
       if (![item.headline, item.hook, item.body, item.alternativeHook].every(value => /\[C\d+\]/.test(value))) issues.push(`${item.platform}: headlines, hooks and body need claim references.`)
     }
   }
@@ -128,6 +131,7 @@ export async function generateContent(evidence, settings, context = {}, generate
   }
   request.system += `\nKeep the package concise: aim for about ${Math.round(settings.duration * 2.2)} spoken words across all scenes combined, captions and platform bodies under 150 words each, one sentence per planning field, and one editorial experiment. Use 3 to 6 scenes when production is requested. Return the entire populated package as one JSON data object; never split the result.`
   request.system += '\nClaims must be facts directly supported by the selected publisher passage. Never add dates, years or numbers absent from that selected passage. Write actual spoken sentences in script and every scene narration; citation markers alone are not content. Do not create attributed claims about what our capture system did not retrieve, missing methodology, missing audience reactions, or other capture limitations. Put those limitations in strategy.factCheck when strategy is selected, or state them clearly as capture notes in prose without attaching a publisher claim marker to the limitation itself. Each scene can pair one cited publisher fact with an explicitly separate uncited capture note. Use factual headline-based hooks rather than turning capture limitations into attributed claims. Never copy unsupported claim/quotation pairs from a previous draft.'
+  request.system += '\nFor X, write a concise post, never an article: aim for no more than 140 body characters after citation markers are removed, reserving room for the server-appended source attribution. The final post must fit 280 weighted characters (ASCII counts one, non-ASCII conservatively counts two, each source URL counts 23). For YouTube, the saved headline must fit 100 characters after citation markers are removed. Do not truncate or change an approved post during publishing; author a complete platform-appropriate version now. Do not invent or include source URLs: the server appends the actual cited evidence URLs.'
   let issues = []; let lastParseFailure; let useFallback = startWithFallback
   if (useFallback && !fallback) throw Object.assign(new Error('Vertex fallback approval is unavailable'), { code: 'BUDGET_BLOCKED' })
   // One shared correction allowance for model JSON, schema or editorial errors; transport/quota errors never retry.

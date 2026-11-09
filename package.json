@@ -12,7 +12,7 @@
     "uuid": "^11.1.1"
   },
   "scripts": {
-    "postinstall": "patch-package --error-on-fail",
+    "postinstall": "patch-package --error-on-fail && node node_modules/ffmpeg-static/install.js",
     "dev": "concurrently -k -n api,web \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite",
     "dev:api": "node --watch server/index.js",
@@ -33,6 +33,7 @@
     "@google/genai": "^2.24.0",
     "@hexclave/js": "1.0.133",
     "@hexclave/react": "1.0.133",
+    "@resvg/resvg-js": "^2.6.2",
     "@supabase/supabase-js": "^2.117.2",
     "@vercel/functions": "3.11.0",
     "@vitejs/plugin-react": "latest",
@@ -41,6 +42,7 @@
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
+    "ffmpeg-static": "^5.3.0",
     "firebase": "^12.19.0",
     "firebase-admin": "^14.5.0",
     "helmet": "^8.3.0",

@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { createHash } from 'node:crypto'
 import { mediaConfig, generateMedia, refreshVideo } from './provider.js'
 import { saveMediaFile, readMediaFile, signedMediaUrl } from './files.js'
+import { contentHash } from '../studio/approval.js'
+import { inspectMediaBytes, assessAutomaticMedia } from './acceptance.js'
 
 const schema = z.object({ kind: z.enum(['image', 'audio', 'video']), prompt: z.string().trim().min(10).max(12000), requestId: z.string().uuid(), confirmCost: z.literal(true), voice: z.enum(['Female', 'Male']).optional(), language: z.enum(['English', 'Hindi', 'Hinglish']).optional(), delivery: z.string().trim().max(300).optional() }).strict()
 const publicAsset = ({ operation: _operation, ...asset }) => asset
@@ -24,7 +26,12 @@ export function createMediaRouter({ repository, auth, generate = generateMedia, 
   async function finish(uid, asset, result) {
     if (result.operation) return repository.studioPut(uid, 'asset', asset.id, { ...asset, operation: result.operation }, asset.revision)
     await saveFile(asset.id, result.bytes, result.mime)
-    return repository.studioPut(uid, 'asset', asset.id, { ...asset, status: 'completed', mime: result.mime, bytes: result.bytes.length, operation: null }, asset.revision)
+    const completed = { ...asset, status: 'completed', mime: result.mime, bytes: result.bytes.length, sha256: createHash('sha256').update(result.bytes).digest('hex'), operation: null, provenance: result.provenance || null, technicalReport: result.technicalReport || null, captions: result.captions || null }
+    const pack = await repository.studioGet(uid, 'package', asset.packageId)
+    const inspection = inspectMediaBytes(completed, result.bytes)
+    const assessment = assessAutomaticMedia(pack, [completed], [inspection])
+    completed.verification = { status: assessment.eligible ? 'passed' : 'blocked', issues: assessment.issues, method: assessment.method, limitations: assessment.limitations }
+    return repository.studioPut(uid, 'asset', asset.id, completed, asset.revision)
   }
   router.post('/api/studio/packages/:id/assets', ...protect, async (req, res) => {
     const parsed = schema.safeParse(req.body)
@@ -44,9 +51,9 @@ export function createMediaRouter({ repository, auth, generate = generateMedia, 
     // Separate quota bucket: media usage never consumes content-writing allowance.
     const reservation = await repository.studioReserve(`${uid}:media`, input.requestId, 10)
     if (!reservation.reserved) return res.status(409).json({ error: 'This request was already submitted. Reload assets before retrying.' })
-    const asset = await repository.studioPut(uid, 'asset', id, { requestId: input.requestId, packageId: pack.id, packageRevision: pack.revision, kind: input.kind, prompt: input.prompt, ...(input.voice ? { voice: input.voice } : {}), ...(input.language ? { language: input.language } : {}), ...(input.delivery ? { delivery: input.delivery } : {}), estimatedUsd: capability.estimatedUsd, status: 'running', error: null }, 0)
+    const asset = await repository.studioPut(uid, 'asset', id, { requestId: input.requestId, packageId: pack.id, packageRevision: pack.revision, packageContentHash: contentHash(pack), createdBy: req.identity.uid, kind: input.kind, prompt: input.prompt, ...(input.voice ? { voice: input.voice } : {}), ...(input.language ? { language: input.language } : {}), ...(input.delivery ? { delivery: input.delivery } : {}), estimatedUsd: capability.estimatedUsd, status: 'running', error: null }, 0)
     try {
-      res.status(201).json(publicAsset(await finish(uid, asset, await generate(input.kind, input.prompt, { voice: input.voice, language: input.language, delivery: input.delivery }))))
+      res.status(201).json(publicAsset(await finish(uid, asset, await generate(input.kind, input.prompt, { package: pack, voice: input.voice, language: input.language, delivery: input.delivery }))))
     } catch {
       const failed = await repository.studioPut(uid, 'asset', id, { ...asset, status: 'failed', error: 'Media generation or storage failed. Provider usage may still have been charged; retry creates a new request.' }, asset.revision)
       res.status(502).json(publicAsset(failed))

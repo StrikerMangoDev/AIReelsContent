@@ -1,8 +1,10 @@
 import { GoogleGenAI, GenerateVideosOperation } from '@google/genai'
 import { env } from '../config/env.js'
 import { assertCapability, capabilityAllowed } from '../policy.js'
+import { renderLocalMedia } from './render.js'
 
 export function mediaConfig() {
+  if (env.CONTENT_LOCAL_MEDIA === 'true') return { image: { enabled: true, estimatedUsd: 0, method: 'editorial-local-v1' }, video: { enabled: true, estimatedUsd: 0, method: 'editorial-local-v1' }, audio: { enabled: false, estimatedUsd: null } }
   return Object.fromEntries(['image', 'audio', 'video'].map(kind => {
     const model = process.env[`STUDIO_${kind.toUpperCase()}_MODEL`]
     const price = process.env[`STUDIO_${kind.toUpperCase()}_ESTIMATE_USD`]
@@ -37,8 +39,9 @@ export function videoResult(operation) {
   return { bytes: Buffer.from(video.videoBytes, 'base64'), mime: 'video/mp4' }
 }
 
-export async function generateMedia(kind, prompt) {
+export async function generateMedia(kind, prompt, options = {}) {
   assertCapability('media')
+  if (env.CONTENT_LOCAL_MEDIA === 'true') return renderLocalMedia(kind, options.package)
   const model = process.env[`STUDIO_${kind.toUpperCase()}_MODEL`]
   if (kind === 'audio' || /gemini/i.test(model || '')) throw new Error('Gemini generation is disabled')
   const ai = client()

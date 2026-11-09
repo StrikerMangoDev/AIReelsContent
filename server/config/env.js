@@ -20,6 +20,8 @@ const schema = z.object({
   STUDIO_DAILY_GENERATIONS: z.coerce.number().int().min(1).max(100).default(10),
   STUDIO_RESEARCH_SCHEDULER: z.enum(['true', 'false']).default('false'),
   CONTENT_LIVE_FREE_CALLS: z.enum(['true', 'false']).default('false'),
+  CONTENT_LOCAL_MEDIA: z.enum(['true', 'false']).default('false'),
+  CONTENT_ACCOUNT_AUTOMATION: z.enum(['true', 'false']).default('false'),
   ENABLE_SCHEDULER: z.enum(['true', 'false']).default('false'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   STORAGE_PROVIDER: z.enum(['sqlite', 'supabase']).default('sqlite'),

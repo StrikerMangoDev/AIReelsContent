@@ -10,9 +10,12 @@ import { createAuthMiddleware, requireAdmin, publicAuthConfig } from '../auth/in
 import { eventSchema } from '../services/analytics.js'
 import { createMediaRouter } from '../media/router.js'
 import { studioRouter } from '../studio/routes.js'
+import { createPublishingRouter } from '../publishing/router.js'
+import { createAutomationRouter } from '../automation/router.js'
+import { assessAutomationRelease } from '../automation/services.js'
 
 const querySchema = z.object({ region: z.enum(['Global', ...regions]).optional(), category: z.enum(['All signals', ...categories]).optional(), q: z.string().max(200).optional(), page: z.coerce.number().int().min(1).max(200).default(1), limit: z.coerce.number().int().min(1).max(60).default(24), timezone: z.string().max(100).default('UTC') })
-export function createApp({ repository, sources, verifyIdentity, onResearchAdmitted, onGenerationAdmitted }) {
+export function createApp({ repository, sources, verifyIdentity, onResearchAdmitted, onGenerationAdmitted, onAutomationAdmitted }) {
   const app = express()
   const auth = createAuthMiddleware(verifyIdentity)
   app.disable('x-powered-by'); app.use(helmet()); app.use(express.json({ limit: '128kb' }))
@@ -53,7 +56,9 @@ export function createApp({ repository, sources, verifyIdentity, onResearchAdmit
     response.redirect(302, article.url)
   })
   app.use(createMediaRouter({ repository, auth }))
-  app.use('/api/studio', studioRouter({ repository, auth, onResearchAdmitted, onGenerationAdmitted }))
+  app.use('/api/studio', createPublishingRouter({ repository, auth, assessReady: assessAutomationRelease }))
+  app.use('/api/studio', createAutomationRouter({ repository, auth, onAutomationAdmitted }))
+  app.use('/api/studio', studioRouter({ repository, auth, onResearchAdmitted, onGenerationAdmitted, onAutomationAdmitted }))
   app.use('/api', (_request, response) => response.status(404).json({ error: 'Endpoint not found' }))
   app.use((error, _request, response, _next) => {
     console.error(JSON.stringify({ event: 'api_request_failed', requestId: response.getHeader('X-Request-Id'), type: error.name, code: error.code || null, storageCode: error.cause?.code || null }))

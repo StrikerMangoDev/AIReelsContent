@@ -5,7 +5,7 @@ import { renderReel } from '@/services/reel'
 import { useAuth } from '@/context/auth-state'
 
 type Kind = 'image' | 'audio' | 'video'
-type Asset = { id: string; requestId?: string; kind: Kind; status: string; error?: string; estimatedUsd?: number; prompt: string; packageRevision: number; voice?: string; language?: string }
+type Asset = { id: string; requestId?: string; kind: Kind; status: string; error?: string; estimatedUsd?: number; prompt: string; packageRevision: number; voice?: string; language?: string; verification?: { status: string; issues?: string[] }; sha256?: string }
 type MediaRequest = { kind: Kind; prompt: string; requestId: string; confirmCost: true; voice?: string; language?: string; delivery?: string }
 type MediaConfig = Record<Kind, { enabled: boolean; estimatedUsd: number | null }>
 const clean = (text: string) => text.replace(/\s*\[C\d+\]/g, '').trim()
@@ -42,9 +42,15 @@ export function StudioMedia({ packageId, initialPrompt, script, strategy, scenes
   const controller = useRef<AbortController | null>(null)
   useEffect(() => {
     let active = true
-    Promise.all([studioRequest<MediaConfig>('/media/config'), studioRequest<{ assets: Asset[] }>(`/packages/${packageId}/assets`)]).then(([settings, list]) => { if (active) { setConfig(settings); acceptAssets(list.assets) } }).catch(cause => { if (active) setError(cause.message) })
+    Promise.all([studioRequest<MediaConfig>('/media/config'), studioRequest<{ assets: Asset[] }>(`/packages/${packageId}/assets`)]).then(([settings, list]) => {
+      if (active) {
+        setConfig(settings); acceptAssets(list.assets)
+        const available = (['audio', 'image', 'video'] as Kind[]).find(value => settings[value]?.enabled)
+        if (available) { setKind(available); setPrompt(available === 'audio' ? clean(script) : initialPrompt) }
+      }
+    }).catch(cause => { if (active) setError(cause.message) })
     return () => { active = false; controller.current?.abort() }
-  }, [packageId, acceptAssets])
+  }, [packageId, acceptAssets, script, initialPrompt])
   useEffect(() => () => { if (preview) { URL.revokeObjectURL(preview.url); if (preview.srt) URL.revokeObjectURL(preview.srt) } }, [preview])
   const hasRunning = Boolean(pending) || assets.some(asset => asset.status === 'running')
   useEffect(() => {
@@ -80,7 +86,7 @@ export function StudioMedia({ packageId, initialPrompt, script, strategy, scenes
   }
   const locked = Boolean(busy) || disabled || Boolean(pending)
   return <section>
-    <div className="production-callout"><h3>A complete narrated draft</h3><p>Generate the voiceover, then export a vertical video with animated text scenes and captions. Your team can also use the scene prompts for richer visual production.</p><p className="studio-muted">Video export is WebM, runs in this browser, and takes the length of the narration. Caption timing is estimated; review before posting. No stock footage or music is added.</p></div>
+    <div className="production-callout"><h3>Media for this content</h3><p>Create an illustration, voiceover or clip using the saved production directions. Preview files are drafts until their release checks pass.</p><details><summary>About narrated video exports</summary><p className="studio-muted">Video export is WebM, runs in this browser, and takes the length of the narration. Caption timing is estimated. No stock footage or music is added.</p></details></div>
     {error && <p className="studio-alert" role="alert">{error}</p>}
     {pending && <p role="status">The last request has an uncertain response. Checking saved assets automatically. Retry uses the same request and cannot start a duplicate.</p>}
     <div className="studio-fields"><label>Asset<select value={kind} disabled={locked} onChange={event => { const next = event.target.value as Kind; setKind(next); setPrompt(next === 'audio' ? clean(script) : initialPrompt); setConfirmed(false) }}><option value="audio">Full voiceover</option><option value="image">Scene image</option><option value="video">8-second illustrative clip</option></select></label>
@@ -103,7 +109,7 @@ export function StudioMedia({ packageId, initialPrompt, script, strategy, scenes
       if (asset.status === 'completed') setPreview({ url: URL.createObjectURL(await assetFile(asset)), kind: asset.kind, id: asset.id })
     })}>{busy || (pending ? 'Recover last request' : `Generate ${kind === 'audio' ? 'voiceover' : kind}`)}</button>
     {busy === 'Exporting narrated video' && <div role="status"><p>Exporting {progress}% — keep this tab visible.</p><progress max={100} value={progress} /><button onClick={() => controller.current?.abort()}>Cancel export</button></div>}
-    <div className="studio-package-list">{assets.map(asset => <article key={asset.id} className="studio-evidence"><h3>{asset.kind} · {asset.status}</h3><p className="studio-muted">Created from revision {asset.packageRevision}{asset.voice ? ` · ${asset.voice} · ${asset.language}` : ''}</p>{asset.error && <p role="alert">{asset.error}</p>}{asset.status === 'running' && <p role="status">Processing. Video progress is checked automatically.</p>}{asset.status === 'completed' && <div className="studio-toolbar"><button disabled={locked} onClick={() => void run('Loading preview', async () => setPreview({ url: URL.createObjectURL(await assetFile(asset)), kind: asset.kind, id: asset.id }))}>Preview & download</button>{asset.kind === 'audio' && <button disabled={locked || clean(asset.prompt) !== clean(script)} title={clean(asset.prompt) !== clean(script) ? 'This voiceover differs from the current script. Generate a matching voiceover first.' : undefined} onClick={() => void run('Exporting narrated video', () => assemble(asset))}>Export narrated video</button>}</div>}</article>)}</div>
-    {preview && <div className="studio-media-preview">{preview.kind === 'image' ? <img src={preview.url} alt="Generated illustrative production asset" /> : preview.kind === 'audio' ? <audio src={preview.url} controls /> : <video src={preview.url} controls />}<div className="studio-toolbar"><a className="studio-button" href={preview.url} download={preview.id.startsWith('reel-') ? preview.id : `asset-${preview.id}`}>Download {preview.kind}</a>{preview.srt && <a className="studio-button" href={preview.srt} download="captions.srt">Download subtitles</a>}</div></div>}
+    <div className="studio-package-list">{assets.map(asset => <article key={asset.id} className="studio-evidence"><h3>{asset.kind} · {asset.status}</h3><p className="studio-muted">Created from revision {asset.packageRevision}{asset.voice ? ` · ${asset.voice} · ${asset.language}` : ''}</p>{asset.verification ? <p role="status">Media checks: {asset.verification.status.replaceAll('_', ' ')}{asset.verification.issues?.length ? ` — ${asset.verification.issues.join(' ')}` : ''}</p> : <p className="studio-muted">Release checks have not been recorded for this asset.</p>}{asset.error && <p role="alert">{asset.error}</p>}{asset.status === 'running' && <p role="status">Processing. Video progress is checked automatically.</p>}{asset.status === 'completed' && <div className="studio-toolbar"><button disabled={locked} onClick={() => void run('Loading preview', async () => setPreview({ url: URL.createObjectURL(await assetFile(asset)), kind: asset.kind, id: asset.id }))}>Preview draft</button>{asset.kind === 'audio' && <button disabled={locked || clean(asset.prompt) !== clean(script)} title={clean(asset.prompt) !== clean(script) ? 'This voiceover differs from the current script. Generate a matching voiceover first.' : undefined} onClick={() => void run('Exporting narrated video', () => assemble(asset))}>Export narrated video</button>}</div>}</article>)}</div>
+    {preview && <div className="studio-media-preview">{preview.kind === 'image' ? <img src={preview.url} alt="Generated illustrative production asset" /> : preview.kind === 'audio' ? <audio src={preview.url} controls /> : <video src={preview.url} controls />}<div className="studio-toolbar"><a className="studio-button" href={preview.url} download={preview.id.startsWith('reel-') ? preview.id : `asset-${preview.id}`}>Download draft {preview.kind}</a>{preview.srt && <a className="studio-button" href={preview.srt} download="captions.srt">Download subtitles</a>}</div></div>}
   </section>
 }

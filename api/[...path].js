@@ -1,5 +1,6 @@
 import { waitUntil } from '@vercel/functions'
 import { runContentJob } from '../server/studio/job-worker.js'
+import { dispatchAutomation } from './automation.js'
 
 export function vercelJobDispatcher(repository, retain = waitUntil, run = runContentJob) {
   return ({ uid, requestId }) => {
@@ -16,7 +17,7 @@ export default async function handler(request, response) {
     pending ??= Promise.all([import('../server/http/app.js'), import('../server/storage/index.js'), import('../server/config/sources.js')])
       .then(([{ createApp }, { repository }, { sources }]) => {
         const dispatch = vercelJobDispatcher(repository)
-        return createApp({ repository, sources, onResearchAdmitted: dispatch, onGenerationAdmitted: dispatch })
+        return createApp({ repository, sources, onResearchAdmitted: dispatch, onGenerationAdmitted: dispatch, onAutomationAdmitted: input => dispatchAutomation(input, repository) })
       })
     const app = await pending
     return app(request, response)

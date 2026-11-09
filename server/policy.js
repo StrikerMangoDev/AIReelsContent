@@ -3,6 +3,7 @@ import { env } from './config/env.js'
 // Keys and credit balances are not authorization to dispatch provider work.
 export function capabilityAllowed(capability, config = env) {
   if (capability === 'research' || capability === 'generation') return config.CONTENT_LIVE_FREE_CALLS === 'true'
+  if (capability === 'media') return config.CONTENT_LOCAL_MEDIA === 'true'
   return false
 }
 
