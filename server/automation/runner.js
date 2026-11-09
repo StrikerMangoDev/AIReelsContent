@@ -107,7 +107,14 @@ export async function runAccountAutomation({ repository, owner, profile, service
           run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, stages: [...run.stages, stageRecord], status: 'blocked', error: 'Stage checks did not permit automatic continuation.', findings: result?.issues || [] }, run.revision); break
         }
         if (['reserved', 'running', 'dispatch_unknown', 'pending'].includes(outcome?.status)) {
-          run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, stages: [...run.stages, stageRecord], status: 'dispatch_unknown', jobId: result.jobId || null, error: 'An admitted operation has not completed. Reconcile its stable job before continuing.' }, run.revision); break
+          run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, stages: [...run.stages, stageRecord], status: 'dispatch_unknown', jobId: result.jobId || null, error: 'An admitted operation has not completed. Reconcile its stable job before continuing.' }, run.revision)
+          if (outcome.status === 'dispatch_unknown' && ['research', 'generate'].includes(phase) && !run.replacements?.[phase] && typeof services.reconcile === 'function') {
+            try {
+              const available = await services.reconcile({ repository, owner, profile: currentProfile, run, phase, requestId: id, actorUid: run.actorUid, freeOnly: true, paidBudgetMicros: 0 })
+              deferred = available?.status === 'free_text_replacement_available' && available.replacementOf === id
+            } catch { /* Failed readback never schedules another provider operation. */ }
+          }
+          break
         }
         const next = { ...run, stages: [...run.stages, stageRecord], status: 'pending' }
         if (phase === 'research') {

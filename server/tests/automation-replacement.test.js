@@ -54,18 +54,34 @@ test('runner persists only one text replacement ID and never replaces unknown pu
       reconcile: async ctx => ({ status: 'free_text_replacement_available', replacementOf: ctx.requestId }),
       review: async () => ({ eligible: true }), render: async () => ({ assets: ['asset'] }), publish: async () => { throw new Error('must not publish') },
     }
-    await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    const first = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    assert.equal(first.deferred, true, 'only an eligible terminal text timeout schedules one continuation')
     const second = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    assert.equal(second.deferred, false, 'the replacement timeout cannot schedule another replacement')
     assert.equal(calls.length, 2); assert.notEqual(calls[0].requestId, calls[1].requestId)
     assert.equal(calls[1].replacementOf, calls[0].requestId)
     assert.equal(second.results[0].replacements.generate.originalRequestId, calls[0].requestId)
-    await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    const repeat = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    assert.equal(repeat.deferred, false)
     assert.equal(calls.length, 2)
     const run = second.results[0]
     await repository.studioPut('alice', 'automation_run', run.id, { ...run, stage: 'publish', status: 'dispatch_unknown' }, run.revision)
-    await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    const publication = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    assert.equal(publication.deferred, false)
     assert.equal(calls.length, 2)
   } finally { repository.close() }
+})
+
+test('queued or running text work cannot schedule a replacement continuation', async () => {
+  for (const status of ['reserved', 'running', 'pending']) {
+    const repository = createRepository(':memory:')
+    try {
+      const profile = await fixture(repository); let reconciles = 0
+      const services = { research: async () => ({ status }), generate: async () => {}, review: async () => {}, render: async () => {}, publish: async () => {}, reconcile: async () => { reconciles++; return { status: 'free_text_replacement_available' } } }
+      const result = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+      assert.equal(result.deferred, false); assert.equal(reconciles, 0)
+    } finally { repository.close() }
+  }
 })
 
 test('late original worker response cannot overwrite a replacement package', async () => {
