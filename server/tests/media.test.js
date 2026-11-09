@@ -30,9 +30,9 @@ test('media generation is owner-scoped, idempotent and persists files without le
     assert.equal((await request('/packages/draft/assets', 'owner', { ...input, prompt: 'A different prompt for this request' })).status, 409)
     const speech = { ...input, kind: 'audio', requestId: randomUUID(), voice: 'Male', language: 'Hinglish', delivery: 'Calm' }
     assert.equal((await request('/packages/draft/assets', 'owner', speech)).status, 201)
-    assert.equal(options.package.id, 'draft')
-    assert.equal(options.package.content.script, 'evidence backed script')
-    const { package: _package, ...speechOptions } = options
+    const { package: mediaPackage, ...speechOptions } = options
+    assert.equal(mediaPackage.id, 'draft')
+    assert.equal(mediaPackage.content.script, 'evidence backed script')
     assert.deepEqual(speechOptions, { voice: 'Male', language: 'Hinglish', delivery: 'Calm' })
     assert.equal((await request('/packages/draft/assets', 'owner', { ...speech, voice: 'Female' })).status, 409)
   } finally { await new Promise(resolve => server.close(resolve)); repository.close() }

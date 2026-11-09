@@ -10,7 +10,7 @@ import { fetchEvidence } from '../studio/evidence.js'
 import { workspaceRole } from '../studio/workspaces.js'
 import { assessRelease } from '../studio/release.js'
 import { generateJson } from '../providers/llm.js'
-import { reviewAutomaticText, assessAutomaticText } from './review.js'
+import { reviewAutomaticText, assessAutomaticText, automaticTextPolicyVersion } from './review.js'
 import { renderLocalMedia } from '../media/render.js'
 import { saveMediaFile, readMediaFile } from '../media/files.js'
 import { inspectMediaBytes, assessAutomaticMedia, assessMediaAcceptance } from '../media/acceptance.js'
@@ -22,6 +22,12 @@ const hash = value => createHash('sha256').update(value).digest('hex')
 const uuid = value => { const digest = hash(value); return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}` }
 const blocked = message => Object.assign(new Error(message), { preDispatch: true })
 const writingConstraint = 'Return the complete requested schema concisely. Use a factual title under 65 characters, at most three supported claims totalling at most 48 words, website body at most 180 words, each planning field one sentence, and short platform adaptations. Preserve necessary attribution, citation markers and source limitations. These length targets do not authorize adding unsupported numbers to the content.'
+
+function reviewOutcome(pack, profile) {
+  const actual = pack.automaticReview
+  const preflightIssues = actual?.preflightIssues || []
+  return { ...assessAutomaticText(pack, profile), status: actual?.status || 'blocked', repairable: actual?.policyVersion === automaticTextPolicyVersion && ((actual?.status === 'needs_revision' && Boolean(actual.result)) || (actual?.status === 'blocked' && preflightIssues.length > 0)), reviewResult: actual?.result || null, preflightIssues, reviewId: actual?.runId || null, contentHash: actual?.contentHash || null }
+}
 
 function normalizedResearch(report, context) {
   const day = context.localDate || new Date(context.now || Date.now()).toISOString().slice(0, 10)
@@ -115,7 +121,19 @@ export function createAutomationServices(repository, { research = researchNiche,
       const { owner, profile, requestId, actorUid, run } = context
       const id = hash(`${run.id}:package`).slice(0, 32)
       let pack = await repository.studioGet(owner, 'package', id)
-      if (pack?.content) return pack
+      const quality = run.qualityRevision
+      if (pack?.content && (!quality || (pack.jobId === requestId && pack.status === 'completed'))) return pack
+      if (quality) {
+        await checkConsent(context)
+        const previous = await repository.studioJobGet(owner, requestId)
+        if (previous) {
+          if (previous.scope?.packageId !== pack?.id || previous.scope?.actorUid !== actorUid || previous.scope?.qualityRevisionOf !== quality.reviewId || previous.scope?.instruction !== quality.instruction) throw blocked('The quality repair identifier belongs to different content or review feedback.')
+          return { status: previous.status, jobId: requestId, package: previous.result }
+        }
+        const actualReview = pack?.automaticReview
+        const repairable = (actualReview?.status === 'needs_revision' && actualReview.result) || (actualReview?.status === 'blocked' && actualReview.preflightIssues?.length > 0)
+        if (!pack?.content || pack.status !== 'completed' || quality.version !== 1 || !quality.instruction || quality.contentHash !== contentHash(pack) || actualReview?.policyVersion !== automaticTextPolicyVersion || actualReview?.runId !== quality.reviewId || !repairable || actualReview?.contentHash !== contentHash(pack)) throw blocked('Quality repair requires the actual completed review of this exact saved content.')
+      }
       if (!pack) {
         const report = await repository.studioGet(owner, 'research', run.researchId)
         const topic = report?.opportunities[run.topic?.index]
@@ -133,7 +151,7 @@ export function createAutomationServices(repository, { research = researchNiche,
         const prior = await freeTextReplacementJob(repository, owner, context.replacementOf, 'generation', actorUid)
         if (!prior || prior.scope.packageId !== pack.id || pack.jobId !== prior.id || pack.status !== 'dispatch_unknown' || pack.content) throw blocked('The previous generation cannot be replaced by a bounded free text operation.')
       }
-      const scope = { operation: 'generation', packageId: pack.id, revision: pack.revision, instruction: '', actorUid, contentHash: contentHash(pack), generationProvider: 'free', llmModel: env.LLM_MODEL, ...(context.replacementOf ? { replacementOf: context.replacementOf } : {}) }
+      const scope = { operation: 'generation', packageId: pack.id, revision: pack.revision, instruction: quality?.instruction || '', actorUid, contentHash: contentHash(pack), generationProvider: 'free', llmModel: env.LLM_MODEL, ...(quality ? { qualityRevisionOf: quality.reviewId } : context.replacementOf ? { replacementOf: context.replacementOf } : {}) }
       let admission
       try { admission = await repository.studioJobReserve(owner, requestId, hash(JSON.stringify(scope)), env.STUDIO_DAILY_GENERATIONS, scope) }
       catch (error) { throw Object.assign(error, { preDispatch: true }) }
@@ -141,7 +159,7 @@ export function createAutomationServices(repository, { research = researchNiche,
       let cost
       try {
         cost = await reserveFreeOperation(repository, owner, requestId, scope)
-        pack = await repository.studioPut(owner, 'package', pack.id, { ...pack, status: 'generating', generatedBy: actorUid, jobId: requestId, independentReview: null, approval: null }, pack.revision)
+        pack = await repository.studioPut(owner, 'package', pack.id, { ...pack, status: 'generating', generatedBy: actorUid, jobId: requestId, automaticReview: null, independentReview: null, approval: null }, pack.revision)
         await repository.studioJobUpdate(owner, requestId, { status: 'reserved', ready: true }, admission.job.revision, 'reserved')
       } catch (error) {
         if (cost?.status === 'reserved') await repository.budgetTransition(owner, cost.id, cost.revision, 'cancel')
@@ -155,14 +173,14 @@ export function createAutomationServices(repository, { research = researchNiche,
     async review(context) {
       await checkConsent(context)
       const pack = await savedPack(context)
-      if (!(await repository.studioReserve(`${context.owner}:automatic-review`, context.requestId, 10)).reserved) throw blocked('The review attempt already exists or its allowance is exhausted.')
+      if (!(await repository.studioReserve(`${context.owner}:automatic-review`, context.requestId, env.STUDIO_DAILY_GENERATIONS)).reserved) throw blocked('The review attempt already exists or its allowance is exhausted.')
       const scope = { operation: 'generation', purpose: 'automatic-review', packageId: pack.id, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null) }
       const cost = await reserveFreeOperation(repository, context.owner, context.requestId, scope)
       if (cost.status !== 'reserved') throw blocked('The previous evaluator request requires reconciliation.')
       await repository.budgetTransition(context.owner, cost.id, cost.revision, 'dispatch')
       const automaticReview = await evaluate(pack, context.profile, { actorId: context.actorUid, ...(evaluate === reviewAutomaticText ? { generate: boundedGenerate, model: env.LLM_MODEL } : {}) })
       const saved = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, automaticReview }, pack.revision)
-      return assessAutomaticText(saved, context.profile)
+      return reviewOutcome(saved, context.profile)
     },
     async render(context) {
       if (render === renderLocalMedia) assertCapability('media')
@@ -191,7 +209,7 @@ export function createAutomationServices(repository, { research = researchNiche,
     async reconcile(context) {
       if (['research', 'generate'].includes(context.phase)) {
         const job = await repository.studioJobGet(context.owner, context.requestId)
-        if (job?.status === 'dispatch_unknown' && !context.run.replacements?.[context.phase]) {
+        if (job?.status === 'dispatch_unknown' && !context.run.qualityRevision && !context.run.replacements?.[context.phase]) {
           await checkConsent(context)
           const prior = await freeTextReplacementJob(repository, context.owner, context.requestId, context.phase === 'generate' ? 'generation' : 'research', context.actorUid)
           if (prior) return { status: 'free_text_replacement_available', replacementOf: prior.id }
@@ -203,7 +221,7 @@ export function createAutomationServices(repository, { research = researchNiche,
       }
       if (context.phase === 'review') {
         const pack = await savedPack(context)
-        return pack.automaticReview ? assessAutomaticText(pack, context.profile) : { status: 'dispatch_unknown' }
+        return pack.automaticReview ? reviewOutcome(pack, context.profile) : { status: 'dispatch_unknown' }
       }
       if (context.phase === 'render') {
         const assets = (await repository.studioList(context.owner, 'asset')).filter(asset => asset.requestId === context.requestId && asset.packageId === context.run.packageId && asset.status === 'completed')
