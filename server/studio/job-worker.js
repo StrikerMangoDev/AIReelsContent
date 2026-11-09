@@ -1,4 +1,5 @@
 import { researchChanges } from './research-changes.js'
+import { env } from '../config/env.js'
 import { createHash } from 'node:crypto'
 import { generateContent, reviewContent } from './content.js'
 import { contentHash } from './approval.js'
@@ -58,6 +59,7 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
   }
   try {
     await checkActor()
+    if (scope.llmModel && scope.llmModel !== env.LLM_MODEL) throw failure('The admitted free model changed before dispatch. A new model-bound operation is required.')
     cost = await repository.budgetGet(uid, requestId)
     if (!cost || cost.status !== 'reserved' || cost.cancellationRequested || cost.scopeHash !== costScopeHash(scope, cost.quote)) throw failure('A matching reserved budget is required before dispatch.')
     if (scope.operation === 'generation') {

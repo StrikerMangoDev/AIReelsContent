@@ -6,6 +6,7 @@ export const automationRegistryOwner = '__automation_registry__'
 const digest = value => createHash('sha256').update(value).digest('hex')
 const dayInZone = (now, timezone) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 const requestId = value => { const hash = digest(value); return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}` }
+const stageRequestId = (unitId, phase, run) => requestId(`${unitId}:${phase}${run.replacements?.[phase] ? ':replacement:1' : ''}`)
 const phases = ['research', 'generate', 'review', 'render', 'publish']
 const held = status => !['blocked', 'skipped'].includes(status)
 
@@ -64,14 +65,19 @@ export async function runAccountAutomation({ repository, owner, profile, service
       let reconciled
       if (run?.status.endsWith('_running') || run?.status === 'dispatch_unknown') {
         if (typeof services.reconcile === 'function') {
-          try { reconciled = await services.reconcile({ repository, owner, profile, run, phase: run.stage, requestId: requestId(`${unitId}:${run.stage}`), actorUid: profile.automaticPolicy.consentedBy, freeOnly: true, paidBudgetMicros: 0 }) }
+          try { reconciled = await services.reconcile({ repository, owner, profile, run, phase: run.stage, requestId: stageRequestId(unitId, run.stage, run), actorUid: profile.automaticPolicy.consentedBy, freeOnly: true, paidBudgetMicros: 0 }) }
           catch { /* Reconciliation may read receipts, never repeat provider dispatch. */ }
         }
-        if (!reconciled || ['reserved', 'running', 'dispatch_unknown', 'pending'].includes(reconciled.status)) {
+        if (reconciled?.status === 'free_text_replacement_available') {
+          if (!['research', 'generate'].includes(run.stage) || run.replacements?.[run.stage] || reconciled.replacementOf !== stageRequestId(unitId, run.stage, run)) { results.push(run); continue }
+          const replacement = { originalRequestId: reconciled.replacementOf, replacementRequestId: requestId(`${unitId}:${run.stage}:replacement:1`), reason: 'One new free text operation after local provider timeout; original outcome remains unknown.', createdAt: new Date().toISOString() }
+          run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, replacements: { ...run.replacements, [run.stage]: replacement }, status: 'pending', error: null }, run.revision)
+          reconciled = null
+        } else if (!reconciled || ['reserved', 'running', 'dispatch_unknown', 'pending'].includes(reconciled.status)) {
           if (run.status !== 'dispatch_unknown') run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, status: 'dispatch_unknown', error: 'A prior worker stopped during a provider operation. Its receipt remains uncertain; no automatic retry was sent.' }, run.revision)
           results.push(run); continue
         }
-        run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, status: 'pending', error: null }, run.revision)
+        if (run.status !== 'pending') run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, status: 'pending', error: null }, run.revision)
       }
       const existingRuns = await repository.studioList(owner, 'automation_run')
       const publications = await repository.studioList(owner, 'social_publication')
@@ -86,11 +92,11 @@ export async function runAccountAutomation({ repository, owner, profile, service
         if (!currentProfile || costScopeHash(currentProfile, null) !== profileHash || !await authorizedProfile(repository, owner, currentProfile)) {
           run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, status: 'blocked', error: 'Account profile or owner consent changed before the next stage.' }, run.revision); break
         }
-        const id = requestId(`${unitId}:${phase}`)
+        const id = stageRequestId(unitId, phase, run)
         run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, stage: phase, status: `${phase}_running` }, run.revision)
         let result
         try {
-          result = reconciled || await services[phase]({ repository, owner, profile: currentProfile, slot, localDate: plan.localDate, now, run, requestId: id, actorUid: run.actorUid, freeOnly: true, paidBudgetMicros: 0 })
+          result = reconciled || await services[phase]({ repository, owner, profile: currentProfile, slot, localDate: plan.localDate, now, run, requestId: id, replacementOf: run.replacements?.[phase]?.originalRequestId, actorUid: run.actorUid, freeOnly: true, paidBudgetMicros: 0 })
           reconciled = null
         } catch (error) {
           run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, status: error.preDispatch === true ? 'blocked' : 'dispatch_unknown', error: error.preDispatch === true ? 'The stage was blocked before dispatch.' : 'Stage outcome is uncertain. Reconcile its actual job or provider receipt before any retry.' }, run.revision); break

@@ -58,3 +58,32 @@ test('account plans keep distinct briefs, require explicit automation consent an
   assert.equal(calls.some(call => call.path === '/automation/run'), false, 'status polling cannot start new content or publication')
   assert.ok(calls.filter(call => call.method === 'POST').every(call => call.path.endsWith('/refresh')))
 })
+
+test('local media describes actual silent captioned output while preserving configured legacy clip labels', async () => {
+  const source = await readFile(new URL('../../src/pages/app/StudioMedia.tsx', import.meta.url), 'utf8')
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText
+  for (const local of [true, false]) {
+    const slots = []; const effects = []; let cursor = 0; let effectCursor = 0
+    const element = (type, props) => ({ type, props })
+    const modules = {
+      react: { useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value }] }, useCallback: value => value, useRef: () => ({ current: null }), useEffect(action) { const index = effectCursor++; if (!effects[index]) { effects[index] = true; action() } } },
+      'react/jsx-runtime': { jsx: element, jsxs: element },
+      '@/services/studio-api': { studioAuthHeaders: async () => ({}), studioRequest: async path => path === '/media/config' ? { image: { enabled: true, estimatedUsd: local ? 0 : 0.04, ...(local ? { method: 'editorial-local-v1' } : {}) }, video: { enabled: true, estimatedUsd: local ? 0 : 1, ...(local ? { method: 'editorial-local-v1' } : {}) }, audio: { enabled: false, estimatedUsd: null } } : { assets: [] } },
+      '@/services/reel': { renderReel: () => { throw new Error('This copy check must not render media') } },
+      '@/context/auth-state': { useAuth: () => ({ identity: { uid: 'owner' } }) },
+    }
+    const exports = {}
+    runInNewContext(code, { exports, sessionStorage: { getItem: () => null }, require: name => { assert.ok(name in modules, name); return modules[name] } })
+    const render = () => { cursor = 0; effectCursor = 0; return exports.StudioMedia({ packageId: 'package-a', initialPrompt: 'A source-backed production direction', script: 'A source-backed narration sentence.', scenes: [] }) }
+    render(); await new Promise(resolve => setImmediate(resolve)); const tree = render()
+    const video = flatten(tree).find(node => node.type === 'option' && node.props.value === 'video')
+    const audio = flatten(tree).find(node => node.type === 'option' && node.props.value === 'audio')
+    assert.equal(audio.props.disabled, true)
+    if (local) {
+      assert.equal(text(video), 'Captioned video (silent MP4)')
+      assert.match(text(tree), /No voiceover, music or stock footage is added/)
+      assert.match(text(tree), /Production note \(saved with the asset\)/)
+      assert.doesNotMatch(text(tree), /8-second illustrative clip/)
+    } else assert.equal(text(video), '8-second illustrative clip')
+  }
+})

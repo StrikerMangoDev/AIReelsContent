@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { env } from '../config/env.js'
 import { costScopeHash } from '../budget/policy.js'
 import { reserveFreeOperation } from '../budget/free-operation.js'
-import { createResearch, nicheSchema, researchNiche, refreshAvailableAt, researchScopeKey } from '../studio/intelligence.js'
+import { createResearch, nicheSchema, researchNiche, refreshAvailableAt, researchScopeKey, freeTextReplacementJob } from '../studio/intelligence.js'
 import { generateContent, settingsSchema } from '../studio/content.js'
 import { runContentJob } from '../studio/job-worker.js'
 import { contentHash } from '../studio/approval.js'
@@ -21,6 +21,7 @@ import { assertCapability } from '../policy.js'
 const hash = value => createHash('sha256').update(value).digest('hex')
 const uuid = value => { const digest = hash(value); return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}` }
 const blocked = message => Object.assign(new Error(message), { preDispatch: true })
+const writingConstraint = 'Return the complete requested schema concisely. Use a factual title under 65 characters, at most three supported claims totalling at most 48 words, website body at most 180 words, each planning field one sentence, and short platform adaptations. Preserve necessary attribution, citation markers and source limitations. These length targets do not authorize adding unsupported numbers to the content.'
 
 function normalizedResearch(report, context) {
   const day = context.localDate || new Date(context.now || Date.now()).toISOString().slice(0, 10)
@@ -77,7 +78,7 @@ export function createAutomationServices(repository, { research = researchNiche,
     const current = await repository.studioGet(context.owner, 'account_profile', context.profile.id)
     if (!current?.enabled || !current.automationConsent || costScopeHash(current, null) !== costScopeHash(context.profile, null) || await workspaceRole(repository, context.owner, context.actorUid) !== 'owner') throw Object.assign(blocked('The account plan or owner consent changed before dispatch.'), { code: 'JOB_BLOCKED' })
   }
-  const boundedGenerate = request => generateJson(request, { request: (url, init) => fetch(url, { ...init, signal: AbortSignal.any([init.signal, AbortSignal.timeout(110000)]) }) })
+  const boundedGenerate = request => generateJson({ ...request, maxTokens: Math.min(request.maxTokens || 8000, 6000) }, { request: (url, init) => fetch(url, { ...init, signal: AbortSignal.any([init.signal, AbortSignal.timeout(110000)]) }) })
   return {
     async research(context) {
       const { owner, profile, slot, requestId, actorUid } = context
@@ -94,7 +95,7 @@ export function createAutomationServices(repository, { research = researchNiche,
       if (saved?.niche?.id === niche.id && saved.nicheRevision === niche.revision && researchScopeKey(saved.niche) === researchScopeKey(niche) && Date.parse(refreshAvailableAt(saved, niche)) > new Date(context.now || Date.now()).getTime()) return normalizedResearch(saved, context)
       let report
       for (let attempt = 0; attempt < 16; attempt++) {
-        try { report = await createResearch({ repository, uid: owner, niche, requestId, actorUid, refresh: true, research, dispatchMode: 'queue' }); break }
+        try { report = await createResearch({ repository, uid: owner, niche, requestId, actorUid, refresh: true, research, dispatchMode: 'queue', replacementOf: context.replacementOf }); break }
         catch (error) {
           if (error.code !== 'RESEARCH_BUSY' || error.preDispatch !== true || attempt === 15) throw error
           const existing = await repository.studioJobGet(owner, requestId)
@@ -125,9 +126,14 @@ export function createAutomationServices(repository, { research = researchNiche,
         }))
         if (!evidence.some(source => source.excerpt?.trim().length >= 100)) throw blocked('No readable evidence supports the selected topic.')
         const settings = settingsSchema.parse({ industry: profile.contentPillars[0].slice(0, 100), audience: profile.audience.slice(0, 300), tone: profile.tone.slice(0, 100), language: 'English', platform: profile.platform, duration: 18, outputs: ['captions', 'platforms', 'website'] })
-        pack = await repository.studioPut(owner, 'package', id, { title: topic.title, content: null, evidence, settings, createdBy: actorUid, contributorUids: [actorUid], sourceIds: [], researchId: report.id, opportunityIndex: run.topic.index, researchContext: { brief: profile.weeklyBrief, opportunity: topic, researchedAt: report.researchedAt, methodology: report.methodology, automationAccountId: profile.accountId, outputConstraint: 'Use a factual title under 65 characters and at least one complete supported claim under 45 words, suitable for a readable vertical card.' }, status: 'draft', editorialStatus: 'draft', review: null }, 0)
+        pack = await repository.studioPut(owner, 'package', id, { title: topic.title, content: null, evidence, settings, createdBy: actorUid, contributorUids: [actorUid], sourceIds: [], researchId: report.id, opportunityIndex: run.topic.index, researchContext: { brief: profile.weeklyBrief, opportunity: topic, researchedAt: report.researchedAt, methodology: report.methodology, automationAccountId: profile.accountId, outputConstraint: writingConstraint }, status: 'draft', editorialStatus: 'draft', review: null }, 0)
       }
-      const scope = { operation: 'generation', packageId: pack.id, revision: pack.revision, instruction: '', actorUid, contentHash: contentHash(pack), generationProvider: 'free' }
+      if (context.replacementOf) {
+        await checkConsent(context)
+        const prior = await freeTextReplacementJob(repository, owner, context.replacementOf, 'generation', actorUid)
+        if (!prior || prior.scope.packageId !== pack.id || pack.jobId !== prior.id || pack.status !== 'dispatch_unknown' || pack.content) throw blocked('The previous generation cannot be replaced by a bounded free text operation.')
+      }
+      const scope = { operation: 'generation', packageId: pack.id, revision: pack.revision, instruction: '', actorUid, contentHash: contentHash(pack), generationProvider: 'free', llmModel: env.LLM_MODEL, ...(context.replacementOf ? { replacementOf: context.replacementOf } : {}) }
       let admission
       try { admission = await repository.studioJobReserve(owner, requestId, hash(JSON.stringify(scope)), env.STUDIO_DAILY_GENERATIONS, scope) }
       catch (error) { throw Object.assign(error, { preDispatch: true }) }
@@ -143,7 +149,7 @@ export function createAutomationServices(repository, { research = researchNiche,
         if (job?.status === 'reserved') await repository.studioJobUpdate(owner, requestId, { status: 'failed', error: 'Automatic generation admission was blocked before provider dispatch.' }, job.revision, 'reserved')
         throw Object.assign(error, { preDispatch: true })
       }
-      const outcome = await runContentJob({ repository, uid: owner, requestId, generate: (evidence, settings, details, unused, options) => write(evidence, settings, details, write === generateContent ? boundedGenerate : unused, { ...options, fallback: undefined, startWithFallback: false, beforeAttempt: async () => { await checkConsent(context); if (options.beforeAttempt) await options.beforeAttempt() } }) })
+      const outcome = await runContentJob({ repository, uid: owner, requestId, generate: (evidence, settings, details, unused, options) => write(evidence, settings, { ...details, outputConstraint: writingConstraint }, write === generateContent ? boundedGenerate : unused, { ...options, fallback: undefined, startWithFallback: false, beforeAttempt: async () => { await checkConsent(context); if (options.beforeAttempt) await options.beforeAttempt() } }) })
       return { ...outcome, package: outcome.result }
     },
     async review(context) {
@@ -185,6 +191,11 @@ export function createAutomationServices(repository, { research = researchNiche,
     async reconcile(context) {
       if (['research', 'generate'].includes(context.phase)) {
         const job = await repository.studioJobGet(context.owner, context.requestId)
+        if (job?.status === 'dispatch_unknown' && !context.run.replacements?.[context.phase]) {
+          await checkConsent(context)
+          const prior = await freeTextReplacementJob(repository, context.owner, context.requestId, context.phase === 'generate' ? 'generation' : 'research', context.actorUid)
+          if (prior) return { status: 'free_text_replacement_available', replacementOf: prior.id }
+        }
         if (!job || job.status !== 'completed') return { status: job?.status || 'dispatch_unknown', jobId: context.requestId }
         if (context.phase === 'generate') return { status: 'completed', package: job.result }
         const report = job.result
