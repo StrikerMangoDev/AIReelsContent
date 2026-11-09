@@ -8,10 +8,10 @@ import { assessMediaAcceptance } from '../media/acceptance.js'
 import { readMediaFile } from '../media/files.js'
 import { costScopeHash } from '../budget/policy.js'
 import { createPostizProvider, publishingConfig } from './provider.js'
-import { cleanCaption, platformSettings, renderSocialCaption, socialSourceUrls } from './constraints.js'
+import { platformSettings, renderSocialCaption, socialSourceUrls } from './constraints.js'
+import { postizContentMatches } from './readback.js'
 
 const fail = (status, message) => Object.assign(new Error(message), { status, publicMessage: message })
-const clean = cleanCaption
 const inputSchema = z.object({ requestId: z.string().uuid(), revision: z.number().int().positive(), accountId: z.string().min(1).max(200), platform: z.string().min(1).max(80), mode: z.enum(['draft', 'schedule', 'now']), publishAt: z.iso.datetime().optional(), caption: z.string().trim().min(1).max(12000), assetIds: z.array(z.string().min(1).max(100)).min(1).max(10), confirmed: z.literal(true), automatic: z.boolean().default(false) }).strict()
 const profileSchema = z.object({ accountId: z.string().min(1).max(200), weeklyBrief: z.string().trim().min(15).max(4000), audience: z.string().trim().min(1).max(500), tone: z.string().trim().min(1).max(200), contentPillars: z.array(z.string().trim().min(1).max(200)).min(1).max(12), weeklyCadence: z.number().int().min(0).max(14), dailyNews: z.boolean(), maxDailyPosts: z.number().int().min(1).max(10), timezone: z.string().max(100).default('Asia/Calcutta').refine(value => { try { new Intl.DateTimeFormat('en', { timeZone: value }); return true } catch { return false } }), enabled: z.boolean(), automationConsent: z.boolean().default(false), revision: z.number().int().min(0) }).strict()
 
@@ -105,7 +105,7 @@ export function createPublishingService({ repository, provider = createPostizPro
     const date = Date.parse(receipt.publishAt || receipt.dispatchedAt || receipt.createdAt)
     const posts = await provider.list(new Date(date - 86400000).toISOString(), new Date(date + 86400000).toISOString())
     const post = posts.find(value => value.id === receipt.providerPostId && value.integration?.id === receipt.accountId)
-    if (!post || clean(post.content) !== receipt.caption) throw fail(409, 'Provider readback does not match this publication; no retry was sent')
+    if (!post || !postizContentMatches(receipt.caption, post.content)) throw fail(409, 'Provider readback does not match this publication; no retry was sent')
     const state = String(post.state || '').toUpperCase()
     const status = state === 'PUBLISHED' ? 'published' : state === 'QUEUE' ? 'scheduled' : state === 'DRAFT' ? 'draft' : state === 'ERROR' ? 'failed' : 'submitted'
     const releaseUrl = typeof post.releaseURL === 'string' && /^https:\/\//.test(post.releaseURL) ? post.releaseURL : null

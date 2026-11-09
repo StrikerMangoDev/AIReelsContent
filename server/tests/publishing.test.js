@@ -13,6 +13,7 @@ import { reviewFixture } from './fixtures/finalization.js'
 import { mediaManifest } from '../media/acceptance.js'
 import { platformSettings, xWeightedLength, renderSocialCaption, socialSourceUrls } from '../publishing/constraints.js'
 import { createApp } from '../http/app.js'
+import { postizContentMatches } from '../publishing/readback.js'
 
 test('publishing binds exact approved text/assets/account, dispatches once and requires matching provider readback', async () => {
   const repository = createRepository(':memory:')
@@ -139,4 +140,15 @@ test('social captions preserve reviewed prose and append only actual cited evide
   assert.throws(() => platformSettings(pack, { platform: 'LinkedIn', provider: 'linkedin' }, [{ kind: 'image' }]), /3000/)
   pack.evidence[0].url = 'https://user:password@publisher.example/not-public'
   assert.equal(socialSourceUrls(pack, 'X').length, 0)
+})
+
+test('Postiz readback decodes HTML entities without accepting changed prose, newlines or link targets', () => {
+  const caption = 'R&D reports a finding.\n\nSource: https://example.com/paper?a=1&b=2'
+  assert.equal(postizContentMatches(caption, 'R&amp;D reports a finding.\n\nSource: https://example.com/paper?a=1&amp;b=2'), true)
+  assert.equal(postizContentMatches(caption, '<p>R&amp;D reports a finding.</p><p>Source: <a href="https://example.com/paper?a=1&amp;b=2">https://example.com/paper?a=1&amp;b=2</a></p>'), true)
+  assert.equal(postizContentMatches(caption, '<p>R&amp;D reports a finding.</p><p>Source: <a href="https://evil.example/">https://example.com/paper?a=1&amp;b=2</a></p>'), false)
+  assert.equal(postizContentMatches(caption, caption.replace('reports', 'proves')), false)
+  assert.equal(postizContentMatches(caption, caption.replace('\n\n', '\n')), false)
+  assert.equal(postizContentMatches(caption, `${caption}<script>doSomething()</script>`), false)
+  assert.equal(postizContentMatches('A\nB', '<p>A<br>B</p>'), true)
 })
