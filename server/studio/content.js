@@ -54,7 +54,7 @@ export function generationSchema(settings) {
   return z.object(fields).strict()
 }
 
-export function reviewContent(content, evidence, settings) {
+export function reviewContent(content, evidence, settings, context = {}) {
   const issues = []
   if (Buffer.byteLength(JSON.stringify(content) || '') > 90000) issues.push('Content exceeds the editable package size limit.')
   const parsed = contentSchema.safeParse(content)
@@ -71,22 +71,39 @@ export function reviewContent(content, evidence, settings) {
     if (!source || claim.quote.length < 12 || !normalize(source.excerpt).includes(normalize(claim.quote))) issues.push(`${claim.id}: quotation does not match the cited evidence.`)
     const captureTerms = /\b(?:(?:our|these|supplied|saved|retrieved|captured)\s+(?:evidence|excerpts?|headlines?|sources?)|(?:headlines?|excerpts?)\s+(?:were|are|do not|don't|only)|only\s+(?:headlines?|excerpts?))\b/i
     if (source?.type === 'news-feed-excerpt' && captureTerms.test(claim.text) && !captureTerms.test(claim.quote)) issues.push(`${claim.id}: capture limitations belong in fact-check notes, not attributed publisher claims.`)
-    if (source?.type === 'news-feed-excerpt' && [...claim.text.matchAll(/\d+(?:\.\d+)?/g)].some(match => ![...claim.quote.matchAll(/\d+(?:\.\d+)?/g)].some(quoted => quoted[0] === match[0]))) issues.push(`${claim.id}: use only dates and numbers stated in the selected publisher passage.`)
+    if ([...claim.text.matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)].some(match => ![...claim.quote.matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)].some(quoted => quoted[0] === match[0]))) issues.push(`${claim.id}: use only dates and numbers stated in the selected publisher passage.`)
   }
   const fields = { ...(content.script ? { script: content.script } : {}), ...(content.website ? { website: content.website.body } : {}), ...(content.captions || {}), ...Object.fromEntries((content.hooks || []).map((hook, index) => [`hook ${index + 1}`, hook])), ...Object.fromEntries((content.scenes || []).map((scene, index) => [`scene ${index + 1}`, scene.narration])), ...Object.fromEntries((content.strategy?.platforms || []).flatMap(item => ['headline', 'hook', 'body', 'alternativeHook'].map(field => [`${item.platform} ${field}`, item[field]]))) }
+  if (content.website?.title) fields['website title'] = content.website.title
   for (const [field, body] of Object.entries(fields)) {
     const citations = [...body.matchAll(/\[(C\d+)\]/g)].map(match => match[1])
     if (!/\p{L}/u.test(body.replace(/\[C\d+\]/g, ''))) issues.push(`${field}: write actual content, not citation markers alone.`)
-    if (!citations.length) issues.push(`${field}: add inline claim references such as [C1].`)
+    if (!citations.length && (field !== 'website title' || /(?<![\p{L}\p{N}_])\d/u.test(body))) issues.push(`${field}: add inline claim references such as [C1].`)
     if (citations.some(id => !ids.has(id))) issues.push(`${field}: references an unknown claim.`)
     for (const sentence of body.split(/(?<=[.!?])\s+/)) {
       const cited = [...sentence.matchAll(/\[(C\d+)\]/g)].map(match => parsed.data.claims.find(claim => claim.id === match[1])).filter(Boolean)
       const feedClaims = cited.filter(claim => evidence.find(source => source.id === claim.evidenceId)?.type === 'news-feed-excerpt')
+      const sentenceNumbers = [...sentence.replace(/\[C\d+\]/g, '').matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)]
+      if (sentenceNumbers.length && !cited.length) issues.push(`${field}: numeric statements need their own valid claim marker and supporting selected quotation.`)
+      if (cited.length) {
+        const quotedNumbers = new Set(cited.flatMap(claim => [...claim.quote.matchAll(/(?<![\p{L}\p{N}_])\d+(?:\.\d+)?/gu)].map(match => match[0])))
+        if (sentenceNumbers.some(match => !quotedNumbers.has(match[0]))) issues.push(`${field}: use only dates and numbers supported by the cited publisher passages.`)
+      }
       if (feedClaims.length && cited.length === feedClaims.length) {
-        const quotedNumbers = new Set(feedClaims.flatMap(claim => [...claim.quote.matchAll(/\d+(?:\.\d+)?/g)].map(match => match[0])))
-        if ([...sentence.replace(/\[C\d+\]/g, '').matchAll(/\d+(?:\.\d+)?/g)].some(match => !quotedNumbers.has(match[0]))) issues.push(`${field}: use only dates and numbers supported by the cited publisher passages.`)
         if (/\bweekly\b/i.test(sentence) && !/\bdaily\b|horoscopes today/i.test(sentence) && feedClaims.some(claim => /\bdaily\b|horoscopes today/i.test(claim.quote))) issues.push(`${field}: do not describe a daily horoscope as part of a weekly forecast.`)
       }
+    }
+  }
+  if (context.automationAccountId) {
+    const words = value => cleanCaption(value || '').split(/\s+/u).filter(Boolean).length
+    if (content.claims.length > 3) issues.push('Automation: use no more than 3 source-backed claims.')
+    if (content.claims.reduce((total, claim) => total + words(claim.text), 0) > 48) issues.push('Automation: keep all claim text within 48 words combined.')
+    if (content.website && [...cleanCaption(content.website.title)].length > 65) issues.push('Automation: keep the website title within 65 characters.')
+    if (content.website && words(content.website.body) > 180) issues.push('Automation: keep the website body within 180 words.')
+    for (const item of content.strategy?.platforms || []) {
+      if ([...cleanCaption(item.headline)].length > 65) issues.push(`Automation ${item.platform}: keep the headline within 65 characters.`)
+      if (words(item.body) > 150) issues.push(`Automation ${item.platform}: keep the platform body within 150 words.`)
+      if (item.platform === 'X' && [...cleanCaption(item.body)].length > 140) issues.push('Automation X: keep the body within 140 characters after citation markers are removed.')
     }
   }
   const allText = JSON.stringify(content)
@@ -113,7 +130,7 @@ export async function generateContent(evidence, settings, context = {}, generate
   const persistedSchema = generationSchema(settings)
   const passages = evidencePassages(evidence)
   if (!passages.length) throw Object.assign(new Error('No readable evidence passages'), { code: 'EVIDENCE_VALIDATION' })
-  let schema = persistedSchema.extend({ claims: z.array(z.object({ id: z.string().regex(/^C\d+$/), text, evidenceId: z.string().max(50), passageId: z.string().regex(/^P[0-9a-f]{24}$/), status: z.literal('attributed') }).strict()).min(1).max(30) })
+  let schema = persistedSchema.extend({ claims: z.array(z.object({ id: z.string().regex(/^C\d+$/), text, evidenceId: z.string().max(50), passageId: z.string().regex(/^P[0-9a-f]{24}$/), status: z.literal('attributed') }).strict()).min(1).max(context.automationAccountId ? 3 : 30) })
   // Prior prose guides revisions; its claim/quote pairs are not fresh source evidence.
   if (context.previousContent) {
     const prose = { ...context.previousContent }; delete prose.claims
@@ -133,6 +150,7 @@ export async function generateContent(evidence, settings, context = {}, generate
   request.system += '\nThis request writes one saved source-backed topic, not a research briefing. Do not create a ten-topic collection or apply research-only topic-count targets. Adapt only the selected topic to the requested outputs while preserving source attribution and qualifications.'
   request.system += '\nClaims must be facts directly supported by the selected publisher passage. Never add dates, years or numbers absent from that selected passage. Write actual spoken sentences in script and every scene narration; citation markers alone are not content. Do not create attributed claims about what our capture system did not retrieve, missing methodology, missing audience reactions, or other capture limitations. Put those limitations in strategy.factCheck when strategy is selected, or state them clearly as capture notes in prose without attaching a publisher claim marker to the limitation itself. Each scene can pair one cited publisher fact with an explicitly separate uncited capture note. Use factual headline-based hooks rather than turning capture limitations into attributed claims. Never copy unsupported claim/quotation pairs from a previous draft.'
   request.system += '\nFor X, write a concise post, never an article: aim for no more than 140 body characters after citation markers are removed, reserving room for the server-appended source attribution. The final post must fit 280 weighted characters (ASCII counts one, non-ASCII conservatively counts two, each source URL counts 23). For YouTube, the saved headline must fit 100 characters after citation markers are removed. Do not truncate or change an approved post during publishing; author a complete platform-appropriate version now. Do not invent or include source URLs: the server appends the actual cited evidence URLs.'
+  if (context.automationAccountId) request.system += '\nAUTOMATION OUTPUT CONTRACT: Write one compact update, never a long briefing. Use at most 3 claims and at most 48 words across all claim text combined. Keep every website title and platform headline within 65 characters, website body within 180 words, each platform body within 150 words, and X body within 140 characters after citation markers are removed. These are validation limits, not optional targets. Preserve the requested video duration; never promise a longer duration in a headline. Omit peripheral claims and unsupported numbers instead of expanding the package. Select the smallest useful set of directly supported facts and preserve their qualifications.'
   let issues = []; let lastParseFailure; let useFallback = startWithFallback
   if (useFallback && !fallback) throw Object.assign(new Error('Vertex fallback approval is unavailable'), { code: 'BUDGET_BLOCKED' })
   // One shared correction allowance for model JSON, schema or editorial errors; transport/quota errors never retry.
@@ -159,7 +177,7 @@ export async function generateContent(evidence, settings, context = {}, generate
     try { content = persistedSchema.parse(resolvePassageClaims(parsed.data, passages)) }
     catch { issues = ['Select only supplied passageIds with their matching evidenceId.']; request.input = { evidence, passages, settings, context, corrections: issues }; if (fallback && !useFallback) useFallback = true; continue }
     if (content.scenes) content.script = content.scenes.map(scene => scene.narration).join(' ')
-    issues = reviewContent(content, evidence, settings).issues
+    issues = reviewContent(content, evidence, settings, context).issues
     if (!issues.length) return retainGenerationReceipt(content, draft)
     if (fallback && !useFallback) useFallback = true
     request.input = { evidence, passages, settings, context, draft: { ...content, claims: parsed.data.claims }, corrections: issues,
