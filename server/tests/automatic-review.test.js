@@ -77,9 +77,10 @@ test('evaluator sees only selected claim quotations and cannot rescue them from 
     assert.match(request.system, /browser planning feature does not establish a similarly named coding-product mode/)
     return result
   } })
-  assert.equal(reviewed.status, 'passed'); assert.equal(reviewed.policyVersion, 'automated-text-v3')
+  assert.equal(reviewed.status, 'passed'); assert.equal(reviewed.policyVersion, 'automated-text-v4')
   assert.equal(assessAutomaticText({ ...pack, automaticReview: { ...reviewed, policyVersion: 'automated-text-v1' } }, profile, { now }).eligible, false)
   assert.equal(assessAutomaticText({ ...pack, automaticReview: { ...reviewed, policyVersion: 'automated-text-v2' } }, profile, { now }).eligible, false)
+  assert.equal(assessAutomaticText({ ...pack, automaticReview: { ...reviewed, policyVersion: 'automated-text-v3' } }, profile, { now }).eligible, false)
 })
 
 test('supported verdicts require meaningful evidence from their own selected quote, not another article passage', async () => {
@@ -178,4 +179,28 @@ test('editorial rubric separates unknown future metrics from copy quality withou
   assert.equal(reviewed.status, 'needs_revision')
   assert.equal(reviewed.result.ratings.hookStrength.score, 6); assert.equal(reviewed.result.ratings.cta.score, 6)
   assert.equal(assessAutomaticText({ ...pack, automaticReview: reviewed }, profile, { now }).eligible, false)
+})
+
+test('unused optional references are excluded from evaluator metadata while material issues always block', async () => {
+  const { pack, profile, result } = fixture()
+  pack.evidence.push({ ...pack.evidence[0], id: 'E2', url: 'https://example.com/unused', title: 'UNSELECTED OPTIONAL SOURCE METADATA', excerpt: 'This optional source was captured for research but no saved claim uses its separate material or its publisher metadata.' })
+  profile.weeklyBrief += ' Optional research reference: https://example.com/unused'
+  const reviewed = await reviewAutomaticText(pack, profile, { now, generate: async request => {
+    assert.deepEqual(request.input.evidence.map(source => source.id), ['E1'])
+    assert.equal(JSON.stringify(request.input).includes('UNSELECTED OPTIONAL SOURCE METADATA'), false)
+    assert.match(request.input.account.weeklyBrief, /Optional research reference/)
+    assert.match(request.system, /issues ONLY for unresolved MATERIAL release defects/)
+    assert.match(request.system, /appropriately disclosed vendor attribution, and unused optional reference URLs belong in summary, not issues/)
+    assert.match(request.system, /not mandatory citations unless the brief explicitly requires that source coverage or comparison/)
+    assert.match(request.system, /An unmet explicit brief requirement, unsupported statement, contradiction, missing relevant scope, privacy or rights defect is still material/)
+    return result
+  } })
+  assert.equal(reviewed.status, 'passed')
+  const material = structuredClone(result)
+  material.issues = ['The body claims unrestricted rollout, which the selected limited-preview quotation does not support.']
+  assert.ok(Object.values(material.checks).every(Boolean))
+  const rejected = await reviewAutomaticText(pack, profile, { now, generate: async () => material })
+  assert.equal(rejected.status, 'needs_revision')
+  assert.ok(rejected.issues.includes(material.issues[0]))
+  assert.equal(assessAutomaticText({ ...pack, automaticReview: rejected }, profile, { now }).eligible, false)
 })

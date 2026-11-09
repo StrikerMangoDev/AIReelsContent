@@ -145,7 +145,7 @@ export function createAutomationServices(repository, { research = researchNiche,
           try { return { ...await fetchSource(source.url), id: source.id } } catch { return source }
         }))
         if (!evidence.some(source => source.excerpt?.trim().length >= 100)) throw blocked('No readable evidence supports the selected topic.')
-        const settings = settingsSchema.parse({ industry: profile.contentPillars[0].slice(0, 100), audience: profile.audience.slice(0, 300), tone: profile.tone.slice(0, 100), language: 'English', platform: profile.platform, duration: 18, outputs: ['captions', 'platforms', 'website'] })
+        const settings = settingsSchema.parse({ industry: profile.contentPillars[0].slice(0, 100), audience: profile.audience.slice(0, 300), tone: profile.tone.slice(0, 100), language: 'English', platform: profile.platform, duration: 18, outputs: ['platforms', 'website'] })
         pack = await repository.studioPut(owner, 'package', id, { title: topic.title, content: null, evidence, settings, createdBy: actorUid, contributorUids: [actorUid], sourceIds: [], researchId: report.id, opportunityIndex: run.topic.index, researchContext: { brief: profile.weeklyBrief, opportunity: topic, researchedAt: report.researchedAt, methodology: report.methodology, automationAccountId: profile.accountId, outputConstraint: writingConstraint }, status: 'draft', editorialStatus: 'draft', review: null }, 0)
       }
       if (context.replacementOf) {
