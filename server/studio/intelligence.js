@@ -208,7 +208,7 @@ export async function createResearch({ repository, uid, niche, requestId, actorU
   }
   if (dispatchMode === 'inline' && research === researchNiche) throw conflict('Inline dispatch requires an injected test provider')
   const lock = `research:${uid}`; const owner = randomUUID()
-  if (!await repository.acquireLease(lock, owner, 300000)) throw conflict('Research is already running. Your saved reports remain available.')
+  if (!await repository.acquireLease(lock, owner, 300000)) throw Object.assign(conflict('Research is already running. Your saved reports remain available.'), { code: 'RESEARCH_BUSY', preDispatch: true })
   let job; let cost
   try {
     const key = researchScopeKey(parsed)

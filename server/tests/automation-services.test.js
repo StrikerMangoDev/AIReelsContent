@@ -112,3 +112,36 @@ test('automated export stays private, binds the current profile and describes on
     assert.equal((await call('owner')).status, 422)
   } finally { await new Promise(resolve => server.close(resolve)); repository.close() }
 })
+
+test('concurrent account research waits only for owner admission contention and dispatches each durable job once', async () => {
+  const repository = createRepository(':memory:')
+  const acquire = repository.acquireLease
+  let first = true; let busy = 0; let signalHeld
+  const held = new Promise(resolve => { signalHeld = resolve })
+  repository.acquireLease = async (...args) => {
+    const acquired = await acquire(...args)
+    if (args[0] === 'research:owner') {
+      if (!acquired) busy++
+      if (acquired && first) { first = false; signalHeld(); await new Promise(resolve => setTimeout(resolve, 50)) }
+    }
+    return acquired
+  }
+  let calls = 0
+  const services = createAutomationServices(repository, { research: async () => {
+    calls++
+    return { summary: 'No supported opportunity in this controlled fixture.', opportunities: [], unknowns: ['No supporting source was supplied.'], evidence: [], researchedAt: new Date().toISOString(), methodology: 'Controlled concurrent admission test, not actual source research.' }
+  } })
+  try {
+    const profiles = await Promise.all(['a', 'b'].map(id => repository.studioPut('owner', 'account_profile', `profile-${id}`, { accountId: `account-${id}`, platform: 'LinkedIn', weeklyBrief: `Explain practical AI for account ${id} and preserve uncertainty.`, audience: `Account ${id} readers`, tone: 'Clear', contentPillars: ['AI previews'], enabled: true, automationConsent: true, automaticPolicy: { version: 'account-automation-v1', scope: 'research-generation-and-social-publishing', consentedBy: 'owner', consentedAt: new Date().toISOString(), paidBudgetMicros: 0 } })))
+    const contexts = profiles.map(profile => ({ owner: 'owner', profile, slot: { kind: 'weekly' }, localDate: new Date().toISOString().slice(0, 10), now: new Date(), actorUid: 'owner', requestId: randomUUID() }))
+    const a = services.research(contexts[0]); await held
+    const results = await Promise.all([a, services.research(contexts[1])])
+    assert.ok(busy >= 1, 'the actual shared owner research lease was contended')
+    assert.equal(calls, 2, 'waiting for admission must not duplicate provider dispatch')
+    for (let index = 0; index < contexts.length; index++) {
+      assert.equal((await repository.studioJobGet('owner', contexts[index].requestId)).status, 'completed')
+      assert.equal(results[index].status, 'blocked', 'empty genuine research is blocked rather than inventing topics')
+      assert.ok(results[index].reportId)
+    }
+  } finally { repository.close() }
+})

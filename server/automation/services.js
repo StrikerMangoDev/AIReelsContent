@@ -92,7 +92,17 @@ export function createAutomationServices(repository, { research = researchNiche,
       const state = await repository.studioGet(owner, 'research_state', nicheId)
       const saved = state?.reportId ? await repository.studioGet(owner, 'research', state.reportId) : null
       if (saved?.niche?.id === niche.id && saved.nicheRevision === niche.revision && researchScopeKey(saved.niche) === researchScopeKey(niche) && Date.parse(refreshAvailableAt(saved, niche)) > new Date(context.now || Date.now()).getTime()) return normalizedResearch(saved, context)
-      let report = await createResearch({ repository, uid: owner, niche, requestId, actorUid, refresh: true, research, dispatchMode: 'queue' })
+      let report
+      for (let attempt = 0; attempt < 16; attempt++) {
+        try { report = await createResearch({ repository, uid: owner, niche, requestId, actorUid, refresh: true, research, dispatchMode: 'queue' }); break }
+        catch (error) {
+          if (error.code !== 'RESEARCH_BUSY' || error.preDispatch !== true || attempt === 15) throw error
+          const existing = await repository.studioJobGet(owner, requestId)
+          if (existing) return existing.status === 'completed' ? normalizedResearch(existing.result, context) : { status: existing.status, jobId: existing.id }
+          await checkConsent(context)
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+      }
       if (report.jobId) {
         const outcome = await runContentJob({ repository, uid: owner, requestId: report.jobId, research: (value, options) => research(value, { ...options, ...(research === researchNiche ? { generate: boundedGenerate } : {}), fallback: undefined, beforeAttempt: async () => { await checkConsent(context); if (options.beforeAttempt) await options.beforeAttempt() } }) })
         if (outcome.status !== 'completed') return { status: outcome.status, issues: [outcome.error || 'Research did not finish.'], jobId: report.jobId }
