@@ -9,7 +9,7 @@ async function fixture() {
   const repository = createRepository(':memory:'); const demoId = 'independent-qa'; const contexts = []; const bindings = []
   for (let index = 0; index < 5; index++) {
     const id = String(index + 1).repeat(32); const packageId = String(index + 5).repeat(32)
-    const profile = await repository.studioPut(demoOwner, 'account_profile', `profile-${index}`, { accountId: `account-${index}`, enabled: true, automationConsent: true, automaticPolicy: { version: 'account-automation-v1', scope: 'research-generation-and-social-publishing', consentedBy: demoOwner, paidBudgetMicros: 0 } }, 0)
+    const profile = await repository.studioPut(demoOwner, 'account_profile', `profile-${index}`, { accountId: `account-${index}`, enabled: true, automationConsent: true, automaticPolicy: { version: 'account-automation-v1', scope: 'research-generation-and-social-publishing', consentedBy: demoOwner, consentedAt: new Date(Date.now() - 60000).toISOString(), paidBudgetMicros: 0 } }, 0)
     const pack = await repository.studioPut(demoOwner, 'package', packageId, { content: { website: { title: 'QA fixture', body: 'No provider call' }, claims: [] }, evidence: [], settings: {} }, 0)
     const sourceContentHash = contentHash(pack); const profileHash = costScopeHash(profile, null)
     const run = await repository.studioPut(demoOwner, 'automation_run', id, { demoAuthorizationId: demoId, demoSourceContentHash: sourceContentHash, packageId, accountId: profile.accountId, profileHash, status: 'generate_running', stage: 'generate' }, 0)
@@ -29,9 +29,11 @@ test('independent paid demo QA rejects owner, actor, phase, run, profile, expiry
   const { repository, contexts, demoId } = await fixture(); const context = contexts[0]
   try {
     assert.ok(await assertDemoAuthorization(context))
-    for (const patch of [{ owner: 'other' }, { actorUid: 'other' }, { phase: 'publish' }, { run: { ...context.run, id: 'f'.repeat(32) } }, { profile: { ...context.profile, accountId: 'changed' } }, { now: Date.now() + 7200000 }]) await assert.rejects(() => assertDemoAuthorization({ ...context, ...patch }), error => error.code === 'BUDGET_BLOCKED' && error.preDispatch === true)
-    const authorization = await repository.studioGet(demoOwner, 'automation_demo', demoId)
-    await repository.studioPut(demoOwner, 'automation_demo', demoId, { ...authorization, status: 'revoked' }, authorization.revision)
+    for (const patch of [{ owner: 'other' }, { actorUid: 'other' }, { phase: 'publish' }, { run: { ...context.run, id: 'f'.repeat(32) } }, { profile: { ...context.profile, accountId: 'changed' } }]) await assert.rejects(() => assertDemoAuthorization({ ...context, ...patch }), error => error.code === 'BUDGET_BLOCKED' && error.preDispatch === true)
+    let authorization = await repository.studioGet(demoOwner, 'automation_demo', demoId)
+    authorization = await repository.studioPut(demoOwner, 'automation_demo', demoId, { ...authorization, expiresAt: new Date(Date.now() - 500).toISOString() }, authorization.revision)
+    await assert.rejects(() => assertDemoAuthorization(context), /inactive or expired/)
+    await repository.studioPut(demoOwner, 'automation_demo', demoId, { ...authorization, status: 'revoked', expiresAt: new Date(Date.now() + 3600000).toISOString() }, authorization.revision)
     await assert.rejects(() => assertDemoAuthorization(context), /inactive or expired/)
   } finally { repository.close() }
 })

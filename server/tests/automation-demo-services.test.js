@@ -17,7 +17,7 @@ test('scoped demo writes fresh content into a distinct durable job and a changed
   let paidCalls = 0; let writes = 0
   const services = createAutomationServices(repository, { demoGenerate: () => async () => { paidCalls++; return { controlled: true } }, write: async (_evidence, settings, details, generate) => { writes++; assert.equal(details.previousContent, null); assert.deepEqual(settings.outputs, ['platforms', 'website']); await generate({ input: {}, schema: {} }); return content } })
   try {
-    const profile = repository.studioPut(owner, 'account_profile', 'profile-a', { accountId: 'account-a', platform: 'X', enabled: true, automationConsent: true, automaticPolicy: { version: 'account-automation-v1', scope: 'research-generation-and-social-publishing', consentedBy: owner, paidBudgetMicros: 0 } }, 0)
+    const profile = repository.studioPut(owner, 'account_profile', 'profile-a', { accountId: 'account-a', platform: 'X', enabled: true, automationConsent: true, automaticPolicy: { version: 'account-automation-v1', scope: 'research-generation-and-social-publishing', consentedBy: owner, consentedAt: new Date(Date.now() - 60000).toISOString(), paidBudgetMicros: 0 } }, 0)
     const oldContent = { ...content, website: { title: 'Previous saved title', body } }
     const pack = repository.studioPut(owner, 'package', packageId, { settings: settingsSchema.parse({ outputs: ['website'] }), content: oldContent, evidence: [{ id: 'E1', hash: 'source-hash', url: 'https://example.com/update', excerpt, retrievedAt: new Date().toISOString() }], status: 'completed', createdBy: owner, jobId: 'original-unknown' }, 0)
     const old = repository.studioJobReserve(owner, 'original-unknown', 'a'.repeat(64), 20, { operation: 'generation', packageId })

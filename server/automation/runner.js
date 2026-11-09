@@ -46,7 +46,7 @@ export async function runAccountAutomation({ repository, owner, profile, service
     for (const run of pending) {
       try {
         const receipt = await services.readback({ repository, owner, profile, run, actorUid: profile.automaticPolicy.consentedBy, freeOnly: true, paidBudgetMicros: 0 })
-        if (['published', 'scheduled', 'draft', 'failed'].includes(receipt?.status)) await repository.studioPut(owner, 'automation_run', run.id, { ...run, status: receipt.status === 'failed' ? 'failed' : 'completed', providerPostId: receipt.providerPostId || run.providerPostId, releaseUrl: receipt.releaseUrl || null, lastReadbackAt: new Date().toISOString() }, run.revision)
+        if (['published', 'scheduled', 'draft', 'failed'].includes(receipt?.status)) await repository.studioPut(owner, 'automation_run', run.id, { ...run, status: receipt.status === 'failed' ? 'failed' : receipt.status === 'scheduled' ? 'awaiting_receipt' : 'completed', providerPostId: receipt.providerPostId || run.providerPostId, releaseUrl: receipt.releaseUrl || null, lastReadbackAt: new Date().toISOString() }, run.revision)
       } catch { /* Readback never starts a second publication. */ }
     }
   }
@@ -147,7 +147,7 @@ export async function runAccountAutomation({ repository, owner, profile, service
         if (phase === 'publish') {
           const receipt = result.receipt || result
           next.publicationId = receipt.id || null; next.providerPostId = receipt.providerPostId || null; next.releaseUrl = receipt.releaseUrl || null
-          next.status = receipt.status === 'published' || receipt.status === 'scheduled' || receipt.status === 'draft' ? 'completed' : receipt.status === 'dispatch_unknown' ? 'dispatch_unknown' : 'awaiting_receipt'
+          next.status = receipt.status === 'published' || receipt.status === 'draft' ? 'completed' : receipt.status === 'dispatch_unknown' ? 'dispatch_unknown' : 'awaiting_receipt'
         }
         next.stage = phases[phases.indexOf(phase) + 1] || 'publish'
         run = await repository.studioPut(owner, 'automation_run', unitId, next, run.revision)
