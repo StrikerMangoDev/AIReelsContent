@@ -17,7 +17,7 @@ test('account plans keep distinct briefs, require explicit automation consent an
     'react/jsx-runtime': { jsx: element, jsxs: element },
     '@/services/studio-api': { async studioRequest(path, body, method) {
       calls.push({ path, body, method })
-      if (path === '/publishing/config') return { enabled: true, accounts: [{ id: 'account-a', name: 'Account A', platform: 'LinkedIn' }, { id: 'account-b', name: 'Account B', platform: 'Facebook' }] }
+      if (path === '/publishing/config') return { enabled: true, accounts: [{ id: 'account-a', name: 'Vikash Kumar', platform: 'LinkedIn' }, { id: 'account-b', name: 'Vikash Kumar', platform: 'Facebook' }] }
       if (path === '/publishing/profiles') return method === 'PUT' ? { ...body, revision: body.revision + 1 } : { profiles: [profile] }
       if (path === '/automation') return { plans: [], runs: [], requests: [], requestResults: [] }
       if (path.endsWith('/social-publications') || path === '/publishing/receipts') return { publications: [{ id: 'receipt-1', status: 'dispatch_unknown', mode: 'now', accountId: 'account-a', platform: 'LinkedIn', caption: 'Actual sent caption', createdAt: new Date().toISOString() }] }
@@ -30,6 +30,8 @@ test('account plans keep distinct briefs, require explicit automation consent an
   const named = (tree, name) => flatten(tree).find(node => node.props?.name === name)
   render(); await new Promise(resolve => setImmediate(resolve)); let tree = render()
   assert.match(text(tree), /dispatch unknown/)
+  assert.equal(text(flatten(tree).find(node => node.type === 'strong')), 'Vikash Kumar · LinkedIn')
+  assert.match(text(flatten(tree).find(node => node.type === 'h4')), /Vikash Kumar · LinkedIn/)
   assert.doesNotMatch(text(tree), /Open published post/)
   named(tree, 'publishing-account').props.onChange({ target: { value: 'account-a' } }); tree = render()
   assert.equal(named(tree, 'weekly-brief').props.value, profile.weeklyBrief)
