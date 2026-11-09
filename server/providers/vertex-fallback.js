@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { env } from '../config/env.js'
 import { reserveCost, budgetError } from '../budget/policy.js'
+// Full documented model context plus two full output/thinking allowances, not expected request usage.
+export const vertexDemoCallUpperBoundMicros = Math.ceil(1048576 * 0.75 + 65536 * 2 * 3.75)
 
 export function vertexFallbackAllowed(config = env) {
-  return config.CONTENT_VERTEX_FALLBACK === 'true' && config.VERTEX_FALLBACK_MODEL === 'gemini-3.8-flash' && Boolean(config.VERTEX_FALLBACK_PROJECT && config.VERTEX_FALLBACK_CREDENTIALS) && Date.parse(config.VERTEX_FALLBACK_APPROVED_UNTIL || '') > Date.now() && Date.now() < Date.parse('2027-01-01T00:00:00Z')
+  return config.CONTENT_VERTEX_FALLBACK === 'true' && config.VERTEX_FALLBACK_MODEL === 'gemini-3.8-flash' && Boolean(config.VERTEX_FALLBACK_PROJECT && (config.VERTEX_FALLBACK_CREDENTIALS || config.GOOGLE_SERVICE_ACCOUNT_JSON)) && Date.parse(config.VERTEX_FALLBACK_APPROVED_UNTIL || '') > Date.now() && Date.now() < Date.parse('2027-01-01T00:00:00Z')
 }
 
 export function vertexSchema(schema) {
@@ -13,29 +15,36 @@ export function vertexSchema(schema) {
   return Object.fromEntries(Object.entries(schema).filter(([key]) => !['$schema', 'minItems', 'maxItems', 'minLength', 'maxLength', 'pattern', 'default'].includes(key)).map(([key, value]) => key === 'const' ? ['enum', [value]] : [key, vertexSchema(value)]))
 }
 
-async function callVertex(request, config) {
-  const credentials = JSON.parse(readFileSync(config.VERTEX_FALLBACK_CREDENTIALS, 'utf8'))
-  if (credentials.project_id !== config.VERTEX_FALLBACK_PROJECT) throw budgetError('Fallback credential project does not match the approved project')
+function vertexCredentials(config) {
+  try {
+    const credentials = JSON.parse(config.VERTEX_FALLBACK_CREDENTIALS ? readFileSync(config.VERTEX_FALLBACK_CREDENTIALS, 'utf8') : config.GOOGLE_SERVICE_ACCOUNT_JSON)
+    if (!credentials || typeof credentials !== 'object' || Array.isArray(credentials) || credentials.type !== 'service_account' || credentials.project_id !== config.VERTEX_FALLBACK_PROJECT || typeof credentials.client_email !== 'string' || !credentials.client_email || typeof credentials.private_key !== 'string' || !credentials.private_key) throw new Error('Invalid credentials')
+    return credentials
+  } catch { throw Object.assign(budgetError('The approved Vertex project credentials are unavailable or do not match.'), { preDispatch: true, configurationFailure: true }) }
+}
+
+async function callVertex(request, config, credentials = vertexCredentials(config), timeoutMs = 180000) {
   const { GoogleGenAI } = await import('@google/genai')
   // The SDK also sends this as X-Server-Timeout; allow structured generation to finish without automatic retries.
-  const client = new GoogleGenAI({ vertexai: true, project: config.VERTEX_FALLBACK_PROJECT, location: 'global', googleAuthOptions: { credentials }, httpOptions: { timeout: 180000, retryOptions: { attempts: 1 } } })
+  const client = new GoogleGenAI({ vertexai: true, project: config.VERTEX_FALLBACK_PROJECT, location: 'global', googleAuthOptions: { credentials }, httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } } })
   return client.models.generateContent({ model: config.VERTEX_FALLBACK_MODEL, contents: JSON.stringify(request.input), config: { systemInstruction: request.system, responseMimeType: 'application/json', responseJsonSchema: vertexSchema(request.schema), maxOutputTokens: request.maxTokens, thinkingConfig: { thinkingLevel: 'LOW', includeThoughts: false } } })
 }
 
-export async function generateVertexJson(input, { repository, owner, requestId, beforeAttempt, kind = 'generation', config = env, request = callVertex }) {
+export async function generateVertexJson(input, { repository, owner, requestId, beforeAttempt, kind = 'generation', config = env, request = callVertex, worstCaseModelBound = false, timeoutMs = 180000 }) {
   if (!vertexFallbackAllowed(config)) throw budgetError('Vertex fallback is not authorized or its test approval expired')
   const maxTokens = Math.min(input.maxTokens || 6000, 8000)
   const bytes = Buffer.byteLength(JSON.stringify(input))
-  if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > 12000 || bytes > 200000) throw budgetError('Fallback request exceeds the bounded test scope')
+  if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > 12000 || bytes > 200000 || !Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 180000) throw budgetError('Fallback request exceeds the bounded test scope')
+  const credentials = request === callVertex ? vertexCredentials(config) : undefined
   // Verified global introductory rates through 2026-12-31; allow extra output headroom for thinking.
-  const upperBoundMicros = Math.ceil((bytes + 4096) * 0.75 + maxTokens * 2 * 3.75)
+  const upperBoundMicros = worstCaseModelBound ? vertexDemoCallUpperBoundMicros : Math.ceil((bytes + 4096) * 0.75 + maxTokens * 2 * 3.75)
   const { reservation, reserved } = await reserveCost(repository, { owner, requestId, scope: { provider: 'vertex', project: config.VERTEX_FALLBACK_PROJECT, model: config.VERTEX_FALLBACK_MODEL, input }, quote: { currency: 'USD', upperBoundMicros, priceVersion: 'gemini-3.8-flash-global-2026-10-29', priceExpiresAt: new Date(Math.min(Date.parse(config.VERTEX_FALLBACK_APPROVED_UNTIL), Date.parse('2027-01-01T00:00:00Z'))).toISOString(), kind } })
   if (!reserved) throw budgetError('This fallback attempt already exists; reconcile it before another dispatch')
   let cost = reservation
   try {
     if (beforeAttempt) await beforeAttempt()
     cost = await repository.budgetTransition(owner, cost.id, cost.revision, 'dispatch')
-    const response = await request({ ...input, maxTokens }, config)
+    const response = await request({ ...input, maxTokens }, config, credentials, timeoutMs)
     const usage = response.usageMetadata
     const counts = [usage?.promptTokenCount, usage?.candidatesTokenCount, usage?.thoughtsTokenCount ?? 0]
     if (counts.every(value => Number.isSafeInteger(value) && value >= 0)) {

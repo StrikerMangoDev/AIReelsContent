@@ -3,7 +3,7 @@ import { env } from '../config/env.js'
 import { costScopeHash } from '../budget/policy.js'
 import { reserveFreeOperation } from '../budget/free-operation.js'
 import { createResearch, nicheSchema, researchNiche, refreshAvailableAt, researchScopeKey, freeTextReplacementJob } from '../studio/intelligence.js'
-import { generateContent, settingsSchema } from '../studio/content.js'
+import { generateContent, reviewContent, settingsSchema } from '../studio/content.js'
 import { runContentJob } from '../studio/job-worker.js'
 import { contentHash } from '../studio/approval.js'
 import { fetchEvidence } from '../studio/evidence.js'
@@ -17,6 +17,10 @@ import { inspectMediaBytes, assessAutomaticMedia, assessMediaAcceptance } from '
 import { approvedCaption, createPublishingService } from '../publishing/router.js'
 import { runAccountAutomation } from './runner.js'
 import { assertCapability } from '../policy.js'
+import { assertDemoAuthorization, createDemoGenerator, demoStageRequestId } from './demo.js'
+import { buildAssurance } from '../studio/assurance.js'
+import { generationReceipt } from '../providers/llm.js'
+import { safeJobFailure } from '../studio/job-worker.js'
 
 const hash = value => createHash('sha256').update(value).digest('hex')
 const uuid = value => { const digest = hash(value); return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}` }
@@ -73,7 +77,7 @@ export async function assessAutomationRelease({ repository, owner, pack, assets,
   return { eligible: issues.length === 0, issues: [...new Set(issues)], text, media }
 }
 
-export function createAutomationServices(repository, { research = researchNiche, fetchSource = fetchEvidence, write = generateContent, evaluate = reviewAutomaticText, render = renderLocalMedia, saveFile = saveMediaFile, readFile = readMediaFile, publisher } = {}) {
+export function createAutomationServices(repository, { research = researchNiche, fetchSource = fetchEvidence, write = generateContent, evaluate = reviewAutomaticText, render = renderLocalMedia, saveFile = saveMediaFile, readFile = readMediaFile, publisher, demoGenerate = createDemoGenerator } = {}) {
   const publishing = publisher || createPublishingService({ repository, readFile, assessReady: context => assessAutomationRelease({ ...context, readFile }) })
   async function savedPack(context) {
     const pack = await repository.studioGet(context.owner, 'package', context.run.packageId)
@@ -85,6 +89,51 @@ export function createAutomationServices(repository, { research = researchNiche,
     if (!current?.enabled || !current.automationConsent || costScopeHash(current, null) !== costScopeHash(context.profile, null) || await workspaceRole(repository, context.owner, context.actorUid) !== 'owner') throw Object.assign(blocked('The account plan or owner consent changed before dispatch.'), { code: 'JOB_BLOCKED' })
   }
   const boundedGenerate = request => generateJson({ ...request, maxTokens: Math.min(request.maxTokens || 8000, 6000) }, { preferTools: Boolean(request.schema?.properties?.claims), acceptCompleteJsonAtLength: Boolean(request.schema?.properties?.claims), request: (url, init) => fetch(url, { ...init, signal: AbortSignal.any([init.signal, AbortSignal.timeout(110000)]) }) })
+  async function generateDemo(context, pack) {
+    const demoContext = { ...context, repository, phase: 'generate' }
+    const authorization = await assertDemoAuthorization(demoContext)
+    const binding = authorization.authorization.runs.find(value => value.runId === context.run.id)
+    if (!pack || pack.id !== binding?.packageId) throw blocked('The paid demo draft does not match its authorized package.')
+    if (context.requestId !== demoStageRequestId(context.run, 'generate')) throw blocked('The paid demo operation identifier does not match this exact run.')
+    await checkConsent(context)
+    const previous = await repository.studioJobGet(context.owner, context.requestId)
+    if (previous) {
+      if (previous.scope?.demoId !== context.run.demoAuthorizationId || previous.scope?.packageId !== pack?.id) throw blocked('The paid demo operation belongs to different content.')
+      return { status: previous.status, jobId: previous.id, package: previous.result }
+    }
+    if (!pack?.content) throw blocked('The authorized demo requires its existing saved draft.')
+    const scope = { operation: 'generation', generationProvider: 'vertex-demo', demoId: context.run.demoAuthorizationId, packageId: pack.id, revision: pack.revision, actorUid: context.actorUid, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null), model: authorization.model }
+    let admission
+    try { admission = await repository.studioJobReserve(context.owner, context.requestId, costScopeHash(scope, null), env.STUDIO_DAILY_GENERATIONS, scope) }
+    catch (error) { throw Object.assign(error, { preDispatch: true }) }
+    if (!admission.reserved) return { status: admission.job.status, jobId: admission.job.id, package: admission.job.result }
+    let job = admission.job; let dispatched = false
+    try {
+      job = await repository.studioJobUpdate(context.owner, job.id, { status: 'running' }, job.revision, 'reserved')
+      const settings = settingsSchema.parse({ ...pack.settings, platform: context.profile.platform, outputs: ['platforms', 'website'] })
+      const provider = demoGenerate(demoContext, { beforeAttempt: () => checkConsent(context) })
+      const generate = async request => { dispatched = true; return provider(request) }
+      const content = await write(pack.evidence, settings, { ...pack.researchContext, automationAccountId: context.profile.accountId, outputConstraint: writingConstraint, previousContent: null, revisionInstruction: 'Write a fresh compact account-specific post and website article from the supplied source passages. Preserve attribution and scope; omit unsupported claims.' }, generate, { beforeAttempt: () => checkConsent(context), fallback: undefined, startWithFallback: false })
+      const review = reviewContent(content, pack.evidence, settings, { automationAccountId: context.profile.accountId })
+      if (review.issues.length) throw Object.assign(new Error('Demo writing did not pass evidence validation'), { code: 'EVIDENCE_VALIDATION', issues: review.issues, issueCount: review.issues.length })
+      await checkConsent(context)
+      await assertDemoAuthorization(demoContext)
+      const current = await repository.studioGet(context.owner, 'package', pack.id)
+      if (!current || current.revision !== pack.revision || contentHash(current) !== scope.contentHash) throw blocked('The saved draft changed during the demo operation.')
+      const completed = { ...pack, content, settings, jobId: job.id, status: 'completed', editorialStatus: 'needs_review', review, automaticReview: null, independentReview: null, approval: null, providerReceipt: generationReceipt(content) || null }
+      completed.assurance = buildAssurance(completed, { actorId: context.actorUid, runId: job.id, stage: 'generation' })
+      const result = await repository.studioPut(context.owner, 'package', pack.id, completed, pack.revision)
+      await repository.studioJobUpdate(context.owner, job.id, { status: 'completed', result }, job.revision, 'running')
+      return { status: 'completed', jobId: job.id, package: result }
+    } catch (error) {
+      const diagnostics = safeJobFailure(error)
+      const rejected = !dispatched || error.preDispatch === true || error.code === 'EVIDENCE_VALIDATION' || (error.transportStatus === 200 && ['MODEL_INCOMPLETE', 'MODEL_JSON_INVALID'].includes(error.code))
+      const status = rejected ? 'failed' : 'dispatch_unknown'
+      const current = await repository.studioJobGet(context.owner, job.id)
+      if (current?.status === 'running') await repository.studioJobUpdate(context.owner, job.id, { status, error: `Paid demo writing did not complete; existing saved content preserved. Diagnostics: ${JSON.stringify(diagnostics)}` }, current.revision, 'running')
+      return { status, jobId: job.id, diagnostics }
+    }
+  }
   return {
     async research(context) {
       const { owner, profile, slot, requestId, actorUid } = context
@@ -121,6 +170,7 @@ export function createAutomationServices(repository, { research = researchNiche,
       const { owner, profile, requestId, actorUid, run } = context
       const id = hash(`${run.id}:package`).slice(0, 32)
       let pack = await repository.studioGet(owner, 'package', id)
+      if (run.demoAuthorizationId) return generateDemo(context, pack)
       const quality = run.qualityRevision
       let automaticReviewFeedback
       if (pack?.content && (!quality || (pack.jobId === requestId && pack.status === 'completed'))) return pack
@@ -175,12 +225,18 @@ export function createAutomationServices(repository, { research = researchNiche,
     async review(context) {
       await checkConsent(context)
       const pack = await savedPack(context)
+      const demoContext = { ...context, repository, phase: 'review' }
+      const demo = await assertDemoAuthorization(demoContext)
+      if (demo && context.requestId !== demoStageRequestId(context.run, 'review')) throw blocked('The paid demo review identifier does not match this exact content.')
       if (!(await repository.studioReserve(`${context.owner}:automatic-review`, context.requestId, env.STUDIO_DAILY_GENERATIONS)).reserved) throw blocked('The review attempt already exists or its allowance is exhausted.')
       const scope = { operation: 'generation', purpose: 'automatic-review', packageId: pack.id, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null) }
-      const cost = await reserveFreeOperation(repository, context.owner, context.requestId, scope)
-      if (cost.status !== 'reserved') throw blocked('The previous evaluator request requires reconciliation.')
-      await repository.budgetTransition(context.owner, cost.id, cost.revision, 'dispatch')
-      const automaticReview = await evaluate(pack, context.profile, { actorId: context.actorUid, ...(evaluate === reviewAutomaticText ? { generate: boundedGenerate, model: env.LLM_MODEL } : {}) })
+      if (!demo) {
+        const cost = await reserveFreeOperation(repository, context.owner, context.requestId, scope)
+        if (cost.status !== 'reserved') throw blocked('The previous evaluator request requires reconciliation.')
+        await repository.budgetTransition(context.owner, cost.id, cost.revision, 'dispatch')
+      }
+      const automaticReview = await evaluate(pack, context.profile, { actorId: context.actorUid, ...(demo ? { generate: demoGenerate(demoContext, { beforeAttempt: () => checkConsent(context) }), model: demo.model } : evaluate === reviewAutomaticText ? { generate: boundedGenerate, model: env.LLM_MODEL } : {}) })
+      if (demo) { await checkConsent(context); await assertDemoAuthorization(demoContext) }
       const saved = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, automaticReview }, pack.revision)
       return reviewOutcome(saved, context.profile)
     },

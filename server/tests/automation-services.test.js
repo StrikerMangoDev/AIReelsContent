@@ -164,11 +164,11 @@ test('automatic generation quota rejection is known pre-dispatch and leaves no n
 })
 
 test('new automatic drafts request the account platform and website and publish its exact strategy body without generic captions', async () => {
-  const repository = createRepository(':memory:'); let publishingInput
+  const repository = createRepository(':memory:'); let publishingInput; let writes = 0
   const excerpt = 'The publisher announced a limited developer preview. Availability remains restricted and independent deployment outcomes have not been established.'
   const body = 'The publisher announced a limited developer preview [C1].'
   const content = { website: { title: 'Developer preview', body }, claims: [{ id: 'C1', text: 'The publisher announced a limited developer preview', evidenceId: 'E1', quote: excerpt, status: 'attributed' }], strategy: { angle: 'Limited preview', audience: 'Developers', whyNow: 'A preview', factCheck: 'Check scope', language: 'English', languageReason: 'Requested', voice: 'Female', voiceReason: 'Requested', delivery: 'Clear', keywords: ['AI'], platforms: [{ platform: 'X', headline: 'Limited developer preview [C1]', hook: 'A limited preview [C1]', body, cta: 'Read the source', hashtags: [], thumbnail: 'Original diagram', format: 'Post', retentionPlan: 'Clear scope', alternativeHook: 'Developer preview [C1]', testPlan: 'Observe clicks' }], experiments: [{ variable: 'Hook', variantA: 'A', variantB: 'B', metric: 'Clicks', decisionRule: 'Comparable views' }] } }
-  const services = createAutomationServices(repository, { write: async (_evidence, settings) => { assert.deepEqual(settings.outputs, ['platforms', 'website']); return content }, publisher: { publish: async value => { publishingInput = value.input; return { receipt: { id: 'controlled-receipt', status: 'submitted' } } } } })
+  const services = createAutomationServices(repository, { write: async (_evidence, settings) => { writes++; assert.deepEqual(settings.outputs, ['platforms', 'website']); return content }, publisher: { publish: async value => { publishingInput = value.input; return { receipt: { id: 'controlled-receipt', status: 'submitted' } } } } })
   try {
     const profile = repository.studioPut('owner', 'account_profile', 'profile-x', { accountId: 'account-x', platform: 'X', audience: 'Developers', tone: 'Factual', contentPillars: ['AI'], weeklyBrief: 'Explain a limited developer preview.', enabled: true, automationConsent: true }, 0)
     const topic = { index: 0, title: 'Limited developer preview', evidenceIds: ['E1'] }
@@ -180,5 +180,8 @@ test('new automatic drafts request the account platform and website and publish 
     assert.equal(publishingInput.platform, 'X'); assert.equal(publishingInput.accountId, 'account-x')
     assert.equal(publishingInput.caption, 'The publisher announced a limited developer preview.\n\nSource: https://example.com/update')
     assert.deepEqual(result.package.settings.outputs, ['platforms', 'website'])
+    await assert.rejects(services.generate({ ...context, requestId: randomUUID(), run: { ...context.run, demoAuthorizationId: 'unapproved-demo' } }), { code: 'BUDGET_BLOCKED' })
+    assert.equal(writes, 1, 'an invalid paid marker cannot silently reuse or rewrite existing content through a free path')
+    assert.equal((await repository.studioGet('owner', 'package', result.package.id)).revision, result.package.revision)
   } finally { repository.close() }
 })

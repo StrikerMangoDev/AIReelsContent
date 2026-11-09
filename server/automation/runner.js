@@ -3,12 +3,13 @@ import { costScopeHash } from '../budget/policy.js'
 import { workspaceRole } from '../studio/workspaces.js'
 import { automaticTextPolicyVersion } from './review.js'
 import { contentHash } from '../studio/approval.js'
+import { demoStageRequestId } from './demo.js'
 
 export const automationRegistryOwner = '__automation_registry__'
 const digest = value => createHash('sha256').update(value).digest('hex')
 const dayInZone = (now, timezone) => new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
 const requestId = value => { const hash = digest(value); return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}` }
-const stageRequestId = (unitId, phase, run) => requestId(`${unitId}:${phase}${phase === 'review' ? `:${automaticTextPolicyVersion}${run.contentHash ? `:content:${run.contentHash}` : ''}` : ''}${run.qualityRevision && phase !== 'research' ? ':quality:1' : run.replacements?.[phase] ? ':replacement:1' : ''}`)
+const stageRequestId = (unitId, phase, run) => run.demoAuthorizationId && ['generate', 'review'].includes(phase) ? demoStageRequestId(run, phase) : requestId(`${unitId}:${phase}${phase === 'review' ? `:${automaticTextPolicyVersion}${run.contentHash ? `:content:${run.contentHash}` : ''}` : ''}${run.qualityRevision && phase !== 'research' ? ':quality:1' : run.replacements?.[phase] ? ':replacement:1' : ''}`)
 const phases = ['research', 'generate', 'review', 'render', 'publish']
 const held = status => !['blocked', 'skipped'].includes(status)
 
@@ -71,7 +72,7 @@ export async function runAccountAutomation({ repository, owner, profile, service
           catch { /* Reconciliation may read receipts, never repeat provider dispatch. */ }
         }
         if (reconciled?.status === 'free_text_replacement_available') {
-          if (run.qualityRevision || !['research', 'generate'].includes(run.stage) || run.replacements?.[run.stage] || reconciled.replacementOf !== stageRequestId(unitId, run.stage, run)) { results.push(run); continue }
+          if (run.demoAuthorizationId || run.qualityRevision || !['research', 'generate'].includes(run.stage) || run.replacements?.[run.stage] || reconciled.replacementOf !== stageRequestId(unitId, run.stage, run)) { results.push(run); continue }
           const replacement = { originalRequestId: reconciled.replacementOf, replacementRequestId: requestId(`${unitId}:${run.stage}:replacement:1`), reason: 'One new free text operation after local provider timeout; original outcome remains unknown.', createdAt: new Date().toISOString() }
           run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, replacements: { ...run.replacements, [run.stage]: replacement }, status: 'pending', error: null }, run.revision)
           reconciled = null
@@ -105,7 +106,7 @@ export async function runAccountAutomation({ repository, owner, profile, service
         }
         const outcome = result?.receipt || result
         const stageRecord = { stage: phase, requestId: id, status: outcome?.status || (result?.eligible === false ? 'blocked' : 'completed'), completedAt: new Date().toISOString(), jobId: result?.jobId || null }
-        if (phase === 'review' && ['needs_revision', 'blocked'].includes(result?.status) && result.repairable === true && (result.reviewResult || result.preflightIssues?.length > 0) && result.reviewId && result.contentHash && !run.qualityRevision && !run.publicationId && !run.providerPostId && Array.isArray(result.issues) && result.issues.some(issue => typeof issue === 'string' && issue.trim())) {
+        if (!run.demoAuthorizationId && phase === 'review' && ['needs_revision', 'blocked'].includes(result?.status) && result.repairable === true && (result.reviewResult || result.preflightIssues?.length > 0) && result.reviewId && result.contentHash && !run.qualityRevision && !run.publicationId && !run.providerPostId && Array.isArray(result.issues) && result.issues.some(issue => typeof issue === 'string' && issue.trim())) {
           const issues = result.issues.filter(issue => typeof issue === 'string').slice(0, 20)
           const instruction = `Resolve the recorded automated review findings using only supported source passages. Preserve qualifications and citations; omit unsupported claims rather than inventing support. Findings: ${issues.slice(0, 8).map(issue => issue.slice(0, 200)).join(' | ')}`.slice(0, 1900)
           const qualityRevision = { version: 1, reviewRequestId: id, reviewId: result.reviewId, contentHash: result.contentHash, instruction, issues, createdAt: new Date().toISOString() }
@@ -118,7 +119,7 @@ export async function runAccountAutomation({ repository, owner, profile, service
         }
         if (['reserved', 'running', 'dispatch_unknown', 'pending'].includes(outcome?.status)) {
           run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, stages: [...run.stages, stageRecord], status: 'dispatch_unknown', jobId: result.jobId || null, error: 'An admitted operation has not completed. Reconcile its stable job before continuing.' }, run.revision)
-          if (outcome.status === 'dispatch_unknown' && !run.qualityRevision && ['research', 'generate'].includes(phase) && !run.replacements?.[phase] && typeof services.reconcile === 'function') {
+          if (outcome.status === 'dispatch_unknown' && !run.demoAuthorizationId && !run.qualityRevision && ['research', 'generate'].includes(phase) && !run.replacements?.[phase] && typeof services.reconcile === 'function') {
             try {
               const available = await services.reconcile({ repository, owner, profile: currentProfile, run, phase, requestId: id, actorUid: run.actorUid, freeOnly: true, paidBudgetMicros: 0 })
               deferred = available?.status === 'free_text_replacement_available' && available.replacementOf === id

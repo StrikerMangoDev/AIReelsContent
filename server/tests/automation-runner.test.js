@@ -5,6 +5,7 @@ import { planAccountWeek, runAccountAutomation, runRegisteredAutomation } from '
 import { contentHash } from '../studio/approval.js'
 import { automaticTextPolicyVersion } from '../automation/review.js'
 import { createHash } from 'node:crypto'
+import { demoStageRequestId } from '../automation/demo.js'
 
 const now = new Date('2026-11-09T06:00:00.000Z')
 function profileFixture(repository, accountId = 'account-one') {
@@ -165,5 +166,27 @@ test('a changed content hash cannot redispatch an uncertain publication', async 
     repository.studioPut('alice', 'automation_run', run.id, { ...run, contentHash: 'different-content-hash' }, run.revision)
     const next = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
     assert.equal(next.results[0].status, 'dispatch_unknown'); assert.equal(publishes, 1)
+  } finally { repository.close() }
+})
+
+test('explicit demo stages use scoped IDs and cannot start automatic paid quality or timeout replacements', async () => {
+  const repository = createRepository(':memory:'); const calls = []; const profile = profileFixture(repository)
+  const services = servicesFixture(repository, calls)
+  try {
+    const first = await runAccountAutomation({ repository, owner: 'alice', profile, services, now, maxStages: 1 })
+    let run = first.results[0]
+    run = repository.studioPut('alice', 'automation_run', run.id, { ...run, demoAuthorizationId: 'controlled-demo', demoSourceContentHash: 'a'.repeat(64) }, run.revision)
+    const writingId = demoStageRequestId(run, 'generate')
+    const generated = await runAccountAutomation({ repository, owner: 'alice', profile, services, now, maxStages: 1 })
+    assert.equal(calls.at(-1).requestId, writingId)
+    const reviewId = demoStageRequestId(generated.results[0], 'review')
+    assert.notEqual(reviewId, writingId)
+    assert.notEqual(demoStageRequestId({ ...generated.results[0], contentHash: 'b'.repeat(64) }, 'review'), reviewId)
+    services.review = async ctx => { calls.push({ phase: 'review', requestId: ctx.requestId }); return { status: 'needs_revision', eligible: false, repairable: true, reviewResult: {}, reviewId: 'actual-review', contentHash: ctx.run.contentHash, issues: ['A material qualification is missing.'] } }
+    const rejected = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
+    assert.equal(calls.at(-1).requestId, reviewId)
+    assert.equal(rejected.results[0].status, 'blocked'); assert.equal(rejected.results[0].qualityRevision, undefined)
+    assert.equal(calls.filter(call => call.phase === 'generate').length, 1)
+    assert.equal(calls.filter(call => call.phase === 'publish').length, 0)
   } finally { repository.close() }
 })
