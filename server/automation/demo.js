@@ -5,7 +5,7 @@ import { generateVertexJson, vertexDemoCallUpperBoundMicros, vertexProductionPro
 import { generateOpenRouterDemoJson, openRouterDemoModel, openRouterDemoCallUpperBoundMicros } from '../providers/openrouter-demo.js'
 import { contentHash } from '../studio/approval.js'
 import { workspaceRole } from '../studio/workspaces.js'
-import { automaticTextPolicyVersion } from './review.js'
+import { automaticTextPolicyVersion, assessAutomaticText } from './review.js'
 
 export const demoOwner = 'W8eI22SdAsZa2LGz6VZxWQkXsyj1'
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
@@ -26,8 +26,35 @@ export function demoAuthorizationActive(value, now = Date.now()) {
 }
 export const demoBudgetOwner = (owner, demoId) => `demo:${costScopeHash({ owner, demoId }, null).slice(0, 48)}`
 export function demoStageRequestId(run, phase) {
-  const digest = costScopeHash({ demoId: run.demoAuthorizationId, runId: run.id, phase, contentHash: phase === 'generate' ? run.demoSourceContentHash : run.contentHash, ...(phase === 'review' ? { policyVersion: automaticTextPolicyVersion } : {}) }, null)
+  const digest = costScopeHash({ demoId: run.demoAuthorizationId, runId: run.id, phase, contentHash: phase === 'generate' ? run.demoSourceContentHash : run.contentHash, ...(phase === 'review' ? { policyVersion: automaticTextPolicyVersion } : {}), ...(run.qualityRevision ? { qualityRevision: { version: run.qualityRevision.version, reviewId: run.qualityRevision.reviewId, contentHash: run.qualityRevision.contentHash } } : {}) }, null)
   return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`
+}
+const repairReviewId = run => costScopeHash({ demoId: run.demoAuthorizationId, runId: run.id, reviewId: run.qualityRevision?.reviewId }, null).slice(0, 32)
+async function settledDemoStage(repository, budgetOwner, run, phase, required = true) {
+  for (let attempt = 0; attempt < (phase === 'generate' ? 2 : 1); attempt++) {
+    const cost = await repository.budgetGet(budgetOwner, `demo:${demoStageRequestId(run, phase)}:${attempt}`)
+    if ((!cost && attempt === 0 && required) || cost && (cost.status !== 'settled' || cost.overage)) throw blocked('Prior paid demo usage must be settled before a quality revision.')
+  }
+}
+export async function assertDemoQualityRepair(context) {
+  const admitted = await assertDemoAuthorization(context)
+  if (!admitted || context.phase !== 'review' || context.run.qualityRevision || context.run.publicationId || context.run.providerPostId) throw blocked('Only one actual failed demo review may authorize a quality revision.')
+  const pack = await context.repository.studioGet(context.owner, 'package', context.run.packageId)
+  const review = pack?.automaticReview
+  let parsedReview = false
+  try { parsedReview = assessAutomaticText(pack, context.profile).policyVersion === automaticTextPolicyVersion } catch { /* Malformed content cannot authorize a paid repair. */ }
+  const repairable = review?.status === 'needs_revision' && Boolean(review.result) && !review.responseFailure && parsedReview
+  if (!repairable || review.model !== admitted.model || review.policyVersion !== automaticTextPolicyVersion || Date.parse(review.reviewedAt) > Date.now() || Date.parse(review.expiresAt) <= Date.now() || review.contentHash !== contentHash(pack) || review.profileHash !== context.run.profileHash || !review.runId || !review.issues?.some(issue => typeof issue === 'string' && issue.trim())) throw blocked('Quality revision requires an actual failed current-policy review of this saved package.')
+  const budget = await context.repository.budgetSummary(admitted.budgetOwner, 'USD')
+  if (budget.heldMicros !== 0) throw blocked('Unsettled demo usage prevents a paid quality revision.')
+  await settledDemoStage(context.repository, admitted.budgetOwner, context.run, 'generate')
+  await settledDemoStage(context.repository, admitted.budgetOwner, context.run, 'review')
+  const id = repairReviewId({ ...context.run, qualityRevision: { reviewId: review.runId } })
+  const saved = await context.repository.studioGet(context.owner, 'automation_demo_review', id)
+  const snapshot = { demoId: context.run.demoAuthorizationId, runId: context.run.id, packageId: pack.id, review }
+  if (saved && costScopeHash(saved.review, null) !== costScopeHash(review, null)) throw blocked('The rejected demo review history changed.')
+  if (!saved) await context.repository.studioPut(context.owner, 'automation_demo_review', id, snapshot, 0)
+  return admitted
 }
 
 export async function assertDemoAuthorization({ repository, owner, actorUid, run, profile, phase }) {
@@ -46,11 +73,28 @@ export async function assertDemoAuthorization({ repository, owner, actorUid, run
   if (!currentProfile || costScopeHash(currentProfile, null) !== binding.profileHash || costScopeHash(profile, null) !== binding.profileHash || currentRun.profileHash !== binding.profileHash || !currentProfile.enabled || currentProfile.automationConsent !== true || currentProfile.automaticPolicy?.version !== 'account-automation-v1' || currentProfile.automaticPolicy?.scope !== 'research-generation-and-social-publishing' || currentProfile.automaticPolicy?.consentedBy !== actorUid || currentProfile.automaticPolicy?.paidBudgetMicros !== 0 || await workspaceRole(repository, owner, actorUid) !== 'owner') throw blocked('The account plan, owner role or recurring free-only consent changed.')
   if (!Number.isFinite(Date.parse(currentProfile.automaticPolicy.consentedAt || '')) || Date.parse(currentProfile.automaticPolicy.consentedAt) > now) throw blocked('The account automation consent timestamp is unavailable or invalid.')
   const pack = await repository.studioGet(owner, 'package', binding.packageId)
-  const expectedHash = phase === 'generate' ? binding.sourceContentHash : currentRun.contentHash
-  if (!pack || !expectedHash || contentHash(pack) !== expectedHash || (phase === 'review' && (run.contentHash !== expectedHash || currentRun.packageId !== pack.id))) throw blocked('The paid demonstration content changed outside the authorized stage.')
+  const quality = currentRun.qualityRevision
   const budgetOwner = demoBudgetOwner(owner, run.demoAuthorizationId)
+  if (quality || run.qualityRevision) {
+    const saved = quality && await repository.studioGet(owner, 'automation_demo_review', repairReviewId(currentRun))
+    if (!saved || quality.version !== 1 || costScopeHash(quality, null) !== costScopeHash(run.qualityRevision, null) || saved.demoId !== run.demoAuthorizationId || saved.runId !== run.id || saved.packageId !== binding.packageId || saved.review.model !== authorization.model || saved.review.policyVersion !== automaticTextPolicyVersion || saved.review.status !== 'needs_revision' || !saved.review.result || saved.review.responseFailure || saved.review.runId !== quality.reviewId || saved.review.contentHash !== quality.contentHash || saved.review.profileHash !== binding.profileHash || currentRun.publicationId || currentRun.providerPostId) throw blocked('The paid quality revision lacks its actual frozen rejected review.')
+    const original = { ...currentRun, qualityRevision: undefined, contentHash: quality.contentHash }
+    await settledDemoStage(repository, budgetOwner, original, 'generate')
+    await settledDemoStage(repository, budgetOwner, original, 'review')
+    if (phase === 'review') await settledDemoStage(repository, budgetOwner, currentRun, 'generate')
+  }
+  const expectedHash = phase === 'generate' ? quality?.contentHash || binding.sourceContentHash : currentRun.contentHash
+  if (!pack || !expectedHash || contentHash(pack) !== expectedHash || (phase === 'review' && (run.contentHash !== expectedHash || currentRun.packageId !== pack.id))) throw blocked('The paid demonstration content changed outside the authorized stage.')
   const budget = await repository.budgetSummary(budgetOwner, 'USD')
   if (budget.limitMicros !== authorization.totalLimitMicros) throw blocked('The paid demonstration needs its own exact shared five-dollar budget.')
+  if (quality) {
+    let ownReservedMicros = 0
+    for (let attempt = 0; attempt < (phase === 'generate' ? 2 : 1); attempt++) {
+      const cost = await repository.budgetGet(budgetOwner, `demo:${demoStageRequestId(currentRun, phase)}:${attempt}`)
+      if (cost?.status === 'reserved') ownReservedMicros += cost.quote.upperBoundMicros
+    }
+    if (budget.heldMicros > ownReservedMicros) throw blocked('Other unsettled demo usage prevents paid quality dispatch.')
+  }
   return { authorization, budgetOwner, model: authorization.model, projectId: authorization.projectId, requiredQuoteMicros: authorization.provider === 'openrouter' ? openRouterDemoCallUpperBoundMicros : vertexDemoCallUpperBoundMicros }
 }
 

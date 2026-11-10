@@ -33,6 +33,10 @@ function reviewOutcome(pack, profile) {
   return { ...assessAutomaticText(pack, profile), status: actual?.status || 'blocked', repairable: actual?.policyVersion === automaticTextPolicyVersion && ((actual?.status === 'needs_revision' && Boolean(actual.result)) || (actual?.status === 'blocked' && preflightIssues.length > 0)), reviewResult: actual?.result || null, preflightIssues, reviewId: actual?.runId || null, contentHash: actual?.contentHash || null }
 }
 
+function recordedReviewFeedback(review) {
+  return { reviewId: review.runId, contentHash: review.contentHash, issues: [...new Set([...(review.issues || []), ...(review.preflightIssues || []), ...(review.result?.issues || [])])], ratings: review.result?.ratings || null, claims: (review.result?.claims || []).map(({ id, verdict, reason }) => ({ id, verdict, reason })) }
+}
+
 function normalizedResearch(report, context) {
   const day = context.localDate || new Date(context.now || Date.now()).toISOString().slice(0, 10)
   const current = Date.parse(`${day}T00:00:00Z`)
@@ -96,12 +100,20 @@ export function createAutomationServices(repository, { research = researchNiche,
     if (!pack || pack.id !== binding?.packageId) throw blocked('The paid demo draft does not match its authorized package.')
     if (context.requestId !== demoStageRequestId(context.run, 'generate')) throw blocked('The paid demo operation identifier does not match this exact run.')
     await checkConsent(context)
+    const quality = context.run.qualityRevision
+    let automaticReviewFeedback
+    if (quality) {
+      const actualReview = pack.automaticReview
+      const repairable = actualReview?.status === 'needs_revision' && actualReview.result && !actualReview.responseFailure
+      if (quality.version !== 1 || !quality.instruction || quality.contentHash !== contentHash(pack) || actualReview?.policyVersion !== automaticTextPolicyVersion || actualReview?.runId !== quality.reviewId || actualReview?.contentHash !== quality.contentHash || !repairable) throw blocked('Paid quality repair requires the actual failed review of this exact saved content.')
+      automaticReviewFeedback = recordedReviewFeedback(actualReview)
+    }
     const previous = await repository.studioJobGet(context.owner, context.requestId)
     if (previous) {
       if (previous.scope?.demoId !== context.run.demoAuthorizationId || previous.scope?.packageId !== pack?.id) throw blocked('The paid demo operation belongs to different content.')
       return { status: previous.status, jobId: previous.id, package: previous.result }
     }
-    const scope = { operation: 'generation', generationProvider: `${authorization.authorization.provider || 'vertex'}-demo`, demoId: context.run.demoAuthorizationId, packageId: pack.id, revision: pack.revision, actorUid: context.actorUid, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null), model: authorization.model }
+    const scope = { operation: 'generation', generationProvider: `${authorization.authorization.provider || 'vertex'}-demo`, demoId: context.run.demoAuthorizationId, packageId: pack.id, revision: pack.revision, actorUid: context.actorUid, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null), model: authorization.model, ...(quality ? { qualityRevisionOf: quality.reviewId } : {}) }
     let admission
     try { admission = await repository.studioJobReserve(context.owner, context.requestId, costScopeHash(scope, null), env.STUDIO_DAILY_GENERATIONS, scope) }
     catch (error) { throw Object.assign(error, { preDispatch: true }) }
@@ -112,7 +124,7 @@ export function createAutomationServices(repository, { research = researchNiche,
       const settings = settingsSchema.parse({ ...pack.settings, platform: context.profile.platform, outputs: ['platforms', 'website'] })
       const provider = demoGenerate(demoContext, { beforeAttempt: () => checkConsent(context) })
       const generate = async request => { dispatched = true; return provider(request) }
-      const content = await write(pack.evidence, settings, { ...pack.researchContext, automationAccountId: context.profile.accountId, outputConstraint: writingConstraint, previousContent: null, revisionInstruction: 'Write a fresh compact account-specific post and website article from the supplied source passages. Preserve attribution and scope; omit unsupported claims.' }, generate, { beforeAttempt: () => checkConsent(context), fallback: undefined, startWithFallback: false })
+      const content = await write(pack.evidence, settings, { ...pack.researchContext, automationAccountId: context.profile.accountId, outputConstraint: writingConstraint, previousContent: quality ? pack.content : null, revisionInstruction: quality?.instruction || 'Write a fresh compact account-specific post and website article from the supplied source passages. Preserve attribution and scope; omit unsupported claims.', ...(automaticReviewFeedback ? { automaticReviewFeedback } : {}) }, generate, { beforeAttempt: () => checkConsent(context), fallback: undefined, startWithFallback: false })
       const review = reviewContent(content, pack.evidence, settings, { automationAccountId: context.profile.accountId })
       if (review.issues.length) throw Object.assign(new Error('Demo writing did not pass evidence validation'), { code: 'EVIDENCE_VALIDATION', issues: review.issues, issueCount: review.issues.length })
       await checkConsent(context)
@@ -183,7 +195,7 @@ export function createAutomationServices(repository, { research = researchNiche,
         const actualReview = pack?.automaticReview
         const repairable = (actualReview?.status === 'needs_revision' && actualReview.result) || (actualReview?.status === 'blocked' && actualReview.preflightIssues?.length > 0)
         if (!pack?.content || pack.status !== 'completed' || quality.version !== 1 || !quality.instruction || quality.contentHash !== contentHash(pack) || actualReview?.policyVersion !== automaticTextPolicyVersion || actualReview?.runId !== quality.reviewId || !repairable || actualReview?.contentHash !== contentHash(pack)) throw blocked('Quality repair requires the actual completed review of this exact saved content.')
-        automaticReviewFeedback = { reviewId: actualReview.runId, contentHash: actualReview.contentHash, issues: [...new Set([...(actualReview.issues || []), ...(actualReview.preflightIssues || []), ...(actualReview.result?.issues || [])])], ratings: actualReview.result?.ratings || null, claims: (actualReview.result?.claims || []).map(({ id, verdict, reason }) => ({ id, verdict, reason })) }
+        automaticReviewFeedback = recordedReviewFeedback(actualReview)
       }
       if (!pack) {
         const report = await repository.studioGet(owner, 'research', run.researchId)
@@ -227,6 +239,8 @@ export function createAutomationServices(repository, { research = researchNiche,
       const demoContext = { ...context, repository, phase: 'review' }
       const demo = await assertDemoAuthorization(demoContext)
       if (demo && context.requestId !== demoStageRequestId(context.run, 'review')) throw blocked('The paid demo review identifier does not match this exact content.')
+      const recorded = pack.automaticReview
+      if (demo && !context.run.qualityRevision && context.run.stages?.some(stage => stage.stage === 'review' && stage.requestId === context.requestId && stage.status === 'needs_revision') && recorded?.policyVersion === automaticTextPolicyVersion && recorded.contentHash === contentHash(pack) && recorded.profileHash === costScopeHash(context.profile, null) && recorded.model === demo.model && !recorded.responseFailure && recorded.status === 'needs_revision' && recorded.result) return reviewOutcome(pack, context.profile)
       if (!(await repository.studioReserve(`${context.owner}:automatic-review`, context.requestId, env.STUDIO_DAILY_GENERATIONS)).reserved) throw blocked('The review attempt already exists or its allowance is exhausted.')
       const scope = { operation: 'generation', purpose: 'automatic-review', packageId: pack.id, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null) }
       if (!demo) {

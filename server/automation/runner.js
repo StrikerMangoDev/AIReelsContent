@@ -3,7 +3,7 @@ import { costScopeHash } from '../budget/policy.js'
 import { workspaceRole } from '../studio/workspaces.js'
 import { automaticTextPolicyVersion } from './review.js'
 import { contentHash } from '../studio/approval.js'
-import { demoStageRequestId, demoAuthorizationSchema, demoAuthorizationActive } from './demo.js'
+import { demoStageRequestId, demoAuthorizationSchema, demoAuthorizationActive, assertDemoQualityRepair } from './demo.js'
 
 export const automationRegistryOwner = '__automation_registry__'
 const digest = value => createHash('sha256').update(value).digest('hex')
@@ -47,8 +47,9 @@ async function currentEvergreenDemo(repository, owner, profile, localDate, now) 
     const authorization = parsed.data
     const binding = authorization.runs.find(value => value.runId === run.id)
     if (!demoAuthorizationActive(authorization, now.getTime()) || !['generate', 'review', 'render', 'publish'].includes(run.stage) || authorization.owner !== owner || authorization.actorUid !== profile.automaticPolicy?.consentedBy || !binding || binding.accountId !== profile.accountId || binding.profileId !== profile.id || binding.profileHash !== profileHash || run.profileHash !== profileHash || binding.packageId !== run.packageId || binding.sourceContentHash !== run.demoSourceContentHash) continue
+    if (run.qualityRevision && (run.qualityRevision.version !== 1 || typeof run.qualityRevision.reviewId !== 'string' || !run.qualityRevision.reviewId || !/^[a-f0-9]{64}$/.test(run.qualityRevision.contentHash || '') || typeof run.qualityRevision.instruction !== 'string' || !run.qualityRevision.instruction.trim())) continue
     const pack = await repository.studioGet(owner, 'package', binding.packageId)
-    if (!pack || contentHash(pack) !== (run.stage === 'generate' ? binding.sourceContentHash : run.contentHash)) continue
+    if (!pack || contentHash(pack) !== (run.stage === 'generate' ? run.qualityRevision?.contentHash || binding.sourceContentHash : run.contentHash)) continue
     valid.push(run)
   }
   // Conflicting operator records do not select an arbitrary paid operation.
@@ -86,6 +87,15 @@ export async function runAccountAutomation({ repository, owner, profile, service
     if (!await repository.acquireLease(leaseId, leaseOwner, 600000)) { results.push({ id: unitId, status: 'busy' }); break }
     try {
       let run = await repository.studioGet(owner, 'automation_run', unitId)
+      if (demoRun && run?.status === 'blocked' && run.stage === 'review' && !run.qualityRevision && !run.publicationId && !run.providerPostId) {
+        const pack = await repository.studioGet(owner, 'package', run.packageId)
+        const actual = pack?.automaticReview
+        if (actual?.status === 'needs_revision' && actual.result && !actual.responseFailure && actual.policyVersion === automaticTextPolicyVersion && actual.contentHash === run.contentHash && actual.contentHash === contentHash(pack) && actual.profileHash === profileHash && run.stages?.some(stage => stage.stage === 'review' && stage.requestId === stageRequestId(unitId, 'review', run) && stage.status === 'needs_revision')) {
+          run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, status: 'review_running' }, run.revision)
+          try { await assertDemoQualityRepair({ repository, owner, actorUid: run.actorUid, run, profile, phase: 'review' }) }
+          catch { run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, status: 'blocked', error: 'The saved failed review remains held; paid quality repair was not admitted.' }, run.revision); results.push(run); continue }
+        }
+      }
       if (run && (['completed', 'blocked', 'failed', 'awaiting_receipt'].includes(run.status) || run.profileHash !== profileHash)) { results.push(run); continue }
       let reconciled
       if (run?.status.endsWith('_running') || run?.status === 'dispatch_unknown') {
@@ -128,7 +138,12 @@ export async function runAccountAutomation({ repository, owner, profile, service
         }
         const outcome = result?.receipt || result
         const stageRecord = { stage: phase, requestId: id, status: outcome?.status || (result?.eligible === false ? 'blocked' : 'completed'), completedAt: new Date().toISOString(), jobId: result?.jobId || null }
-        if (!run.demoAuthorizationId && phase === 'review' && ['needs_revision', 'blocked'].includes(result?.status) && result.repairable === true && (result.reviewResult || result.preflightIssues?.length > 0) && result.reviewId && result.contentHash && !run.qualityRevision && !run.publicationId && !run.providerPostId && Array.isArray(result.issues) && result.issues.some(issue => typeof issue === 'string' && issue.trim())) {
+        if (phase === 'review' && ['needs_revision', 'blocked'].includes(result?.status) && result.repairable === true && (result.reviewResult || result.preflightIssues?.length > 0) && result.reviewId && result.contentHash && !run.qualityRevision && !run.publicationId && !run.providerPostId && Array.isArray(result.issues) && result.issues.some(issue => typeof issue === 'string' && issue.trim())) {
+          if (run.demoAuthorizationId) {
+            if (result.status !== 'needs_revision' || !result.reviewResult) { run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, stages: [...run.stages, stageRecord], status: 'blocked', error: 'A paid quality repair requires a complete failed model review.', findings: result.issues }, run.revision); break }
+            try { await assertDemoQualityRepair({ repository, owner, actorUid: run.actorUid, run, profile: currentProfile, phase: 'review' }) }
+            catch { run = await repository.studioPut(owner, 'automation_run', unitId, { ...run, stages: [...run.stages, stageRecord], status: 'blocked', error: 'The paid demo quality repair was not admitted; no additional provider operation was started.', findings: result.issues }, run.revision); break }
+          }
           const issues = result.issues.filter(issue => typeof issue === 'string').slice(0, 20)
           const instruction = `Resolve the recorded automated review findings using only supported source passages. Preserve qualifications and citations; omit unsupported claims rather than inventing support. Findings: ${issues.slice(0, 8).map(issue => issue.slice(0, 200)).join(' | ')}`.slice(0, 1900)
           const qualityRevision = { version: 1, reviewRequestId: id, reviewId: result.reviewId, contentHash: result.contentHash, instruction, issues, createdAt: new Date().toISOString() }

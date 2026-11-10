@@ -1,14 +1,54 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRepository } from '../storage/repository.js'
-import { assertDemoAuthorization, createDemoGenerator, demoBudgetOwner, demoStageRequestId } from '../automation/demo.js'
+import { assertDemoAuthorization, assertDemoQualityRepair, createDemoGenerator, demoBudgetOwner, demoStageRequestId } from '../automation/demo.js'
 import { generateVertexJson, vertexFallbackAllowed, vertexDemoCallUpperBoundMicros, vertexWifAudience, vertexWifServiceAccount } from '../providers/vertex-fallback.js'
 import { contentHash } from '../studio/approval.js'
 import { createDemoFixture } from './fixtures/demo.js'
+import { automaticTextPolicyVersion } from '../automation/review.js'
+import { ratingsFixture } from './fixtures/finalization.js'
 
 const config = { CONTENT_VERTEX_FALLBACK: 'false', VERTEX_WIF_AUDIENCE: vertexWifAudience, VERTEX_WIF_SERVICE_ACCOUNT: vertexWifServiceAccount }
 const input = { system: 'Return controlled test JSON.', input: {}, schema: { type: 'object' }, maxTokens: 1000 }
 const success = async () => ({ text: '{"ok":true}', candidates: [{ finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 200, thoughtsTokenCount: 0 } })
+
+test('one paid quality revision requires a real failed review, settled original stages and new stable stage IDs', async () => {
+  const repository = createRepository(':memory:')
+  try {
+    const fixture = await createDemoFixture(repository); let context = fixture.contexts[0]
+    await createDemoGenerator(context, { config, request: success })(input)
+    let pack = await repository.studioGet(context.owner, 'package', context.run.packageId)
+    pack = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, content: { text: 'Actual original output', claims: [{ id: 'C1', evidenceIds: ['E1'], text: 'A limited preview was reported.', quote: pack.evidence[0].excerpt }] } }, pack.revision)
+    let run = await repository.studioPut(context.owner, 'automation_run', context.run.id, { ...context.run, stage: 'review', status: 'review_running', contentHash: contentHash(pack) }, context.run.revision)
+    context = { ...context, run, phase: 'review' }
+    await createDemoGenerator(context, { config, request: success })(input)
+    const review = { policyVersion: automaticTextPolicyVersion, method: 'automated-model-review', runId: 'afcb81e1-2e15-423c-9a79-59e054d07bc7', model: 'gemini-3.8-flash', actorId: context.owner, reviewedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(), limitations: [], contentHash: contentHash(pack), profileHash: run.profileHash, status: 'needs_revision', result: { claims: [{ id: 'C1', evidenceIds: ['E1'], verdict: 'unsupported', supportQuote: null, reason: 'Selected quotation is truncated and does not support the final clause.' }], ratings: ratingsFixture(), checks: { semanticSupport: false, contradictionsResolved: true, scopePreserved: false, promisesAligned: true, privacySafe: true, audienceClaimsSupported: true, provenanceClear: true }, summary: 'The actual selected quotation does not support the full claim.', issues: ['Selected quotation is truncated.'] }, issues: ['Selected quotation is truncated.'] }
+    pack = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, automaticReview: review }, pack.revision)
+    for (const invalid of [{ ...review, policyVersion: 'automated-text-v3' }, { ...review, contentHash: '0'.repeat(64) }, { ...review, status: 'blocked', result: null, preflightIssues: [], responseFailure: { code: 'MODEL_TIMEOUT' } }]) {
+      pack = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, automaticReview: invalid }, pack.revision)
+      await assert.rejects(assertDemoQualityRepair(context), { code: 'BUDGET_BLOCKED' })
+    }
+    pack = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, automaticReview: review }, pack.revision)
+    await assertDemoQualityRepair(context)
+    const qualityRevision = { version: 1, reviewId: review.runId, contentHash: review.contentHash, instruction: 'Repair only the actual failed selected quotation.' }
+    const originalGenerateId = demoStageRequestId(run, 'generate'); const originalReviewId = demoStageRequestId(run, 'review')
+    run = await repository.studioPut(context.owner, 'automation_run', run.id, { ...run, stage: 'generate', status: 'generate_running', qualityRevision }, run.revision)
+    context = { ...context, run, phase: 'generate' }
+    assert.notEqual(demoStageRequestId(run, 'generate'), originalGenerateId)
+    assert.notEqual(demoStageRequestId(run, 'review'), originalReviewId)
+    assert.equal(demoStageRequestId(run, 'generate'), demoStageRequestId({ ...run }, 'generate'))
+    await assertDemoAuthorization(context)
+    await assert.rejects(assertDemoAuthorization({ ...context, run: { ...run, qualityRevision: { ...qualityRevision, version: 2 } } }), { code: 'BUDGET_BLOCKED' })
+    await createDemoGenerator(context, { config, request: success })(input)
+    pack = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, content: { text: 'Actual revised output' }, automaticReview: null }, pack.revision)
+    run = await repository.studioPut(context.owner, 'automation_run', run.id, { ...run, stage: 'review', status: 'review_running', contentHash: contentHash(pack) }, run.revision)
+    context = { ...context, run, phase: 'review' }
+    await assertDemoAuthorization(context)
+    await assert.rejects(assertDemoQualityRepair(context), { code: 'BUDGET_BLOCKED' })
+    assert.equal((await repository.studioList(context.owner, 'automation_demo_review'))[0].review.contentHash, review.contentHash)
+    assert.equal(repository.budgetSummary(fixture.owner).limitMicros, 0)
+  } finally { repository.close() }
+})
 
 test('paid demo is exact-owner, five-run, current-profile bound with stable generation/review IDs', async () => {
   const repository = createRepository(':memory:')
