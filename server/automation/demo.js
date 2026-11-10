@@ -26,15 +26,34 @@ export function demoAuthorizationActive(value, now = Date.now()) {
 }
 export const demoBudgetOwner = (owner, demoId) => `demo:${costScopeHash({ owner, demoId }, null).slice(0, 48)}`
 export function demoStageRequestId(run, phase) {
-  const digest = costScopeHash({ demoId: run.demoAuthorizationId, runId: run.id, phase, contentHash: phase === 'generate' ? run.demoSourceContentHash : run.contentHash, ...(phase === 'review' ? { policyVersion: automaticTextPolicyVersion } : {}), ...(run.qualityRevision ? { qualityRevision: { version: run.qualityRevision.version, reviewId: run.qualityRevision.reviewId, contentHash: run.qualityRevision.contentHash } } : {}) }, null)
+  const digest = costScopeHash({ demoId: run.demoAuthorizationId, runId: run.id, phase, contentHash: phase === 'generate' ? run.demoSourceContentHash : run.contentHash, ...(phase === 'review' ? { policyVersion: automaticTextPolicyVersion, ...(run.reviewFormatRetry ? { reviewFormatRetry: { version: run.reviewFormatRetry.version, reviewId: run.reviewFormatRetry.reviewId, contentHash: run.reviewFormatRetry.contentHash } } : {}) } : {}), ...(run.qualityRevision ? { qualityRevision: { version: run.qualityRevision.version, reviewId: run.qualityRevision.reviewId, contentHash: run.qualityRevision.contentHash } } : {}) }, null)
   return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}`
 }
 const repairReviewId = run => costScopeHash({ demoId: run.demoAuthorizationId, runId: run.id, reviewId: run.qualityRevision?.reviewId }, null).slice(0, 32)
+const formatReviewId = run => costScopeHash({ demoId: run.demoAuthorizationId, runId: run.id, reviewId: run.reviewFormatRetry?.reviewId, kind: 'review-format' }, null).slice(0, 32)
+const formatFailure = review => review?.policyVersion === automaticTextPolicyVersion && review.status === 'blocked' && review.result === null && review.responseFailure?.code === 'MODEL_SCHEMA_INVALID' && review.responseFailure.outcome === 'invalid_response' && review.responseFailure.issueCount > 0 && review.responseFailure.schemaIssues?.length > 0
 async function settledDemoStage(repository, budgetOwner, run, phase, required = true) {
   for (let attempt = 0; attempt < (phase === 'generate' ? 2 : 1); attempt++) {
     const cost = await repository.budgetGet(budgetOwner, `demo:${demoStageRequestId(run, phase)}:${attempt}`)
     if ((!cost && attempt === 0 && required) || cost && (cost.status !== 'settled' || cost.overage)) throw blocked('Prior paid demo usage must be settled before a quality revision.')
   }
+}
+export async function assertDemoReviewFormatRetry(context) {
+  const admitted = await assertDemoAuthorization(context)
+  if (!admitted || context.phase !== 'review' || context.run.reviewFormatRetry || context.run.publicationId || context.run.providerPostId) throw blocked('Only one confirmed review schema failure may authorize a format correction.')
+  const pack = await context.repository.studioGet(context.owner, 'package', context.run.packageId)
+  const review = pack?.automaticReview
+  let parsed = false
+  try { parsed = assessAutomaticText(pack, context.profile).policyVersion === automaticTextPolicyVersion } catch { /* Malformed content cannot authorize a paid format correction. */ }
+  if (!parsed || !formatFailure(review) || review.model !== admitted.model || review.profileHash !== context.run.profileHash || review.contentHash !== contentHash(pack) || Date.parse(review.reviewedAt) > Date.now() || Date.parse(review.expiresAt) <= Date.now()) throw blocked('Format correction requires the actual current schema-invalid review of unchanged content.')
+  if ((await context.repository.budgetSummary(admitted.budgetOwner, 'USD')).heldMicros !== 0) throw blocked('Unsettled demo usage prevents a paid format correction.')
+  await settledDemoStage(context.repository, admitted.budgetOwner, context.run, 'generate')
+  await settledDemoStage(context.repository, admitted.budgetOwner, context.run, 'review')
+  const id = formatReviewId({ ...context.run, reviewFormatRetry: { reviewId: review.runId } })
+  const saved = await context.repository.studioGet(context.owner, 'automation_demo_review_format', id)
+  if (saved && costScopeHash(saved.review, null) !== costScopeHash(review, null)) throw blocked('The schema-invalid review history changed.')
+  if (!saved) await context.repository.studioPut(context.owner, 'automation_demo_review_format', id, { demoId: context.run.demoAuthorizationId, runId: context.run.id, packageId: pack.id, review, qualityRevision: context.run.qualityRevision || null }, 0)
+  return admitted
 }
 export async function assertDemoQualityRepair(context) {
   const admitted = await assertDemoAuthorization(context)
@@ -51,7 +70,7 @@ export async function assertDemoQualityRepair(context) {
   await settledDemoStage(context.repository, admitted.budgetOwner, context.run, 'review')
   const id = repairReviewId({ ...context.run, qualityRevision: { reviewId: review.runId } })
   const saved = await context.repository.studioGet(context.owner, 'automation_demo_review', id)
-  const snapshot = { demoId: context.run.demoAuthorizationId, runId: context.run.id, packageId: pack.id, review }
+  const snapshot = { demoId: context.run.demoAuthorizationId, runId: context.run.id, packageId: pack.id, review, reviewFormatRetry: context.run.reviewFormatRetry || null }
   if (saved && costScopeHash(saved.review, null) !== costScopeHash(review, null)) throw blocked('The rejected demo review history changed.')
   if (!saved) await context.repository.studioPut(context.owner, 'automation_demo_review', id, snapshot, 0)
   return admitted
@@ -74,11 +93,17 @@ export async function assertDemoAuthorization({ repository, owner, actorUid, run
   if (!Number.isFinite(Date.parse(currentProfile.automaticPolicy.consentedAt || '')) || Date.parse(currentProfile.automaticPolicy.consentedAt) > now) throw blocked('The account automation consent timestamp is unavailable or invalid.')
   const pack = await repository.studioGet(owner, 'package', binding.packageId)
   const quality = currentRun.qualityRevision
+  const format = currentRun.reviewFormatRetry
   const budgetOwner = demoBudgetOwner(owner, run.demoAuthorizationId)
+  if (format || run.reviewFormatRetry) {
+    const saved = format && await repository.studioGet(owner, 'automation_demo_review_format', formatReviewId(currentRun))
+    if (!saved || format.version !== 1 || costScopeHash(format, null) !== costScopeHash(run.reviewFormatRetry, null) || saved.demoId !== run.demoAuthorizationId || saved.runId !== run.id || saved.packageId !== binding.packageId || !formatFailure(saved.review) || saved.review.model !== authorization.model || saved.review.runId !== format.reviewId || saved.review.contentHash !== format.contentHash || saved.review.profileHash !== binding.profileHash || !quality && (phase !== 'review' || format.contentHash !== currentRun.contentHash) || currentRun.publicationId || currentRun.providerPostId) throw blocked('The format correction lacks its actual frozen schema-invalid review.')
+    await settledDemoStage(repository, budgetOwner, { ...currentRun, qualityRevision: saved.qualityRevision || undefined, reviewFormatRetry: undefined, contentHash: format.contentHash }, 'review')
+  }
   if (quality || run.qualityRevision) {
     const saved = quality && await repository.studioGet(owner, 'automation_demo_review', repairReviewId(currentRun))
     if (!saved || quality.version !== 1 || costScopeHash(quality, null) !== costScopeHash(run.qualityRevision, null) || saved.demoId !== run.demoAuthorizationId || saved.runId !== run.id || saved.packageId !== binding.packageId || saved.review.model !== authorization.model || saved.review.policyVersion !== automaticTextPolicyVersion || saved.review.status !== 'needs_revision' || !saved.review.result || saved.review.responseFailure || saved.review.runId !== quality.reviewId || saved.review.contentHash !== quality.contentHash || saved.review.profileHash !== binding.profileHash || currentRun.publicationId || currentRun.providerPostId) throw blocked('The paid quality revision lacks its actual frozen rejected review.')
-    const original = { ...currentRun, qualityRevision: undefined, contentHash: quality.contentHash }
+    const original = { ...currentRun, qualityRevision: undefined, reviewFormatRetry: saved.reviewFormatRetry || undefined, contentHash: quality.contentHash }
     await settledDemoStage(repository, budgetOwner, original, 'generate')
     await settledDemoStage(repository, budgetOwner, original, 'review')
     if (phase === 'review') await settledDemoStage(repository, budgetOwner, currentRun, 'generate')
@@ -87,7 +112,7 @@ export async function assertDemoAuthorization({ repository, owner, actorUid, run
   if (!pack || !expectedHash || contentHash(pack) !== expectedHash || (phase === 'review' && (run.contentHash !== expectedHash || currentRun.packageId !== pack.id))) throw blocked('The paid demonstration content changed outside the authorized stage.')
   const budget = await repository.budgetSummary(budgetOwner, 'USD')
   if (budget.limitMicros !== authorization.totalLimitMicros) throw blocked('The paid demonstration needs its own exact shared five-dollar budget.')
-  if (quality) {
+  if (quality || format) {
     let ownReservedMicros = 0
     for (let attempt = 0; attempt < (phase === 'generate' ? 2 : 1); attempt++) {
       const cost = await repository.budgetGet(budgetOwner, `demo:${demoStageRequestId(currentRun, phase)}:${attempt}`)

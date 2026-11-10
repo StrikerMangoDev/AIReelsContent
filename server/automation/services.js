@@ -30,7 +30,7 @@ const writingConstraint = 'Return the complete requested schema concisely. Use a
 function reviewOutcome(pack, profile) {
   const actual = pack.automaticReview
   const preflightIssues = actual?.preflightIssues || []
-  return { ...assessAutomaticText(pack, profile), status: actual?.status || 'blocked', repairable: actual?.policyVersion === automaticTextPolicyVersion && ((actual?.status === 'needs_revision' && Boolean(actual.result)) || (actual?.status === 'blocked' && preflightIssues.length > 0)), reviewResult: actual?.result || null, preflightIssues, reviewId: actual?.runId || null, contentHash: actual?.contentHash || null }
+  return { ...assessAutomaticText(pack, profile), status: actual?.status || 'blocked', repairable: actual?.policyVersion === automaticTextPolicyVersion && ((actual?.status === 'needs_revision' && Boolean(actual.result)) || (actual?.status === 'blocked' && preflightIssues.length > 0)), reviewResult: actual?.result || null, responseFailure: actual?.responseFailure || null, preflightIssues, reviewId: actual?.runId || null, contentHash: actual?.contentHash || null }
 }
 
 function recordedReviewFeedback(review) {
@@ -240,7 +240,12 @@ export function createAutomationServices(repository, { research = researchNiche,
       const demo = await assertDemoAuthorization(demoContext)
       if (demo && context.requestId !== demoStageRequestId(context.run, 'review')) throw blocked('The paid demo review identifier does not match this exact content.')
       const recorded = pack.automaticReview
-      if (demo && !context.run.qualityRevision && context.run.stages?.some(stage => stage.stage === 'review' && stage.requestId === context.requestId && stage.status === 'needs_revision') && recorded?.policyVersion === automaticTextPolicyVersion && recorded.contentHash === contentHash(pack) && recorded.profileHash === costScopeHash(context.profile, null) && recorded.model === demo.model && !recorded.responseFailure && recorded.status === 'needs_revision' && recorded.result) return reviewOutcome(pack, context.profile)
+      if (demo && !context.run.qualityRevision && !context.run.reviewFormatRetry && context.run.stages?.some(stage => stage.stage === 'review' && stage.requestId === context.requestId && ['needs_revision', 'blocked'].includes(stage.status)) && recorded?.policyVersion === automaticTextPolicyVersion && recorded.contentHash === contentHash(pack) && recorded.profileHash === costScopeHash(context.profile, null) && recorded.model === demo.model && (recorded.status === 'needs_revision' && recorded.result && !recorded.responseFailure || recorded.status === 'blocked' && !recorded.result && recorded.responseFailure?.code === 'MODEL_SCHEMA_INVALID' && recorded.responseFailure.outcome === 'invalid_response' && recorded.responseFailure.schemaIssues?.length)) return reviewOutcome(pack, context.profile)
+      let formatFeedback
+      if (demo && context.run.reviewFormatRetry && context.run.contentHash === context.run.reviewFormatRetry.contentHash) {
+        if (recorded?.runId !== context.run.reviewFormatRetry.reviewId || recorded.contentHash !== context.run.reviewFormatRetry.contentHash || recorded.status !== 'blocked' || recorded.result || recorded.responseFailure?.code !== 'MODEL_SCHEMA_INVALID' || recorded.responseFailure.outcome !== 'invalid_response' || !recorded.responseFailure.schemaIssues?.length) throw blocked('The review format correction requires its actual saved schema failure.')
+        formatFeedback = { reviewId: recorded.runId, contentHash: recorded.contentHash, schemaIssues: recorded.responseFailure.schemaIssues }
+      }
       if (!(await repository.studioReserve(`${context.owner}:automatic-review`, context.requestId, env.STUDIO_DAILY_GENERATIONS)).reserved) throw blocked('The review attempt already exists or its allowance is exhausted.')
       const scope = { operation: 'generation', purpose: 'automatic-review', packageId: pack.id, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null) }
       if (!demo) {
@@ -248,9 +253,9 @@ export function createAutomationServices(repository, { research = researchNiche,
         if (cost.status !== 'reserved') throw blocked('The previous evaluator request requires reconciliation.')
         await repository.budgetTransition(context.owner, cost.id, cost.revision, 'dispatch')
       }
-      const automaticReview = await evaluate(pack, context.profile, { actorId: context.actorUid, ...(demo ? { generate: demoGenerate(demoContext, { beforeAttempt: () => checkConsent(context) }), model: demo.model } : evaluate === reviewAutomaticText ? { generate: boundedGenerate, model: env.LLM_MODEL } : {}) })
+      const automaticReview = await evaluate(pack, context.profile, { actorId: context.actorUid, ...(formatFeedback ? { formatFeedback } : {}), ...(demo ? { generate: demoGenerate(demoContext, { beforeAttempt: () => checkConsent(context) }), model: demo.model } : evaluate === reviewAutomaticText ? { generate: boundedGenerate, model: env.LLM_MODEL } : {}) })
       if (demo) { await checkConsent(context); await assertDemoAuthorization(demoContext) }
-      const saved = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, automaticReview }, pack.revision)
+      const saved = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, automaticReview, automaticReviewRequestId: context.requestId }, pack.revision)
       return reviewOutcome(saved, context.profile)
     },
     async render(context) {
@@ -292,6 +297,7 @@ export function createAutomationServices(repository, { research = researchNiche,
       }
       if (context.phase === 'review') {
         const pack = await savedPack(context)
+        if (context.run.reviewFormatRetry && pack.automaticReviewRequestId !== context.requestId) return { status: 'dispatch_unknown' }
         return pack.automaticReview ? reviewOutcome(pack, context.profile) : { status: 'dispatch_unknown' }
       }
       if (context.phase === 'render') {

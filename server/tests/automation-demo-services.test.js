@@ -103,3 +103,53 @@ test('a recorded failed paid review resumes into exactly one settled correction 
     } finally { repository.close() }
   }
 })
+
+test('a known paid evaluator schema failure gets one format-only retry without regenerating content or forcing a pass', async () => {
+  for (const outcome of ['passed', 'invalid-again', 'transport-unknown', 'prior-unknown']) {
+    const repository = createRepository(':memory:'); let evaluatorCalls = 0; let writes = 0
+    try {
+      const fixture = await createDemoFixture(repository); const original = fixture.contexts[0]; const owner = fixture.owner
+      const at = new Date(); const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Calcutta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at)
+      const profile = repository.studioPut(owner, 'account_profile', original.profile.id, { ...original.profile, platform: 'X', weeklyCadence: 3, dailyNews: true, maxDailyPosts: 1, audience: 'Developers', tone: 'Factual', weeklyBrief: 'Explain source-reported agent safeguards and limitations.', contentPillars: ['AI security'] }, original.profile.revision)
+      const profileHash = costScopeHash(profile, null)
+      repository.studioPut(owner, 'automation_demo', fixture.demoId, { ...fixture.authorization, runs: fixture.authorization.runs.map(binding => binding.runId === original.run.id ? { ...binding, profileHash } : binding) }, fixture.authorization.revision)
+      let pack = repository.studioGet(owner, 'package', original.run.packageId)
+      const excerpt = pack.evidence[0].excerpt
+      pack = repository.studioPut(owner, 'package', pack.id, { ...pack, settings: settingsSchema.parse({ platform: 'X', outputs: ['platforms', 'website'] }), content: contentFixture(excerpt), status: 'completed' }, pack.revision)
+      const reviewData = invalid => { const ratings = ratingsFixture(); if (invalid) ratings.cta.evidenceIds = []; return { claims: [{ id: 'C1', evidenceIds: ['E1'], verdict: 'supported', supportQuote: excerpt, reason: 'The selected publisher quotation directly supports the qualified limited preview claim.' }], ratings, checks: { semanticSupport: true, contradictionsResolved: true, scopePreserved: true, promisesAligned: true, privacySafe: true, audienceClaimsSupported: true, provenanceClear: true }, issues: [], summary: 'The qualified saved content is assessed against its actual selected source.' } }
+      const actualReview = await reviewAutomaticText(pack, profile, { actorId: owner, model: 'gemini-3.8-flash', generate: async () => { if (outcome === 'transport-unknown') throw Object.assign(new Error('No known complete response'), { code: 'MODEL_TIMEOUT' }); return reviewData(true) } })
+      assert.equal(actualReview.status, 'blocked'); assert.equal(actualReview.result, null)
+      if (outcome !== 'transport-unknown') assert.deepEqual(actualReview.responseFailure.schemaIssues, [{ path: 'ratings.cta.evidenceIds', code: 'too_small' }])
+      pack = repository.studioPut(owner, 'package', pack.id, { ...pack, automaticReview: actualReview }, pack.revision)
+      let run = { ...original.run, profileHash, contentHash: contentHash(pack), actorUid: owner, localDate, slot: { kind: 'evergreen-demo', index: 0 }, stage: 'review', status: 'blocked' }
+      const initialReviewId = demoStageRequestId(run, 'review'); const initialGenerateId = demoStageRequestId(run, 'generate')
+      run.stages = [{ stage: 'review', requestId: initialReviewId, status: 'blocked' }]
+      run = repository.studioPut(owner, 'automation_run', run.id, run, original.run.revision)
+      async function settle(stageRun, phase, unknown = false) {
+        const id = `demo:${demoStageRequestId(stageRun, phase)}:0`; const budgetOwner = demoBudgetOwner(owner, fixture.demoId)
+        const reserved = repository.budgetReserve(budgetOwner, id, 'b'.repeat(64), { currency: 'USD', upperBoundMicros: 100, priceVersion: 'controlled-format-test-receipt', priceExpiresAt: new Date(Date.now() + 3600000).toISOString(), kind: 'generation' })
+        const dispatched = repository.budgetTransition(budgetOwner, id, reserved.reservation.revision, 'dispatch')
+        repository.budgetTransition(budgetOwner, id, dispatched.revision, unknown ? 'unknown' : 'settle', unknown ? undefined : 1)
+      }
+      await settle(run, 'generate'); await settle(run, 'review', outcome === 'prior-unknown')
+      const services = createAutomationServices(repository, { write: async () => { writes++; throw new Error('A format-only retry cannot regenerate content') }, demoGenerate: context => async request => { evaluatorCalls++; assert.deepEqual(request.input.schemaCorrections.schemaIssues, actualReview.responseFailure.schemaIssues); assert.match(request.input.formatInstruction, /scores, semantic verdicts and checks independent and honest/); await settle(context.run, 'review'); return reviewData(outcome === 'invalid-again') } })
+      const first = await runAccountAutomation({ repository, owner, profile, services, now: at, maxStages: 1 })
+      if (outcome === 'transport-unknown' || outcome === 'prior-unknown') {
+        assert.equal(first.results[0].status, 'blocked'); assert.equal(first.results[0].reviewFormatRetry, undefined); assert.equal(evaluatorCalls, 0)
+      } else {
+        const retry = first.results[0]
+        assert.equal(retry.status, 'pending'); assert.equal(retry.stage, 'review'); assert.equal(retry.reviewFormatRetry.version, 1); assert.equal(retry.qualityRevision, undefined)
+        assert.notEqual(demoStageRequestId(retry, 'review'), initialReviewId); assert.equal(demoStageRequestId(retry, 'generate'), initialGenerateId)
+        assert.equal((await services.reconcile({ owner, profile, run: retry, phase: 'review', requestId: demoStageRequestId(retry, 'review') })).status, 'dispatch_unknown', 'the previous malformed response cannot impersonate a completed new review attempt')
+        const reviewed = await runAccountAutomation({ repository, owner, profile, services, now: at, maxStages: 1 })
+        assert.equal(reviewed.results[0].status, outcome === 'passed' ? 'pending' : 'blocked')
+        assert.equal(reviewed.results[0].stage, outcome === 'passed' ? 'render' : 'review')
+        assert.equal(evaluatorCalls, 1)
+        assert.equal(contentHash(repository.studioGet(owner, 'package', pack.id)), contentHash(pack))
+        assert.equal(repository.studioList(owner, 'automation_demo_review_format')[0].review.runId, actualReview.runId)
+        if (outcome === 'invalid-again') { await runAccountAutomation({ repository, owner, profile, services, now: at }); assert.equal(evaluatorCalls, 1) }
+      }
+      assert.equal(writes, 0); assert.equal(repository.budgetSummary(owner).limitMicros, 0)
+    } finally { repository.close() }
+  }
+})

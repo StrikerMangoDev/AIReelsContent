@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRepository } from '../storage/repository.js'
-import { assertDemoAuthorization, assertDemoQualityRepair, createDemoGenerator, demoBudgetOwner, demoStageRequestId } from '../automation/demo.js'
+import { assertDemoAuthorization, assertDemoQualityRepair, assertDemoReviewFormatRetry, createDemoGenerator, demoBudgetOwner, demoStageRequestId } from '../automation/demo.js'
 import { generateVertexJson, vertexFallbackAllowed, vertexDemoCallUpperBoundMicros, vertexWifAudience, vertexWifServiceAccount } from '../providers/vertex-fallback.js'
 import { contentHash } from '../studio/approval.js'
 import { createDemoFixture } from './fixtures/demo.js'
@@ -11,6 +11,39 @@ import { ratingsFixture } from './fixtures/finalization.js'
 const config = { CONTENT_VERTEX_FALLBACK: 'false', VERTEX_WIF_AUDIENCE: vertexWifAudience, VERTEX_WIF_SERVICE_ACCOUNT: vertexWifServiceAccount }
 const input = { system: 'Return controlled test JSON.', input: {}, schema: { type: 'object' }, maxTokens: 1000 }
 const success = async () => ({ text: '{"ok":true}', candidates: [{ finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 200, thoughtsTokenCount: 0 } })
+
+test('one format-only review correction uses a settled schema failure, immutable content and a distinct review ID', async () => {
+  const repository = createRepository(':memory:')
+  try {
+    const { contexts } = await createDemoFixture(repository); let context = contexts[0]
+    await createDemoGenerator(context, { config, request: success })(input)
+    let pack = await repository.studioGet(context.owner, 'package', context.run.packageId)
+    pack = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, content: { claims: [], text: 'The exact unchanged saved output.' } }, pack.revision)
+    let run = await repository.studioPut(context.owner, 'automation_run', context.run.id, { ...context.run, stage: 'review', status: 'review_running', contentHash: contentHash(pack) }, context.run.revision)
+    context = { ...context, run, phase: 'review' }
+    await createDemoGenerator(context, { config, request: success })(input)
+    const review = { policyVersion: automaticTextPolicyVersion, method: 'automated-model-review', runId: 'afcb81e1-2e15-423c-9a79-59e054d07bc7', model: 'gemini-3.8-flash', actorId: context.owner, reviewedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(), limitations: [], contentHash: contentHash(pack), profileHash: run.profileHash, status: 'blocked', result: null, issues: ['Evaluator response schema was invalid.'], responseFailure: { code: 'MODEL_SCHEMA_INVALID', name: 'ZodError', outcome: 'invalid_response', issueCount: 1, schemaIssues: [{ path: 'ratings.cta.evidenceIds', code: 'too_small' }] } }
+    for (const invalid of [{ ...review, responseFailure: { code: 'MODEL_TIMEOUT', name: 'Error', outcome: 'transport_unknown' } }, { ...review, model: 'wrong-model' }, { ...review, status: 'needs_revision', responseFailure: undefined }, { ...review, responseFailure: { ...review.responseFailure, schemaIssues: [] } }]) {
+      pack = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, automaticReview: invalid }, pack.revision)
+      await assert.rejects(assertDemoReviewFormatRetry(context), { code: 'BUDGET_BLOCKED' })
+    }
+    pack = await repository.studioPut(context.owner, 'package', pack.id, { ...pack, automaticReview: review }, pack.revision)
+    await assertDemoReviewFormatRetry(context)
+    const previousReviewId = demoStageRequestId(run, 'review'); const previousGenerateId = demoStageRequestId(run, 'generate')
+    const reviewFormatRetry = { version: 1, reviewId: review.runId, contentHash: review.contentHash }
+    run = await repository.studioPut(context.owner, 'automation_run', run.id, { ...run, reviewFormatRetry }, run.revision)
+    context = { ...context, run }
+    assert.notEqual(demoStageRequestId(run, 'review'), previousReviewId)
+    assert.equal(demoStageRequestId(run, 'generate'), previousGenerateId)
+    await assertDemoAuthorization(context)
+    await assert.rejects(assertDemoAuthorization({ ...context, run: { ...run, reviewFormatRetry: { ...reviewFormatRetry, version: 2 } } }), { code: 'BUDGET_BLOCKED' })
+    await createDemoGenerator(context, { config, request: success })(input)
+    await assert.rejects(assertDemoReviewFormatRetry(context), { code: 'BUDGET_BLOCKED' })
+    await assert.rejects(createDemoGenerator(context, { config, request: success })(input), /already exists/)
+    assert.equal(contentHash(await repository.studioGet(context.owner, 'package', pack.id)), review.contentHash)
+    assert.equal((await repository.studioList(context.owner, 'automation_demo_review_format'))[0].review.responseFailure.code, 'MODEL_SCHEMA_INVALID')
+  } finally { repository.close() }
+})
 
 test('one paid quality revision requires a real failed review, settled original stages and new stable stage IDs', async () => {
   const repository = createRepository(':memory:')
