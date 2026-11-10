@@ -40,7 +40,7 @@ export async function vertexGoogleAuthOptions(config, dependencies = {}) {
     const { getVercelOidcToken } = dependencies.getVercelOidcToken ? dependencies : await import('@vercel/functions/oidc')
     phase = 'client_construction'
     const authClient = ExternalAccountClient.fromJSON({
-      type: 'external_account', audience: vertexWifAudience, subject_token_type: 'urn:ietf:params:oauth:token-type:jwt', token_url: 'https://sts.googleapis.com/v1/token', scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+      type: 'external_account', audience: vertexWifAudience.replace(/^https:/, ''), subject_token_type: 'urn:ietf:params:oauth:token-type:jwt', token_url: 'https://sts.googleapis.com/v1/token', scopes: ['https://www.googleapis.com/auth/cloud-platform'],
       service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${vertexWifServiceAccount}:generateAccessToken`,
       subject_token_supplier: { getSubjectToken: async () => {
         phase = 'oidc_exchange'
@@ -55,9 +55,12 @@ export async function vertexGoogleAuthOptions(config, dependencies = {}) {
     if (typeof access?.token !== 'string' || !access.token) throw new Error('No access token')
     return { authClient, projectId: vertexProductionProject }
   } catch (error) {
-    const allowedCodes = ['ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_PACKAGE_PATH_NOT_EXPORTED', 'ERR_INVALID_ARG_TYPE', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'ENOENT', 'invalid_grant', 'invalid_target', 'permission_denied']
+    const allowedCodes = ['ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_PACKAGE_PATH_NOT_EXPORTED', 'ERR_INVALID_ARG_TYPE', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'ENOENT', 'invalid_request', 'invalid_grant', 'invalid_target', 'permission_denied', 'unauthorized_client', 'access_denied']
     const status = error?.response?.status ?? error?.status
-    const authFailure = { phase, ...(allowedCodes.includes(error?.code) ? { code: error.code } : {}), ...(Number.isInteger(status) && status >= 400 && status <= 599 ? { httpStatus: status } : {}) }
+    const code = allowedCodes.includes(error?.code) ? error.code : error?.response?.data?.error
+    const description = error?.response?.data?.error_description
+    const reason = typeof description === 'string' ? /attribute condition/i.test(description) ? 'attribute_condition_rejected' : /audience/i.test(description) ? 'audience_rejected' : /issuer/i.test(description) ? 'issuer_rejected' : /iam\.serviceAccounts\.getAccessToken/i.test(description) ? 'impersonation_permission_denied' : undefined : undefined
+    const authFailure = { phase, ...(allowedCodes.includes(code) ? { code } : {}), ...(reason ? { reason } : {}), ...(Number.isInteger(status) && status >= 400 && status <= 599 ? { httpStatus: status } : {}) }
     throw Object.assign(budgetError('Production federation authentication failed before inference admission.'), { preDispatch: true, configurationFailure: true, authFailure })
   }
 }

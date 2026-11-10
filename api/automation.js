@@ -33,8 +33,9 @@ export function createAutomationHandler({ repository, retain = waitUntil, execut
       catch (error) {
         const diagnostic = error?.authFailure
         if (['google_auth_import', 'vercel_oidc_import', 'client_construction', 'oidc_exchange', 'google_token_exchange', 'access_token_validation'].includes(diagnostic?.phase)) response.setHeader('X-Vertex-Auth-Phase', diagnostic.phase)
-        if (['ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_PACKAGE_PATH_NOT_EXPORTED', 'ERR_INVALID_ARG_TYPE', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'ENOENT', 'invalid_grant', 'invalid_target', 'permission_denied'].includes(diagnostic?.code)) response.setHeader('X-Vertex-Auth-Code', diagnostic.code)
+        if (['ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_PACKAGE_PATH_NOT_EXPORTED', 'ERR_INVALID_ARG_TYPE', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'ENOENT', 'invalid_request', 'invalid_grant', 'invalid_target', 'permission_denied', 'unauthorized_client', 'access_denied'].includes(diagnostic?.code)) response.setHeader('X-Vertex-Auth-Code', diagnostic.code)
         if (Number.isInteger(diagnostic?.httpStatus) && diagnostic.httpStatus >= 400 && diagnostic.httpStatus <= 599) response.setHeader('X-Vertex-Auth-Status', String(diagnostic.httpStatus))
+        if (['attribute_condition_rejected', 'audience_rejected', 'issuer_rejected', 'impersonation_permission_denied'].includes(diagnostic?.reason)) response.setHeader('X-Vertex-Auth-Reason', diagnostic.reason)
         return response.status(503).end()
       }
     }

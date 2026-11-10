@@ -13,6 +13,7 @@ test('installed federation libraries construct and retrieve the supplied subject
   assert.equal(typeof getVercelOidcToken, 'function')
   let client
   const options = await vertexGoogleAuthOptions(config, { ExternalAccountClient: { fromJSON: settings => {
+    assert.equal(settings.audience, vertexWifAudience.replace(/^https:/, ''))
     client = ExternalAccountClient.fromJSON(settings)
     assert.ok(client instanceof IdentityPoolClient)
     client.getAccessToken = async () => { assert.equal(await client.retrieveSubjectToken(), 'fake-subject'); return { token: 'fake-access' } }
@@ -27,13 +28,18 @@ test('federation diagnostics retain only known failure phase, code and HTTP stat
     assert.equal(JSON.stringify(error).includes('private'), false)
     return true
   })
+  await assert.rejects(vertexGoogleAuthOptions(config, { ExternalAccountClient: { fromJSON: () => ({ getAccessToken: async () => { throw { response: { status: 400, data: { error: 'invalid_request', error_description: 'private token details' } } } } }) }, getVercelOidcToken: async () => 'unused' }), error => {
+    assert.deepEqual(error.authFailure, { phase: 'google_token_exchange', code: 'invalid_request', httpStatus: 400 })
+    assert.equal(JSON.stringify(error).includes('private'), false)
+    return true
+  })
 })
 test('production WIF authenticates exact audience and target before inference without reading Firebase JSON', async () => {
   let oidcOptions; let settings; let authenticated = false
   const authClient = { getAccessToken: async () => { assert.equal(await settings.subject_token_supplier.getSubjectToken(), 'controlled-subject-token'); authenticated = true; return { token: 'controlled-access-token' } } }
   const options = await vertexGoogleAuthOptions({ ...config, GOOGLE_SERVICE_ACCOUNT_JSON: 'invalid-private-legacy-json-must-not-be-read', VERTEX_FALLBACK_CREDENTIALS: 'nonexistent-private-file' }, { ExternalAccountClient: { fromJSON: value => { settings = value; return authClient } }, getVercelOidcToken: async value => { oidcOptions = value; return 'controlled-subject-token' } })
   assert.equal(authenticated, true); assert.equal(options.authClient, authClient); assert.equal(options.projectId, vertexProductionProject); assert.equal(options.credentials, undefined)
-  assert.equal(settings.audience, vertexWifAudience); assert.deepEqual(oidcOptions, { audience: vertexWifAudience })
+  assert.equal(settings.audience, vertexWifAudience.replace(/^https:/, '')); assert.deepEqual(oidcOptions, { audience: vertexWifAudience })
   assert.deepEqual(settings.scopes, ['https://www.googleapis.com/auth/cloud-platform'])
   assert.equal(settings.token_url, 'https://sts.googleapis.com/v1/token')
   assert.equal(settings.service_account_impersonation_url, `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${vertexWifServiceAccount}:generateAccessToken`)
@@ -41,8 +47,18 @@ test('production WIF authenticates exact audience and target before inference wi
   assert.deepEqual(firebaseCredentials({ GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify(legacy) }), legacy)
 })
 
+test('provider descriptions become fixed diagnostic reasons without retaining raw private descriptions', async () => {
+  for (const [description, reason] of [['The attribute condition rejected private-token', 'attribute_condition_rejected'], ['Invalid audience private-token', 'audience_rejected'], ['Invalid issuer private-token', 'issuer_rejected'], ['Denied iam.serviceAccounts.getAccessToken private-token', 'impersonation_permission_denied']]) {
+    await assert.rejects(vertexGoogleAuthOptions(config, { ExternalAccountClient: { fromJSON: () => ({ getAccessToken: async () => { throw { response: { status: 400, data: { error: 'invalid_grant', error_description: description } } } } }) }, getVercelOidcToken: async () => 'unused' }), error => {
+      assert.equal(error.authFailure.reason, reason)
+      assert.equal(JSON.stringify(error).includes('private-token'), false)
+      return true
+    })
+  }
+})
+
 test('wrong WIF target, project, audience and rejected token exchange cannot reserve or call the model', async () => {
-  for (const patch of [{ VERTEX_WIF_AUDIENCE: vertexWifAudience.replace('487106620228', '123456789012') }, { VERTEX_WIF_SERVICE_ACCOUNT: 'other@cs-project-bvfzp2zn.iam.gserviceaccount.com' }, { VERTEX_FALLBACK_PROJECT: 'ai-vertical-495712' }]) await assert.rejects(vertexGoogleAuthOptions({ ...config, ...patch }), error => error.code === 'BUDGET_BLOCKED' && error.configurationFailure === true && error.preDispatch === true)
+  for (const patch of [{ VERTEX_WIF_AUDIENCE: vertexWifAudience.replace('487106620228', '123456789012') }, { VERTEX_WIF_AUDIENCE: vertexWifAudience.replace(/^https:/, '') }, { VERTEX_WIF_SERVICE_ACCOUNT: 'other@cs-project-bvfzp2zn.iam.gserviceaccount.com' }, { VERTEX_FALLBACK_PROJECT: 'ai-vertical-495712' }]) await assert.rejects(vertexGoogleAuthOptions({ ...config, ...patch }), error => error.code === 'BUDGET_BLOCKED' && error.configurationFailure === true && error.preDispatch === true)
   const repository = createRepository(':memory:'); let calls = 0
   try {
     repository.budgetConfigure('USD', 'wif-preflight', 5000000, 5000000)
