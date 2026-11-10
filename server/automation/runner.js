@@ -3,7 +3,7 @@ import { costScopeHash } from '../budget/policy.js'
 import { workspaceRole } from '../studio/workspaces.js'
 import { automaticTextPolicyVersion } from './review.js'
 import { contentHash } from '../studio/approval.js'
-import { demoStageRequestId } from './demo.js'
+import { demoStageRequestId, demoAuthorizationSchema, demoAuthorizationActive } from './demo.js'
 
 export const automationRegistryOwner = '__automation_registry__'
 const digest = value => createHash('sha256').update(value).digest('hex')
@@ -36,6 +36,25 @@ async function authorizedProfile(repository, owner, profile) {
     && actorUid && await workspaceRole(repository, owner, actorUid) === 'owner')
 }
 
+async function currentEvergreenDemo(repository, owner, profile, localDate, now) {
+  const profileHash = costScopeHash(profile, null)
+  const candidates = (await repository.studioList(owner, 'automation_run')).filter(run => run.accountId === profile.accountId && run.localDate === localDate && run.slot?.kind === 'evergreen-demo' && Object.hasOwn(run, 'demoAuthorizationId')).slice(0, 10)
+  const valid = []
+  for (const run of candidates) {
+    const record = await repository.studioGet(owner, 'automation_demo', run.demoAuthorizationId)
+    const parsed = demoAuthorizationSchema.safeParse(Object.fromEntries(Object.keys(demoAuthorizationSchema.shape).map(key => [key, record?.[key]])))
+    if (!parsed.success) continue
+    const authorization = parsed.data
+    const binding = authorization.runs.find(value => value.runId === run.id)
+    if (!demoAuthorizationActive(authorization, now.getTime()) || !['generate', 'review', 'render', 'publish'].includes(run.stage) || authorization.owner !== owner || authorization.actorUid !== profile.automaticPolicy?.consentedBy || !binding || binding.accountId !== profile.accountId || binding.profileId !== profile.id || binding.profileHash !== profileHash || run.profileHash !== profileHash || binding.packageId !== run.packageId || binding.sourceContentHash !== run.demoSourceContentHash) continue
+    const pack = await repository.studioGet(owner, 'package', binding.packageId)
+    if (!pack || contentHash(pack) !== (run.stage === 'generate' ? binding.sourceContentHash : run.contentHash)) continue
+    valid.push(run)
+  }
+  // Conflicting operator records do not select an arbitrary paid operation.
+  return valid.length === 1 && candidates.length === 1 ? valid[0] : candidates.length ? { ...candidates[0], demoSelectionHeld: true } : null
+}
+
 // Services perform the actual admitted provider operations; each receives a stable request ID and a zero paid ceiling.
 export async function runAccountAutomation({ repository, owner, profile, services, now = new Date(), maxSlots = 1, maxStages = Infinity }) {
   if (!await authorizedProfile(repository, owner, profile)) return { accountId: profile.accountId, status: 'blocked', reason: 'Current owner consent for free account automation is required.' }
@@ -55,11 +74,14 @@ export async function runAccountAutomation({ repository, owner, profile, service
   const savedPlan = await repository.studioGet(owner, 'automation_plan', planId)
   if (!savedPlan || savedPlan.profileHash !== profileHash) await repository.studioPut(owner, 'automation_plan', planId, { ...plan, accountId: profile.accountId, profileHash, weeklyBrief: profile.weeklyBrief, audience: profile.audience, tone: profile.tone, contentPillars: profile.contentPillars }, savedPlan?.revision || 0)
   const day = plan.days.find(day => day.date === plan.localDate)
+  const demoRun = await currentEvergreenDemo(repository, owner, profile, plan.localDate, now)
+  if (demoRun?.demoSelectionHeld) return { accountId: profile.accountId, planId, localDate: plan.localDate, results: [{ id: demoRun.id, status: 'held', reason: 'The current-day evergreen demo authorization is invalid, expired or conflicting. No ordinary research fallback was started.' }], deferred: false }
+  const slots = demoRun ? [demoRun.slot] : day.slots
   const results = []; let processed = 0; let deferred = false; let completedStages = 0
   const stageLimit = Number.isFinite(maxStages) ? Math.max(1, Math.floor(maxStages)) : Infinity
-  for (const slot of day.slots) {
+  for (const slot of slots) {
     if (processed >= Math.max(1, Math.min(10, maxSlots))) { deferred = true; break }
-    const unitId = digest(`${profile.accountId}:${plan.localDate}:${slot.kind}:${slot.index}`).slice(0, 32)
+    const unitId = demoRun ? demoRun.id : digest(`${profile.accountId}:${plan.localDate}:${slot.kind}:${slot.index}`).slice(0, 32)
     const leaseId = `automation:${owner}:${profile.accountId}`; const leaseOwner = randomUUID()
     if (!await repository.acquireLease(leaseId, leaseOwner, 600000)) { results.push({ id: unitId, status: 'busy' }); break }
     try {
@@ -87,7 +109,7 @@ export async function runAccountAutomation({ repository, owner, profile, service
       const todayRuns = existingRuns.filter(value => value.id !== unitId && value.accountId === profile.accountId && value.localDate === plan.localDate && held(value.status))
       const todayPosts = publications.filter(value => value.accountId === profile.accountId && value.status !== 'blocked' && dayInZone(new Date(value.publishAt || value.dispatchedAt || value.createdAt), plan.timezone) === plan.localDate)
       const represented = new Set(todayRuns.map(value => value.publicationId).filter(Boolean))
-      if (!run && todayRuns.length + todayPosts.filter(value => !represented.has(value.id)).length >= profile.maxDailyPosts) { results.push({ id: unitId, status: 'skipped', reason: 'Daily cap includes existing and uncertain publication attempts.' }); continue }
+      if ((!run || demoRun) && todayRuns.length + todayPosts.filter(value => !represented.has(value.id) && value.id !== run?.publicationId).length >= profile.maxDailyPosts) { results.push({ id: unitId, status: 'skipped', reason: 'Daily cap includes existing and uncertain publication attempts.' }); continue }
       if (!run) run = await repository.studioPut(owner, 'automation_run', unitId, { accountId: profile.accountId, platform: profile.platform, localDate: plan.localDate, slot, profileHash, status: 'pending', stage: 'research', actorUid: profile.automaticPolicy.consentedBy, paidBudgetMicros: 0, stages: [], packageId: null, publicationId: null }, 0)
       processed++
       for (const phase of phases.slice(phases.indexOf(run.stage))) {
@@ -172,7 +194,8 @@ export async function runRegisteredAutomation({ repository, services, now = new 
       const slots = plan.days.find(day => day.date === plan.localDate).slots
       const currentRuns = runs.filter(run => run.accountId === profile.accountId && run.localDate === plan.localDate)
       const terminal = currentRuns.filter(run => ['completed', 'blocked', 'failed'].includes(run.status))
-      if (slots.every(slot => terminal.some(run => run.slot.kind === slot.kind && run.slot.index === slot.index)) && !runs.some(run => run.accountId === profile.accountId && run.status === 'awaiting_receipt')) continue
+      const demo = await currentEvergreenDemo(repository, record.ownerScope, profile, plan.localDate, now)
+      if ((!demo || ['completed', 'blocked', 'failed'].includes(demo.status)) && slots.every(slot => terminal.some(run => run.slot.kind === slot.kind && run.slot.index === slot.index)) && !runs.some(run => run.accountId === profile.accountId && run.status === 'awaiting_receipt')) continue
       pending.push({ owner: record.ownerScope, profile })
     }
   }

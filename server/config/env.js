@@ -37,6 +37,8 @@ const schema = z.object({
   FIREBASE_ADMIN_CREDENTIALS: z.string().optional(),
   ADMIN_EMAILS: z.string().default('yeshaswi3@gmail.com'),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  VERTEX_WIF_AUDIENCE: z.string().optional(),
+  VERTEX_WIF_SERVICE_ACCOUNT: z.string().optional(),
   CONTENT_VERTEX_FALLBACK: z.enum(['true', 'false']).default('false'),
   VERTEX_FALLBACK_PROJECT: z.string().optional(),
   VERTEX_FALLBACK_CREDENTIALS: z.string().optional(),

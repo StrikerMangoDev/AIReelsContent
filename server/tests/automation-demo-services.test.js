@@ -8,7 +8,7 @@ import { contentHash } from '../studio/approval.js'
 import { costScopeHash } from '../budget/policy.js'
 import { settingsSchema } from '../studio/content.js'
 
-for (const provider of ['vertex', 'openrouter']) test(`${provider} scoped demo preserves actual provider/model provenance and changed profiles block paid review`, async () => {
+for (const provider of ['vertex', 'openrouter']) for (const baseline of ['saved-draft', 'empty']) test(`${provider} scoped demo accepts ${baseline} baselines and preserves actual provider/model provenance`, async () => {
   const repository = createRepository(':memory:'); const owner = demoOwner
   const runId = 'a'.repeat(32); const packageId = createHash('sha256').update(`${runId}:package`).digest('hex').slice(0, 32)
   const excerpt = 'The publisher announced a limited developer preview. Availability remains restricted and independent deployment results have not been established.'
@@ -18,7 +18,7 @@ for (const provider of ['vertex', 'openrouter']) test(`${provider} scoped demo p
   const services = createAutomationServices(repository, { demoGenerate: () => async () => { paidCalls++; return { controlled: true } }, write: async (_evidence, settings, details, generate) => { writes++; assert.equal(details.previousContent, null); assert.deepEqual(settings.outputs, ['platforms', 'website']); await generate({ input: {}, schema: {} }); return content } })
   try {
     const profile = repository.studioPut(owner, 'account_profile', 'profile-a', { accountId: 'account-a', platform: 'X', enabled: true, automationConsent: true, automaticPolicy: { version: 'account-automation-v1', scope: 'research-generation-and-social-publishing', consentedBy: owner, consentedAt: new Date(Date.now() - 60000).toISOString(), paidBudgetMicros: 0 } }, 0)
-    const oldContent = { ...content, website: { title: 'Previous saved title', body } }
+    const oldContent = baseline === 'empty' ? null : { ...content, website: { title: 'Previous saved title', body } }
     const pack = repository.studioPut(owner, 'package', packageId, { settings: settingsSchema.parse({ outputs: ['website'] }), content: oldContent, evidence: [{ id: 'E1', hash: 'source-hash', url: 'https://example.com/update', excerpt, retrievedAt: new Date().toISOString() }], status: 'completed', createdBy: owner, jobId: 'original-unknown' }, 0)
     const old = repository.studioJobReserve(owner, 'original-unknown', 'a'.repeat(64), 20, { operation: 'generation', packageId })
     const running = repository.studioJobUpdate(owner, old.job.id, { status: 'running' }, old.job.revision, 'reserved')
@@ -26,7 +26,7 @@ for (const provider of ['vertex', 'openrouter']) test(`${provider} scoped demo p
     let run = repository.studioPut(owner, 'automation_run', runId, { packageId, accountId: profile.accountId, profileHash: costScopeHash(profile, null), demoAuthorizationId: 'controlled-demo', demoSourceContentHash: contentHash(pack), contentHash: contentHash(pack), status: 'generate_running', stage: 'generate' }, 0)
     const binding = { runId, accountId: profile.accountId, profileId: profile.id, profileHash: costScopeHash(profile, null), packageId, sourceContentHash: contentHash(pack) }
     const model = provider === 'openrouter' ? 'google/gemini-3.8-flash' : 'gemini-3.8-flash'
-    repository.studioPut(owner, 'automation_demo', run.demoAuthorizationId, { version: 'five-account-paid-demo-v1', status: 'active', owner, actorUid: owner, currency: 'USD', totalLimitMicros: 5000000, projectId: 'ai-vertical-495712', ...(provider === 'openrouter' ? { provider, priceExpiresAt: new Date(Date.now() + 1800000).toISOString() } : {}), model, authorizedAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(), allowedStages: ['generate', 'review'], runs: [binding, ...['b', 'c', 'd', 'e'].map(key => ({ ...binding, runId: key.repeat(32), accountId: `account-${key}` }))] }, 0)
+    repository.studioPut(owner, 'automation_demo', run.demoAuthorizationId, { version: 'five-account-paid-demo-v1', status: 'active', owner, actorUid: owner, currency: 'USD', totalLimitMicros: 5000000, projectId: provider === 'vertex' ? 'cs-project-bvfzp2zn' : 'ai-vertical-495712', ...(provider === 'openrouter' ? { provider, priceExpiresAt: new Date(Date.now() + 1800000).toISOString() } : {}), model, authorizedAt: new Date(Date.now() - 1000).toISOString(), expiresAt: new Date(Date.now() + 3600000).toISOString(), allowedStages: ['generate', 'review'], runs: [binding, ...['b', 'c', 'd', 'e'].map(key => ({ ...binding, runId: key.repeat(32), accountId: `account-${key}` }))] }, 0)
     repository.budgetConfigure('USD', demoBudgetOwner(owner, run.demoAuthorizationId), 5000000, 5000000)
     const context = { owner, actorUid: owner, profile, run, requestId: demoStageRequestId(run, 'generate') }
     const result = await services.generate(context)

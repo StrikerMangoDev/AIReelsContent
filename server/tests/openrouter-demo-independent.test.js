@@ -79,8 +79,8 @@ test('independent OpenRouter QA rejects mixed authorization provider/model pairs
     const { owner, demoId, contexts } = await createDemoFixture(repository)
     let record = await repository.studioGet(owner, 'automation_demo', demoId)
     record = await repository.studioPut(owner, 'automation_demo', demoId, { ...record, provider: 'openrouter', model: 'gemini-3.8-flash', priceExpiresAt: record.expiresAt }, record.revision)
-    await assert.rejects(() => assertDemoAuthorization(contexts[0]), /provider, model or frozen price/)
+    await assert.rejects(() => assertDemoAuthorization(contexts[0]), error => error.code === 'BUDGET_BLOCKED' && error.preDispatch === true)
     await repository.studioPut(owner, 'automation_demo', demoId, { ...record, provider: 'vertex', model: openRouterDemoModel }, record.revision)
-    await assert.rejects(() => assertDemoAuthorization(contexts[0]), /provider, model or frozen price/)
+    await assert.rejects(() => assertDemoAuthorization(contexts[0]), error => error.code === 'BUDGET_BLOCKED' && error.preDispatch === true)
   } finally { repository.close() }
 })

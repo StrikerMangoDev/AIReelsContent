@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { env } from '../config/env.js'
 import { budgetError, costScopeHash } from '../budget/policy.js'
-import { generateVertexJson, vertexDemoCallUpperBoundMicros } from '../providers/vertex-fallback.js'
+import { generateVertexJson, vertexDemoCallUpperBoundMicros, vertexProductionProject, vertexWifAudience, vertexWifServiceAccount } from '../providers/vertex-fallback.js'
 import { generateOpenRouterDemoJson, openRouterDemoModel, openRouterDemoCallUpperBoundMicros } from '../providers/openrouter-demo.js'
 import { contentHash } from '../studio/approval.js'
 import { workspaceRole } from '../studio/workspaces.js'
@@ -11,11 +11,19 @@ export const demoOwner = 'W8eI22SdAsZa2LGz6VZxWQkXsyj1'
 const hash = z.string().regex(/^[a-f0-9]{64}$/)
 export const demoAuthorizationSchema = z.object({
   version: z.literal('five-account-paid-demo-v1'), status: z.enum(['active', 'blocked', 'revoked']), owner: z.literal(demoOwner), actorUid: z.literal(demoOwner),
-  currency: z.literal('USD'), totalLimitMicros: z.literal(5000000), projectId: z.literal('ai-vertical-495712'), provider: z.enum(['vertex', 'openrouter']).default('vertex'), model: z.enum(['gemini-3.8-flash', openRouterDemoModel]), priceExpiresAt: z.string().datetime().optional(),
+  currency: z.literal('USD'), totalLimitMicros: z.literal(5000000), projectId: z.enum(['ai-vertical-495712', vertexProductionProject]), provider: z.enum(['vertex', 'openrouter']).default('vertex'), model: z.enum(['gemini-3.8-flash', openRouterDemoModel]), priceExpiresAt: z.string().datetime().optional(),
   authorizedAt: z.string().datetime(), expiresAt: z.string().datetime(), allowedStages: z.tuple([z.literal('generate'), z.literal('review')]),
   runs: z.array(z.object({ runId: z.string().regex(/^[a-f0-9]{32}$/), accountId: z.string().min(1).max(200), profileId: z.string().min(1).max(200), profileHash: hash, packageId: z.string().regex(/^[a-f0-9]{32}$/), sourceContentHash: hash }).strict()).length(5).refine(runs => new Set(runs.map(run => run.runId)).size === 5 && new Set(runs.map(run => run.accountId)).size === 5, 'Use exactly five distinct authorized runs and accounts'),
 }).strict()
 const blocked = message => Object.assign(budgetError(message), { preDispatch: true })
+export function demoAuthorizationActive(value, now = Date.now()) {
+  const parsed = demoAuthorizationSchema.safeParse(Object.fromEntries(Object.keys(demoAuthorizationSchema.shape).map(key => [key, value?.[key]])))
+  if (!parsed.success) return false
+  const authorization = parsed.data
+  const start = Date.parse(authorization.authorizedAt); const end = Date.parse(authorization.expiresAt)
+  const providerMatches = authorization.provider === 'vertex' ? authorization.projectId === vertexProductionProject && authorization.model === 'gemini-3.8-flash' : authorization.model === openRouterDemoModel && Boolean(authorization.priceExpiresAt) && Date.parse(authorization.priceExpiresAt) > now && Date.parse(authorization.priceExpiresAt) <= end
+  return providerMatches && authorization.status === 'active' && start <= now && end > now && end <= start + 86400000 && now < Date.parse('2027-01-01T00:00:00Z')
+}
 export const demoBudgetOwner = (owner, demoId) => `demo:${costScopeHash({ owner, demoId }, null).slice(0, 48)}`
 export function demoStageRequestId(run, phase) {
   const digest = costScopeHash({ demoId: run.demoAuthorizationId, runId: run.id, phase, contentHash: phase === 'generate' ? run.demoSourceContentHash : run.contentHash, ...(phase === 'review' ? { policyVersion: automaticTextPolicyVersion } : {}) }, null)
@@ -30,9 +38,7 @@ export async function assertDemoAuthorization({ repository, owner, actorUid, run
   const parsed = demoAuthorizationSchema.safeParse(Object.fromEntries(Object.keys(demoAuthorizationSchema.shape).map(key => [key, record?.[key]])))
   if (!parsed.success) throw blocked('The paid demonstration authorization is missing or invalid.')
   const authorization = parsed.data
-  const start = Date.parse(authorization.authorizedAt); const end = Date.parse(authorization.expiresAt)
-  if (authorization.provider === 'vertex' ? authorization.model !== 'gemini-3.8-flash' : authorization.model !== openRouterDemoModel || !authorization.priceExpiresAt || Date.parse(authorization.priceExpiresAt) <= now || Date.parse(authorization.priceExpiresAt) > end) throw blocked('The demonstration provider, model or frozen price approval does not match.')
-  if (authorization.status !== 'active' || start > now || end <= now || end > start + 86400000 || now >= Date.parse('2027-01-01T00:00:00Z')) throw blocked('The paid demonstration authorization is inactive or expired.')
+  if (!demoAuthorizationActive(authorization, now)) throw blocked('The demonstration owner, provider, production project, pricing or expiry is outside its approval.')
   const binding = authorization.runs.find(value => value.runId === run.id)
   const currentRun = await repository.studioGet(owner, 'automation_run', run.id)
   const currentProfile = profile?.id && await repository.studioGet(owner, 'account_profile', profile.id)
@@ -64,7 +70,7 @@ export function createDemoGenerator(context, { beforeAttempt, config = env, requ
     const scopedConfig = { ...config, CONTENT_VERTEX_FALLBACK: 'true', VERTEX_FALLBACK_PROJECT: admitted.projectId, VERTEX_FALLBACK_MODEL: admitted.model, VERTEX_FALLBACK_APPROVED_UNTIL: admitted.authorization.expiresAt }
     try {
       if (admitted.authorization.provider === 'openrouter') return await generateOpenRouterDemoJson(input, { repository: context.repository, owner: admitted.budgetOwner, requestId, config, priceExpiresAt: admitted.authorization.priceExpiresAt, ...(request ? { request } : {}), beforeAttempt: async () => { await assertDemoAuthorization(context); if (beforeAttempt) await beforeAttempt() } })
-      if (!scopedConfig.VERTEX_FALLBACK_CREDENTIALS && !scopedConfig.GOOGLE_SERVICE_ACCOUNT_JSON) throw Object.assign(blocked('Approved Vertex credentials are unavailable for this demonstration.'), { configurationFailure: true })
+      if (scopedConfig.VERTEX_WIF_AUDIENCE !== vertexWifAudience || scopedConfig.VERTEX_WIF_SERVICE_ACCOUNT !== vertexWifServiceAccount) throw Object.assign(blocked('The approved production federation configuration is unavailable.'), { configurationFailure: true })
       return await generateVertexJson(input, { repository: context.repository, owner: admitted.budgetOwner, requestId, config: scopedConfig, worstCaseModelBound: true, timeoutMs: 110000, ...(request ? { request } : {}), beforeAttempt: async () => { await assertDemoAuthorization(context); if (beforeAttempt) await beforeAttempt() } })
     } catch (error) {
       if ([401, 402, 403].includes(error.status) || error.configurationFailure === true) {

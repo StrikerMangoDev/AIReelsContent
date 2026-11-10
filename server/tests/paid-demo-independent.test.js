@@ -4,6 +4,7 @@ import { createRepository } from '../storage/repository.js'
 import { assertDemoAuthorization, createDemoGenerator, demoBudgetOwner, demoOwner } from '../automation/demo.js'
 import { contentHash } from '../studio/approval.js'
 import { costScopeHash } from '../budget/policy.js'
+import { vertexProductionProject, vertexWifAudience, vertexWifServiceAccount } from '../providers/vertex-fallback.js'
 
 async function fixture() {
   const repository = createRepository(':memory:'); const demoId = 'independent-qa'; const contexts = []; const bindings = []
@@ -17,13 +18,13 @@ async function fixture() {
     contexts.push({ repository, owner: demoOwner, actorUid: demoOwner, run, profile, phase: 'generate' })
   }
   const now = Date.now()
-  await repository.studioPut(demoOwner, 'automation_demo', demoId, { version: 'five-account-paid-demo-v1', status: 'active', owner: demoOwner, actorUid: demoOwner, currency: 'USD', totalLimitMicros: 5000000, projectId: 'ai-vertical-495712', model: 'gemini-3.8-flash', authorizedAt: new Date(now - 1000).toISOString(), expiresAt: new Date(now + 3600000).toISOString(), allowedStages: ['generate', 'review'], runs: bindings }, 0)
+  await repository.studioPut(demoOwner, 'automation_demo', demoId, { version: 'five-account-paid-demo-v1', status: 'active', owner: demoOwner, actorUid: demoOwner, currency: 'USD', totalLimitMicros: 5000000, projectId: vertexProductionProject, model: 'gemini-3.8-flash', authorizedAt: new Date(now - 1000).toISOString(), expiresAt: new Date(now + 3600000).toISOString(), allowedStages: ['generate', 'review'], runs: bindings }, 0)
   const budgetOwner = demoBudgetOwner(demoOwner, demoId)
   repository.budgetConfigure('USD', budgetOwner, 5000000, 5000000)
   return { repository, contexts, budgetOwner, demoId }
 }
 const input = { system: 'Return JSON', input: { text: 'QA fixture' }, schema: { type: 'object' }, maxTokens: 10 }
-const config = { GOOGLE_SERVICE_ACCOUNT_JSON: '{}' }
+const config = { VERTEX_WIF_AUDIENCE: vertexWifAudience, VERTEX_WIF_SERVICE_ACCOUNT: vertexWifServiceAccount }
 
 test('independent paid demo QA rejects owner, actor, phase, run, profile, expiry and revoked authorization changes', async () => {
   const { repository, contexts, demoId } = await fixture(); const context = contexts[0]
@@ -32,9 +33,9 @@ test('independent paid demo QA rejects owner, actor, phase, run, profile, expiry
     for (const patch of [{ owner: 'other' }, { actorUid: 'other' }, { phase: 'publish' }, { run: { ...context.run, id: 'f'.repeat(32) } }, { profile: { ...context.profile, accountId: 'changed' } }]) await assert.rejects(() => assertDemoAuthorization({ ...context, ...patch }), error => error.code === 'BUDGET_BLOCKED' && error.preDispatch === true)
     let authorization = await repository.studioGet(demoOwner, 'automation_demo', demoId)
     authorization = await repository.studioPut(demoOwner, 'automation_demo', demoId, { ...authorization, expiresAt: new Date(Date.now() - 500).toISOString() }, authorization.revision)
-    await assert.rejects(() => assertDemoAuthorization(context), /inactive or expired/)
+    await assert.rejects(() => assertDemoAuthorization(context), /expiry is outside its approval/)
     await repository.studioPut(demoOwner, 'automation_demo', demoId, { ...authorization, status: 'revoked', expiresAt: new Date(Date.now() + 3600000).toISOString() }, authorization.revision)
-    await assert.rejects(() => assertDemoAuthorization(context), /inactive or expired/)
+    await assert.rejects(() => assertDemoAuthorization(context), /expiry is outside its approval/)
   } finally { repository.close() }
 })
 
@@ -62,7 +63,7 @@ test('independent paid demo QA blocks the whole authorization after a confirmed 
   try {
     await assert.rejects(() => createDemoGenerator(contexts[0], { config, request })(input), error => error.status === 403)
     assert.equal((await repository.studioGet(demoOwner, 'automation_demo', demoId)).status, 'blocked')
-    await assert.rejects(() => createDemoGenerator(contexts[1], { config, request })(input), /inactive or expired/)
+    await assert.rejects(() => createDemoGenerator(contexts[1], { config, request })(input), /expiry is outside its approval/)
     assert.equal(dispatches, 1)
   } finally { repository.close() }
 })
@@ -75,7 +76,7 @@ test('independent paid demo QA rechecks authorization between reservation and pr
       await repository.studioPut(demoOwner, 'automation_demo', demoId, { ...authorization, status: 'revoked' }, authorization.revision)
       await assertDemoAuthorization(contexts[0])
     } })
-    await assert.rejects(() => generator(input), /inactive or expired/)
+    await assert.rejects(() => generator(input), /expiry is outside its approval/)
     assert.equal(dispatches, 0); assert.equal(repository.budgetSummary(budgetOwner).heldMicros, 0)
   } finally { repository.close() }
 })

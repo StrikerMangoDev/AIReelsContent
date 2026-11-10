@@ -16,7 +16,7 @@ export async function createDemoFixture(repository) {
     const run = await repository.studioPut(owner, 'automation_run', runId, { accountId: profile.accountId, profileHash: binding.profileHash, packageId: pack.id, contentHash: binding.sourceContentHash, demoAuthorizationId: demoId, demoSourceContentHash: binding.sourceContentHash, stage: 'generate', status: 'generate_running' }, 0)
     runs.push(binding); contexts.push({ repository, owner, actorUid: owner, run, profile, phase: 'generate' })
   }
-  const authorization = await repository.studioPut(owner, 'automation_demo', demoId, { version: 'five-account-paid-demo-v1', status: 'active', owner, actorUid: owner, currency: 'USD', totalLimitMicros: 5000000, projectId: 'ai-vertical-495712', model: 'gemini-3.8-flash', authorizedAt: new Date(now - 1000).toISOString(), expiresAt: new Date(now + 3600000).toISOString(), allowedStages: ['generate', 'review'], runs }, 0)
+  const authorization = await repository.studioPut(owner, 'automation_demo', demoId, { version: 'five-account-paid-demo-v1', status: 'active', owner, actorUid: owner, currency: 'USD', totalLimitMicros: 5000000, projectId: 'cs-project-bvfzp2zn', model: 'gemini-3.8-flash', authorizedAt: new Date(now - 1000).toISOString(), expiresAt: new Date(now + 3600000).toISOString(), allowedStages: ['generate', 'review'], runs }, 0)
   repository.budgetConfigure('USD', demoBudgetOwner(owner, demoId), 5000000, 5000000)
   return { owner, demoId, authorization, contexts }
 }

@@ -2,11 +2,11 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRepository } from '../storage/repository.js'
 import { assertDemoAuthorization, createDemoGenerator, demoBudgetOwner, demoStageRequestId } from '../automation/demo.js'
-import { generateVertexJson, vertexFallbackAllowed, vertexDemoCallUpperBoundMicros } from '../providers/vertex-fallback.js'
+import { generateVertexJson, vertexFallbackAllowed, vertexDemoCallUpperBoundMicros, vertexWifAudience, vertexWifServiceAccount } from '../providers/vertex-fallback.js'
 import { contentHash } from '../studio/approval.js'
 import { createDemoFixture } from './fixtures/demo.js'
 
-const config = { CONTENT_VERTEX_FALLBACK: 'false', GOOGLE_SERVICE_ACCOUNT_JSON: 'controlled-test-credentials-not-used-by-injected-transport' }
+const config = { CONTENT_VERTEX_FALLBACK: 'false', VERTEX_WIF_AUDIENCE: vertexWifAudience, VERTEX_WIF_SERVICE_ACCOUNT: vertexWifServiceAccount }
 const input = { system: 'Return controlled test JSON.', input: {}, schema: { type: 'object' }, maxTokens: 1000 }
 const success = async () => ({ text: '{"ok":true}', candidates: [{ finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 200, thoughtsTokenCount: 0 } })
 

@@ -101,7 +101,6 @@ export function createAutomationServices(repository, { research = researchNiche,
       if (previous.scope?.demoId !== context.run.demoAuthorizationId || previous.scope?.packageId !== pack?.id) throw blocked('The paid demo operation belongs to different content.')
       return { status: previous.status, jobId: previous.id, package: previous.result }
     }
-    if (!pack?.content) throw blocked('The authorized demo requires its existing saved draft.')
     const scope = { operation: 'generation', generationProvider: `${authorization.authorization.provider || 'vertex'}-demo`, demoId: context.run.demoAuthorizationId, packageId: pack.id, revision: pack.revision, actorUid: context.actorUid, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null), model: authorization.model }
     let admission
     try { admission = await repository.studioJobReserve(context.owner, context.requestId, costScopeHash(scope, null), env.STUDIO_DAILY_GENERATIONS, scope) }

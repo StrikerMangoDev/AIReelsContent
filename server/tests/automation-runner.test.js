@@ -6,6 +6,8 @@ import { contentHash } from '../studio/approval.js'
 import { automaticTextPolicyVersion } from '../automation/review.js'
 import { createHash } from 'node:crypto'
 import { demoStageRequestId } from '../automation/demo.js'
+import { createDemoFixture } from './fixtures/demo.js'
+import { costScopeHash } from '../budget/policy.js'
 
 const now = new Date('2026-11-09T06:00:00.000Z')
 function profileFixture(repository, accountId = 'account-one') {
@@ -205,5 +207,63 @@ test('queued publications continue automatic readback until native publication w
     assert.equal(published.results[0].status, 'completed'); assert.equal(published.results[0].releaseUrl, 'https://example.com/native-post')
     await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
     assert.equal(creates, 1); assert.equal(readbacks, 2)
+  } finally { repository.close() }
+})
+
+async function evergreenDemoFixture(repository) {
+  const fixture = await createDemoFixture(repository); const context = fixture.contexts[0]
+  const at = new Date('2026-11-10T06:00:00Z')
+  const profile = repository.studioPut(fixture.owner, 'account_profile', context.profile.id, { ...context.profile, platform: 'LinkedIn', timezone: 'Asia/Calcutta', weeklyCadence: 3, dailyNews: true, maxDailyPosts: 1 }, context.profile.revision)
+  const profileHash = costScopeHash(profile, null)
+  const run = repository.studioPut(fixture.owner, 'automation_run', context.run.id, { ...context.run, profileHash, actorUid: fixture.owner, localDate: '2026-11-10', slot: { kind: 'evergreen-demo', index: 0 }, stage: 'generate', status: 'pending', stages: [], topic: { title: 'Evergreen source-backed explanation', eventDate: null } }, context.run.revision)
+  const authorization = repository.studioPut(fixture.owner, 'automation_demo', fixture.demoId, { ...fixture.authorization, authorizedAt: new Date(at.getTime() - 1000).toISOString(), expiresAt: new Date(at.getTime() + 3600000).toISOString(), runs: fixture.authorization.runs.map(binding => binding.runId === run.id ? { ...binding, profileHash } : binding) }, fixture.authorization.revision)
+  return { ...fixture, profile, run, authorization, at }
+}
+
+test('today’s explicitly authorized evergreen demo uses its saved run without relabelling news or changing blocked history', async () => {
+  const repository = createRepository(':memory:'); const calls = []
+  try {
+    const fixture = await evergreenDemoFixture(repository); const { owner, profile, run, at } = fixture
+    const newsId = createHash('sha256').update(`${profile.accountId}:2026-11-10:news:0`).digest('hex').slice(0, 32)
+    const oldNews = repository.studioPut(owner, 'automation_run', newsId, { accountId: profile.accountId, localDate: '2026-11-10', slot: { kind: 'news', index: 0 }, status: 'blocked', stage: 'research' }, 0)
+    repository.studioPut('__automation_registry__', 'automation_owner', owner, { ownerScope: owner, enabled: true }, 0)
+    const services = servicesFixture(repository, calls)
+    services.generate = async ctx => { calls.push({ phase: 'generate', requestId: ctx.requestId }); const pack = repository.studioGet(owner, 'package', run.packageId); return repository.studioPut(owner, 'package', pack.id, { ...pack, content: { website: { title: 'A qualified evergreen explanation' } } }, pack.revision) }
+    const result = await runRegisteredAutomation({ repository, services, now: at, limit: 1 })
+    assert.equal(result.outcomes[0].results[0].id, run.id)
+    assert.equal(result.outcomes[0].results[0].slot.kind, 'evergreen-demo')
+    assert.equal(result.outcomes[0].results[0].topic.eventDate, null)
+    assert.deepEqual(calls.map(call => call.phase), ['generate', 'review', 'render', 'publish'])
+    assert.deepEqual(repository.studioGet(owner, 'automation_run', newsId), oldNews)
+  } finally { repository.close() }
+})
+
+test('expired, blocked or mismatched current-day evergreen demos hold without a free fallback and do not block future days', async () => {
+  for (const invalid of ['expired', 'mismatched', 'blocked']) {
+    const repository = createRepository(':memory:'); const calls = []
+    try {
+      const { owner, profile, run, authorization, demoId, at } = await evergreenDemoFixture(repository)
+      repository.studioPut(owner, 'automation_demo', demoId, { ...authorization, ...(invalid === 'expired' ? { expiresAt: new Date(at.getTime() - 1).toISOString() } : invalid === 'blocked' ? { status: 'blocked' } : { runs: authorization.runs.map(binding => binding.runId === run.id ? { ...binding, sourceContentHash: 'f'.repeat(64) } : binding) }) }, authorization.revision)
+      const outcome = await runAccountAutomation({ repository, owner, profile, services: servicesFixture(repository, calls), now: at, maxStages: 1 })
+      assert.equal(outcome.results[0].id, run.id)
+      assert.equal(outcome.results[0].status, 'held')
+      assert.deepEqual(calls, [])
+      assert.equal(repository.studioGet(owner, 'automation_run', run.id).revision, run.revision)
+      const tomorrow = new Date(at.getTime() + 86400000)
+      const future = await runAccountAutomation({ repository, owner, profile, services: servicesFixture(repository, calls), now: tomorrow, maxStages: 1 })
+      assert.notEqual(future.results[0].id, run.id)
+      assert.deepEqual(calls.map(call => call.phase), ['research'])
+    } finally { repository.close() }
+  }
+})
+
+test('an existing uncertain daily publication blocks evergreen demo spending before any stage', async () => {
+  const repository = createRepository(':memory:'); const calls = []
+  try {
+    const { owner, profile, run, at } = await evergreenDemoFixture(repository)
+    repository.studioPut(owner, 'social_publication', 'existing-held-post', { accountId: profile.accountId, status: 'dispatch_unknown', publishAt: at.toISOString() }, 0)
+    const result = await runAccountAutomation({ repository, owner, profile, services: servicesFixture(repository, calls), now: at })
+    assert.equal(result.results[0].status, 'skipped'); assert.equal(calls.length, 0)
+    assert.equal(repository.studioGet(owner, 'automation_run', run.id).revision, run.revision)
   } finally { repository.close() }
 })
