@@ -18,12 +18,26 @@ export async function dispatchAutomation({ owner, requestId, accountIds }, repos
   }))
 }
 
-export function createAutomationHandler({ repository, retain = waitUntil, execute = executeAccountAutomation, dispatch = dispatchAutomation, config = env }) {
+const authenticateVertex = async config => {
+  const { vertexGoogleAuthOptions, vertexProductionProject } = await import('../server/providers/vertex-fallback.js')
+  return vertexGoogleAuthOptions({ ...config, VERTEX_FALLBACK_PROJECT: vertexProductionProject })
+}
+export function createAutomationHandler({ repository, retain = waitUntil, execute = executeAccountAutomation, dispatch = dispatchAutomation, config = env, authenticateVertex: authenticate = authenticateVertex }) {
   return async function handler(request, response) {
     response.setHeader('Cache-Control', 'no-store')
     const expected = Buffer.from(`Bearer ${config.CRON_SECRET || ''}`); const actual = Buffer.from(request.headers.authorization || '')
     if (!config.CRON_SECRET || expected.length !== actual.length || !timingSafeEqual(expected, actual)) return response.status(401).json({ error: 'Unauthorized' })
     if (config.CONTENT_ACCOUNT_AUTOMATION !== 'true') return response.status(503).json({ error: 'Account automation is disabled.' })
+    if (request.method === 'HEAD') {
+      try { await authenticate(config); return response.status(204).end() }
+      catch (error) {
+        const diagnostic = error?.authFailure
+        if (['google_auth_import', 'vercel_oidc_import', 'client_construction', 'oidc_exchange', 'google_token_exchange', 'access_token_validation'].includes(diagnostic?.phase)) response.setHeader('X-Vertex-Auth-Phase', diagnostic.phase)
+        if (['ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_PACKAGE_PATH_NOT_EXPORTED', 'ERR_INVALID_ARG_TYPE', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'ENOENT', 'invalid_grant', 'invalid_target', 'permission_denied'].includes(diagnostic?.code)) response.setHeader('X-Vertex-Auth-Code', diagnostic.code)
+        if (Number.isInteger(diagnostic?.httpStatus) && diagnostic.httpStatus >= 400 && diagnostic.httpStatus <= 599) response.setHeader('X-Vertex-Auth-Status', String(diagnostic.httpStatus))
+        return response.status(503).end()
+      }
+    }
     if (request.method === 'GET') {
       const owners = (await repository.studioList(automationRegistryOwner, 'automation_owner')).filter(record => record.enabled && typeof record.ownerScope === 'string')
       if (owners.length > 20) return response.status(503).json({ error: 'Scheduled workspace capacity exceeded. No partial batch was silently dispatched.' })

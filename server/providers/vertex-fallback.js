@@ -33,18 +33,33 @@ export async function vertexGoogleAuthOptions(config, dependencies = {}) {
     return { credentials: vertexCredentials(config) }
   }
   if (!wifConfigured(config)) throw Object.assign(budgetError('The production federation audience or service account does not match its approval.'), { preDispatch: true, configurationFailure: true })
+  let phase = 'google_auth_import'
   try {
     const { ExternalAccountClient } = dependencies.ExternalAccountClient ? dependencies : await import('google-auth-library')
+    phase = 'vercel_oidc_import'
     const { getVercelOidcToken } = dependencies.getVercelOidcToken ? dependencies : await import('@vercel/functions/oidc')
+    phase = 'client_construction'
     const authClient = ExternalAccountClient.fromJSON({
       type: 'external_account', audience: vertexWifAudience, subject_token_type: 'urn:ietf:params:oauth:token-type:jwt', token_url: 'https://sts.googleapis.com/v1/token', scopes: ['https://www.googleapis.com/auth/cloud-platform'],
       service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${vertexWifServiceAccount}:generateAccessToken`,
-      subject_token_supplier: { getSubjectToken: () => getVercelOidcToken({ audience: vertexWifAudience }) },
+      subject_token_supplier: { getSubjectToken: async () => {
+        phase = 'oidc_exchange'
+        const token = await getVercelOidcToken({ audience: vertexWifAudience })
+        phase = 'google_token_exchange'
+        return token
+      } },
     })
+    phase = 'google_token_exchange'
     const access = await authClient?.getAccessToken()
+    phase = 'access_token_validation'
     if (typeof access?.token !== 'string' || !access.token) throw new Error('No access token')
     return { authClient, projectId: vertexProductionProject }
-  } catch { throw Object.assign(budgetError('Production federation authentication failed before inference admission.'), { preDispatch: true, configurationFailure: true }) }
+  } catch (error) {
+    const allowedCodes = ['ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND', 'ERR_PACKAGE_PATH_NOT_EXPORTED', 'ERR_INVALID_ARG_TYPE', 'ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT', 'ENOENT', 'invalid_grant', 'invalid_target', 'permission_denied']
+    const status = error?.response?.status ?? error?.status
+    const authFailure = { phase, ...(allowedCodes.includes(error?.code) ? { code: error.code } : {}), ...(Number.isInteger(status) && status >= 400 && status <= 599 ? { httpStatus: status } : {}) }
+    throw Object.assign(budgetError('Production federation authentication failed before inference admission.'), { preDispatch: true, configurationFailure: true, authFailure })
+  }
 }
 
 async function callVertex(request, config, googleAuthOptions, timeoutMs = 180000) {

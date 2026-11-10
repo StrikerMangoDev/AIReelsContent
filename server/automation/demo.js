@@ -75,7 +75,7 @@ export function createDemoGenerator(context, { beforeAttempt, config = env, requ
     } catch (error) {
       if ([401, 402, 403].includes(error.status) || error.configurationFailure === true) {
         const current = await context.repository.studioGet(context.owner, 'automation_demo', context.run.demoAuthorizationId)
-        if (current?.status === 'active') await context.repository.studioPut(context.owner, 'automation_demo', current.id, { ...current, status: 'blocked', failureCode: admitted.authorization.provider === 'openrouter' ? error.configurationFailure ? 'OPENROUTER_CONFIG_INVALID' : 'OPENROUTER_ACCESS_REJECTED' : error.configurationFailure ? 'VERTEX_CONFIG_INVALID' : 'VERTEX_ACCESS_REJECTED' }, current.revision)
+        if (current?.status === 'active') await context.repository.studioPut(context.owner, 'automation_demo', current.id, { ...current, status: 'blocked', failureCode: admitted.authorization.provider === 'openrouter' ? error.configurationFailure ? 'OPENROUTER_CONFIG_INVALID' : 'OPENROUTER_ACCESS_REJECTED' : error.configurationFailure ? 'VERTEX_CONFIG_INVALID' : 'VERTEX_ACCESS_REJECTED', ...(error.authFailure ? { authFailure: error.authFailure } : {}) }, current.revision)
       }
       if (error.code === 'BUDGET_BLOCKED') error.preDispatch = true
       throw error

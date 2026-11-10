@@ -7,6 +7,27 @@ import { demoAuthorizationActive } from '../automation/demo.js'
 import { firebaseCredentials } from '../auth/firebase.js'
 
 const config = { CONTENT_VERTEX_FALLBACK: 'true', VERTEX_FALLBACK_PROJECT: vertexProductionProject, VERTEX_FALLBACK_MODEL: 'gemini-3.8-flash', VERTEX_FALLBACK_APPROVED_UNTIL: new Date(Date.now() + 3600000).toISOString(), VERTEX_WIF_AUDIENCE: vertexWifAudience, VERTEX_WIF_SERVICE_ACCOUNT: vertexWifServiceAccount }
+test('installed federation libraries construct and retrieve the supplied subject without network', async () => {
+  const { ExternalAccountClient, IdentityPoolClient } = await import('google-auth-library')
+  const { getVercelOidcToken } = await import('@vercel/functions/oidc')
+  assert.equal(typeof getVercelOidcToken, 'function')
+  let client
+  const options = await vertexGoogleAuthOptions(config, { ExternalAccountClient: { fromJSON: settings => {
+    client = ExternalAccountClient.fromJSON(settings)
+    assert.ok(client instanceof IdentityPoolClient)
+    client.getAccessToken = async () => { assert.equal(await client.retrieveSubjectToken(), 'fake-subject'); return { token: 'fake-access' } }
+    return client
+  } }, getVercelOidcToken: async options => { assert.deepEqual(options, { audience: vertexWifAudience }); return 'fake-subject' } })
+  assert.equal(options.authClient, client)
+})
+
+test('federation diagnostics retain only known failure phase, code and HTTP status', async () => {
+  await assert.rejects(vertexGoogleAuthOptions(config, { ExternalAccountClient: { fromJSON: () => ({ getAccessToken: async () => { throw Object.assign(new Error('private token'), { code: 'ETIMEDOUT', response: { status: 504, data: 'private body' } }) } }) }, getVercelOidcToken: async () => 'unused' }), error => {
+    assert.deepEqual(error.authFailure, { phase: 'google_token_exchange', code: 'ETIMEDOUT', httpStatus: 504 })
+    assert.equal(JSON.stringify(error).includes('private'), false)
+    return true
+  })
+})
 test('production WIF authenticates exact audience and target before inference without reading Firebase JSON', async () => {
   let oidcOptions; let settings; let authenticated = false
   const authClient = { getAccessToken: async () => { assert.equal(await settings.subject_token_supplier.getSubjectToken(), 'controlled-subject-token'); authenticated = true; return { token: 'controlled-access-token' } } }

@@ -6,10 +6,22 @@ import { env } from '../config/env.js'
 
 const secret = 'acceptance-test-only-automation-secret'
 function response() {
-  return { statusCode: 200, headers: {}, setHeader(key, value) { this.headers[key] = value }, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } }
+  return { statusCode: 200, headers: {}, setHeader(key, value) { this.headers[key] = value }, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this }, end() { return this } }
 }
 const request = (method = 'POST', body = { owner: 'owner-a', profileId: 'profile-a', requestId: '46584f0a-d5fc-45c0-b89f-1d35de5a96f1' }, authorization = `Bearer ${secret}`) => ({ method, body, headers: { authorization } })
 const config = { CRON_SECRET: secret, CONTENT_ACCOUNT_AUTOMATION: 'true' }
+
+test('HEAD authenticates federation only with cron authorization and cannot execute, dispatch or access storage', async () => {
+  let authentications = 0
+  const forbidden = () => assert.fail('Preflight cannot perform automation or repository work')
+  const options = { repository: new Proxy({}, { get: forbidden }), config, execute: forbidden, dispatch: forbidden, retain: forbidden, authenticateVertex: async value => { assert.equal(value, config); authentications++ } }
+  const handler = createAutomationHandler(options)
+  const denied = response(); await handler(request('HEAD', undefined, 'Bearer wrong'), denied); assert.equal(denied.statusCode, 401); assert.equal(authentications, 0)
+  const disabled = response(); await createAutomationHandler({ ...options, config: { ...config, CONTENT_ACCOUNT_AUTOMATION: 'false' } })(request('HEAD'), disabled); assert.equal(disabled.statusCode, 503); assert.equal(authentications, 0)
+  const ready = response(); await handler(request('HEAD'), ready); assert.equal(ready.statusCode, 204); assert.equal(authentications, 1); assert.equal(ready.body, undefined)
+  const failed = response(); await createAutomationHandler({ ...options, authenticateVertex: async () => { throw Object.assign(new Error('secret token and private body'), { authFailure: { phase: 'oidc_exchange', code: 'ETIMEDOUT', httpStatus: 504, private: 'secret' } }) } })(request('HEAD'), failed)
+  assert.equal(failed.statusCode, 503); assert.equal(failed.headers['X-Vertex-Auth-Phase'], 'oidc_exchange'); assert.equal(failed.headers['X-Vertex-Auth-Code'], 'ETIMEDOUT'); assert.equal(failed.headers['X-Vertex-Auth-Status'], '504'); assert.equal(JSON.stringify(failed).includes('secret'), false)
+})
 
 test('automation rejects unauthorized, disabled and unregistered work before execution', async () => {
   let reads = 0; let runs = 0
