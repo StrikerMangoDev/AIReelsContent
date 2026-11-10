@@ -8,8 +8,12 @@ export function postizContentMatches(expected, observed) {
   const urls = new Set([...expected.matchAll(/https:\/\/\S+/g)].map(match => { try { return new URL(match[0]).href } catch { return null } }))
   if (doc('a').toArray().some(link => { try { return !urls.has(new URL(doc(link).attr('href')).href) } catch { return true } })) return false
   doc('br').replaceWith('\n')
+  // The Postiz editor serializes each line, including blank lines, as a paragraph.
+  const nodes = doc.root().contents().toArray()
+  const editorText = nodes.length && nodes.every(node => node.type === 'tag' && node.name === 'p') ? nodes.map(node => doc(node).text()).join('\n') : null
   doc('p,div,h1,h2,h3').each((_index, element) => { doc(element).after('\n\n') })
   doc('li').each((_index, element) => { doc(element).after('\n') })
   const text = doc.root().text().replace(/\r\n/g, '\n').replace(/\n\n$/, '')
-  return text === expected.replace(/\r\n/g, '\n')
+  const approved = expected.replace(/\r\n/g, '\n')
+  return text === approved || editorText === approved
 }

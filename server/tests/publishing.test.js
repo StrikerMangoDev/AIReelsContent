@@ -152,6 +152,10 @@ test('Postiz readback decodes HTML entities without accepting changed prose, new
   assert.equal(postizContentMatches(caption, caption.replace('\n\n', '\n')), false)
   assert.equal(postizContentMatches(caption, `${caption}<script>doSomething()</script>`), false)
   assert.equal(postizContentMatches('A\nB', '<p>A<br>B</p>'), true)
+  assert.equal(postizContentMatches('A\n\nSource: https://example.com/a\nhttps://example.com/b', '<p>A</p><p></p><p>Source: https://example.com/a</p><p>https://example.com/b</p>'), true)
+  assert.equal(postizContentMatches('A\nB', 'Changed<p>A</p><p>B</p>'), false)
+  assert.equal(postizContentMatches('A\n\nB', '<p>A</p><p>B</p>'), true)
+  assert.equal(postizContentMatches('A\n\nB', '<p>A</p><p>Changed</p><p>B</p>'), false)
 })
 
 test('concurrent accounts wait for the owner admission lease and retain cross-account request identity', async () => {
