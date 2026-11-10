@@ -72,6 +72,7 @@ test('a recorded failed paid review resumes into exactly one settled correction 
       let run = { ...original.run, profileHash, contentHash: contentHash(pack), actorUid: owner, localDate, slot: { kind: 'evergreen-demo', index: 0 }, stage: 'review', status: 'blocked' }
       const initialGenerateId = demoStageRequestId(run, 'generate'); const initialReviewId = demoStageRequestId(run, 'review')
       run.stages = [{ stage: 'review', requestId: initialReviewId, status: 'needs_revision' }]
+      run.findings = actualReview.issues
       run = repository.studioPut(owner, 'automation_run', run.id, run, original.run.revision)
       async function settleStage(stageRun, phase, unknown = false) {
         const id = `demo:${demoStageRequestId(stageRun, phase)}:0`; const budgetOwner = demoBudgetOwner(owner, fixture.demoId)
@@ -92,6 +93,7 @@ test('a recorded failed paid review resumes into exactly one settled correction 
         const reviewed = await runAccountAutomation({ repository, owner, profile, services, now: at, maxStages: 1 })
         assert.equal(reviewed.results[0].status, outcome === 'passed' ? 'pending' : 'blocked')
         assert.equal(reviewed.results[0].stage, outcome === 'passed' ? 'render' : 'review')
+        if (outcome === 'passed') { assert.deepEqual(reviewed.results[0].findings, []); assert.ok(reviewed.results[0].qualityRevision.issues.length) }
         assert.equal(writes, 1); assert.equal(paidCalls, 2)
         assert.equal(repository.studioList(owner, 'automation_demo_review')[0].review.runId, actualReview.runId)
         if (outcome === 'failed-again') { await runAccountAutomation({ repository, owner, profile, services, now: at }); assert.equal(writes, 1); assert.equal(paidCalls, 2) }

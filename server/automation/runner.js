@@ -165,6 +165,7 @@ export async function runAccountAutomation({ repository, owner, profile, service
           break
         }
         const next = { ...run, stages: [...run.stages, stageRecord], status: 'pending' }
+        if (phase === 'review') { next.findings = []; next.error = null }
         if (phase === 'research') {
           if (!Array.isArray(result.topics) || !result.topics.length) { run = await repository.studioPut(owner, 'automation_run', unitId, { ...next, status: 'blocked', error: 'No source-supported topic was available.' }, run.revision); break }
           const priorTopics = new Set(existingRuns.filter(value => value.accountId === profile.accountId && value.topicHash && held(value.status)).map(value => value.topicHash))
