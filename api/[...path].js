@@ -11,9 +11,18 @@ export function vercelJobDispatcher(repository, retain = waitUntil, run = runCon
   }
 }
 
+// Vercel adds the catch-all path as query metadata; it is not an application filter.
+export function apiRequestUrl(requestUrl) {
+  const url = new URL(requestUrl, 'http://localhost')
+  const paths = url.searchParams.getAll('path')
+  if (paths.length === 1 && paths[0] === url.pathname.replace(/^\/api\//, '')) url.searchParams.delete('path')
+  return url.pathname + url.search
+}
+
 let pending
 export default async function handler(request, response) {
   try {
+    request.url = apiRequestUrl(request.url)
     pending ??= Promise.all([import('../server/http/app.js'), import('../server/storage/index.js'), import('../server/config/sources.js')])
       .then(([{ createApp }, { repository }, { sources }]) => {
         const dispatch = vercelJobDispatcher(repository)

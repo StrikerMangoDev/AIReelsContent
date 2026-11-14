@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
-import handler from '../../api/[...path].js'
+import handler, { apiRequestUrl } from '../../api/[...path].js'
 import authConfig from '../../api/auth/config.js'
 import authMe from '../../api/auth/me.js'
 import adminOverview from '../../api/admin/overview.js'
@@ -72,3 +72,9 @@ test('nested auth routes return configuration JSON and enforce authentication', 
     repository.close()
   }
 })
+
+ test('catch-all routing metadata is removed only for the exact request path', () => {
+  assert.equal(apiRequestUrl('/api/studio/packages/abc/social-preview?path=studio%2Fpackages%2Fabc%2Fsocial-preview&platform=Instagram'), '/api/studio/packages/abc/social-preview?platform=Instagram')
+  assert.equal(apiRequestUrl('/api/studio/config?path=unrelated'), '/api/studio/config?path=unrelated')
+  assert.equal(apiRequestUrl('/api/studio/config?path=studio%2Fconfig&path=studio%2Fconfig'), '/api/studio/config?path=studio%2Fconfig&path=studio%2Fconfig')
+ })
