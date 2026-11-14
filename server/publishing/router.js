@@ -155,7 +155,7 @@ export function createPublishingRouter({ repository, auth, provider = createPost
 
   router.get('/packages/:id/social-preview', async (req, res) => {
     // Parse the cleaned URL: hosted request.query can retain platform rewrite metadata.
-    const { platform } = z.object({ platform: z.enum(platforms) }).strict().parse(parseQuery(new URL(req.originalUrl, 'http://localhost').search.slice(1)))
+    const { platform } = z.object({ platform: z.enum(platforms) }).strict().parse(parseQuery(new URL(req.url, 'http://localhost').search.slice(1)))
     const owner = ownerScope(req); const pack = await packFor(owner, req.params.id)
     if (!pack.content || !selectedPlatforms(pack.settings).includes(platform)) throw fail(422, 'Choose a platform with saved content in this package')
     const hash = contentHash(pack)
@@ -184,7 +184,7 @@ export function createPublishingRouter({ repository, auth, provider = createPost
   })
   router.post('/social-publications/:id/refresh', async (req, res) => res.json(await service.refresh({ owner: ownerScope(req), actorUid: req.identity.uid, id: req.params.id })))
   router.use((error, _req, res, next) => {
-    if (error instanceof z.ZodError) return res.status(400).json({ error: 'Check the publication fields and exact account confirmation.' })
+    if (error instanceof z.ZodError) return res.status(400).json({ error: /\/social-preview$/.test(_req.path) ? 'Invalid preview filters. ' + error.issues.map(issue => issue.code === 'unrecognized_keys' ? 'Unexpected filters: ' + issue.keys.join(', ') : issue.path.join('.') + ': ' + issue.message).join('; ') : 'Check the publication fields and exact account confirmation.' })
     if (error.code === 'STUDIO_CONFLICT') return res.status(409).json({ error: 'Publication changed; reload its receipt before retrying.' })
     if (error.publicMessage) return res.status(error.status).json({ error: error.publicMessage })
     next(error)
