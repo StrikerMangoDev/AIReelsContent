@@ -22,13 +22,14 @@ test('saved social preview is owner-scoped, uses exact server captions and curre
   repository.studioPut('alice', 'asset', 'current-image', { packageId: pack.id, packageContentHash: contentHash(pack), kind: 'image', mime: 'image/png', status: 'completed', bytes: 1024, operation: 'private-provider-operation', verification: { status: 'passed', privateNote: 'private reviewer details' } }, 0)
   repository.studioPut('alice', 'asset', 'stale-image', { packageId: pack.id, packageContentHash: 'older-content', kind: 'image', mime: 'image/png', status: 'completed', bytes: 2048 }, 0)
   repository.studioPut('bob', 'asset', 'other-owner-image', { packageId: pack.id, packageContentHash: contentHash(pack), kind: 'image', mime: 'image/png', status: 'completed' }, 0)
-  const app = express(); app.use(createPublishingRouter({ repository, auth: (req, res, next) => { if (!req.headers.authorization) return res.status(401).json({ error: 'Sign in' }); req.identity = { uid: req.headers.authorization }; next() }, config: () => ({ enabled: false, accounts: [] }), assessReady: () => assert.fail('Preview must not run release assessments or write machine approvals'), provider: { upload: () => assert.fail('Preview cannot upload'), create: () => assert.fail('Preview cannot post') } }))
+  const app = express(); app.use((req, _res, next) => { Object.defineProperty(req, 'query', { configurable: true, value: { __studioPath: 'internal-rewrite', platform: 'invalid-host-cache' } }); next() }); app.use(createPublishingRouter({ repository, auth: (req, res, next) => { if (!req.headers.authorization) return res.status(401).json({ error: 'Sign in' }); req.identity = { uid: req.headers.authorization }; next() }, config: () => ({ enabled: false, accounts: [] }), assessReady: () => assert.fail('Preview must not run release assessments or write machine approvals'), provider: { upload: () => assert.fail('Preview cannot upload'), create: () => assert.fail('Preview cannot post') } }))
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening')
   const read = (platform, actor = 'alice') => fetch(`http://127.0.0.1:${server.address().port}/packages/${pack.id}/social-preview?platform=${encodeURIComponent(platform)}`, { headers: actor ? { Authorization: actor } : {} })
   try {
     assert.equal((await read('Instagram', '')).status, 401)
     assert.equal((await read('Instagram', 'bob')).status, 404)
     assert.equal((await read('TikTok')).status, 400)
+    for (const query of ['platform=Instagram&platform=Facebook', 'platform=Instagram&unexpected=true']) assert.equal((await fetch(`http://127.0.0.1:${server.address().port}/packages/${pack.id}/social-preview?${query}`, { headers: { Authorization: 'alice' } })).status, 400)
     for (const platform of selected) {
       const response = await read(platform); assert.equal(response.status, 200)
       const preview = await response.json()

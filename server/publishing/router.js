@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { parse as parseQuery } from 'node:querystring'
 import { randomUUID, createHash } from 'node:crypto'
 import { z } from 'zod'
 import { ownerScope, workspaceAuth, requireWriteRole, workspaceRole } from '../studio/workspaces.js'
@@ -153,7 +154,8 @@ export function createPublishingRouter({ repository, auth, provider = createPost
   async function packFor(owner, id) { const pack = await repository.studioGet(owner, 'package', id); if (!pack) throw fail(404, 'Content package not found'); return pack }
 
   router.get('/packages/:id/social-preview', async (req, res) => {
-    const { platform } = z.object({ platform: z.enum(platforms) }).strict().parse(req.query)
+    // Parse the cleaned URL: hosted request.query can retain platform rewrite metadata.
+    const { platform } = z.object({ platform: z.enum(platforms) }).strict().parse(parseQuery(new URL(req.originalUrl, 'http://localhost').search.slice(1)))
     const owner = ownerScope(req); const pack = await packFor(owner, req.params.id)
     if (!pack.content || !selectedPlatforms(pack.settings).includes(platform)) throw fail(422, 'Choose a platform with saved content in this package')
     const hash = contentHash(pack)
