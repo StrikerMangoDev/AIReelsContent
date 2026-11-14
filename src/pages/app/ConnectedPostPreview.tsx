@@ -31,7 +31,7 @@ export function ConnectedPostPreview({ packageId, revision, active = true, dirty
       if (!live) return
       const errors: string[] = []
       if (accounts.status === 'rejected') errors.push('Publishing accounts could not load. Reload the preview to try again.')
-      if (media.status === 'rejected') errors.push('Generated media could not load. Reload the preview to try again.')
+      if (media.status === 'rejected') errors.push('Generated media could not load. ' + (typeof media.reason?.message === 'string' ? media.reason.message : 'Reload the preview to try again.'))
       const current = media.status === 'fulfilled' && media.value.packageId === packageId && media.value.revision === revision && media.value.platform === platform
       if (media.status === 'fulfilled' && !current) errors.push('The saved content version changed. Reload the draft before previewing media.')
       setSnapshot({ key, loading: false, accounts: accounts.status === 'fulfilled' ? accounts.value.accounts.filter(account => account.platform === platform) : [], assets: current ? media.value.assets : [], errors })
