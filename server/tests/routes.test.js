@@ -18,6 +18,9 @@ test('studio Vercel rewrite preserves nested paths and query values without perm
   assert.equal(studioRequestUrl({ url: '/api/studio?__studioPath=packages%2Fabc%2Fgenerate&limit=5' }), '/api/studio/packages/abc/generate?limit=5')
   assert.equal(studioRequestUrl({ url: '/api/studio/assets/abc/file?__studioPath=assets%2Fabc%2Ffile' }), '/api/studio/assets/abc/file')
   assert.equal(studioRequestUrl({ url: '/api/studio', query: { __studioPath: 'library/sources' } }), '/api/studio/library/sources')
+  const rewritten = { url: '/api/studio?__studioPath=packages%2Fabc%2Fsocial-preview&platform=Instagram', query: { __studioPath: 'packages/abc/social-preview', platform: 'Instagram' } }
+  assert.equal(studioRequestUrl(rewritten), '/api/studio/packages/abc/social-preview?platform=Instagram')
+  assert.deepEqual(rewritten.query, { platform: 'Instagram' })
   assert.throws(() => studioRequestUrl({ url: '/api/studio?__studioPath=..%2Fadmin' }))
   assert.throws(() => studioRequestUrl({ url: '/api/studio?__studioPath=config&__studioPath=packages' }))
 })
