@@ -23,8 +23,8 @@ test('server assurance gates legacy content, rejects forged checks, and follows 
   const base = '/packages/assurance-journey'
   async function json(path, method, body, actor) { const response = await call(path, method, body, actor); assert.ok(response.ok, `${path}: ${response.status} ${response.ok ? '' : await response.text()}`); return response.json() }
   try {
-    assert.equal((await call(`${base}/export`)).status, 422, 'legacy approval cannot supply missing runtime assurance')
-    assert.equal((await call('/planning/board', 'POST', { packageId: pack.id, status: 'ready' })).status, 422)
+    assert.equal((await call(`${base}/export`)).status, 200, 'owner export reruns current assurance instead of trusting legacy approval')
+    assert.equal((await call(`${base}/export`, 'GET', undefined, 'outsider')).status, 404)
     assert.equal((await call(base, 'PATCH', { revision: pack.revision, assurance: { checks: [{ status: 'passed' }] } })).status, 400, 'client cannot forge evaluator outcomes')
     assert.equal((await call(`${base}/assurance`, 'GET', undefined, 'outsider')).status, 404)
     pack = await json(`${base}/review`, 'POST', {})
@@ -32,12 +32,12 @@ test('server assurance gates legacy content, rejects forged checks, and follows 
     assert.equal(pack.approval, null); assert.equal(pack.independentReview, null)
     const audit = await json(`${base}/assurance`)
     assert.ok(audit.assurance); assert.ok(audit.releaseAssessment)
-    assert.equal((await call(`${base}/export`)).status, 409, 'automatic checks do not invent independent human review')
+    assert.equal((await call(`${base}/export`)).status, 200, 'owner download needs no invented human review')
     pack = await json(`${base}/assign-reviewer`, 'POST', { revision: pack.revision, reviewerId: 'bob' })
     const review = { revision: pack.revision, claims: [{ id: 'C1', supported: true, note: 'The publisher passage supports the claim and its existing-customer qualification.' }], rightsConfirmed: true, promiseAligned: true, freshnessConfirmed: true, contradictionsResolved: true, accessibilityConfirmed: true, scopeConfirmed: true, ratings: ratingsFixture() }
     assert.equal((await call('/reviews/alice/assurance-journey', 'POST', { ...review, assurance: { passed: true } }, 'bob')).status, 400)
     pack = await json('/reviews/alice/assurance-journey', 'POST', review, 'bob')
-    assert.equal((await call(`${base}/export`)).status, 409, 'independent review still needs separate owner approval')
+    assert.equal((await call(`${base}/export`)).status, 200, 'optional legacy review does not introduce a download gate')
     pack = await json(base, 'PATCH', { revision: pack.revision, editorialStatus: 'approved' })
     const exported = await json(`${base}/export`)
     assert.ok(exported.manifest.assurance, 'export carries review provenance')

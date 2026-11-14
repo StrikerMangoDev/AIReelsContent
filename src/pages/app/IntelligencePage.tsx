@@ -3,7 +3,7 @@ import { categoryDefaults, type CategorySetup } from '@/services/category-setup'
 import { topicResearchDetails } from '@/services/topic-research-details'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useLocation, useParams } from 'react-router-dom'
-import { ArrowRight, Radar, Sparkles } from 'lucide-react'
+import { ArrowRight, Bookmark, Check, Radar, Sparkles } from 'lucide-react'
 import { useAuth } from '@/context/auth-state'
 import { studioRead, studioRequest, type StudioConfig, type StudioPackage } from '@/services/studio-api'
 import { trackEvent } from '@/services/analytics'
@@ -62,6 +62,7 @@ function IntelligenceWorkspace() {
   const canWrite = workspace.role === 'owner' || workspace.role === 'editor'
   const [refresh, setRefresh] = useState(false)
   const [notice, setNotice] = useState('')
+  const [savedIdeas, setSavedIdeas] = useState<Set<string>>(new Set())
   const [reports, setReports] = useState<ReportSummary[]>([])
   const [nextCursor, setNextCursor] = useState<HistoryPage['nextCursor']>(null)
   const [selectedReportId, setSelectedReportId] = useState('')
@@ -112,6 +113,11 @@ function IntelligenceWorkspace() {
     }).catch(cause => { if (active) { setLoadErrors(previous => ({ ...previous, library: cause.message })); setLibraryLoading(false) } })
     return () => { active = false }
   }, [uid, categoryId, loadAttempt])
+  useEffect(() => {
+    if (view !== 'library' || !Object.values(jobs).some(job => ['reserved', 'running'].includes(job.status))) return
+    const timer = window.setTimeout(() => setLoadAttempt(value => value + 1), 4000)
+    return () => window.clearTimeout(timer)
+  }, [view, jobs])
   useEffect(() => {
     let active = true
     if (!selectedReportId) return
@@ -184,7 +190,7 @@ function IntelligenceWorkspace() {
     })
   }
   const existingDraft = (index: number) => drafts.find(pack => pack.researchId === report?.id && (pack.opportunityIndex === index || (pack.opportunityIndex == null && pack.researchContext?.opportunity.title === report?.opportunities[index]?.title)))
-  async function saveForLater(index: number) { if (!report) return; await run('Saving to Planner', async () => { await studioRequest('/planning/shortlist', { reportId: report.id, index }, 'POST'); setNotice('Saved for later in Content Planner. No content was generated.') }) }
+  async function saveForLater(index: number) { if (!report) return; await run('Saving to Planner', async () => { await studioRequest('/planning/shortlist', { reportId: report.id, index }, 'POST'); setSavedIdeas(previous => new Set(previous).add(`${report.id}:${index}`)); setNotice('Saved to Content Planner.') }) }
   function citations(ids: string[]) {
     return <span className="source-chips">{ids.map(id => { const source = report?.evidence.find(item => item.id === id); return source ? <a key={id} href={source.url} target="_blank" rel="noreferrer">{id} ↗</a> : null })}</span>
   }
@@ -249,11 +255,30 @@ function IntelligenceWorkspace() {
       {confirmation && <section className="studio-panel refresh-confirm" role="status"><h2>Find fresh ideas?</h2><p>We’ll research {confirmation.name} again. Your saved ideas stay available. {config?.capabilities.vertexFallback ? 'Tries free AI first, then the approved Gemini fallback within your remaining testing budget if needed.' : 'This uses one free research allowance; there is no paid fallback.'}</p><p>Coverage: {confirmation.coverage || "international"}{confirmation.country ? ` · ${confirmation.country}` : ""}. Topics: {(confirmation.topics || []).join(", ") || "From your brief"}.</p><p>{confirmation.intent}</p><button disabled={Boolean(busy)} onClick={() => void research()}>Confirm refresh</button><button disabled={Boolean(busy)} onClick={() => { setConfirmation(null); setPendingResearch(null); setRefresh(false) }}>Cancel</button></section>}
       {selectedReportId && !report && !loadErrors.report && <div role="status"><p className="library-loading-status"><span className="library-loading-spinner" aria-hidden="true" />Loading saved ideas…</p><div className="discovery-cards" aria-hidden="true">{Array.from({ length: 4 }, (_, index) => <div className="studio-panel category-skeleton" key={index}><span className="skeleton-line skeleton-line-short" /><span className="skeleton-line skeleton-line-title" /><span className="skeleton-line" /><span className="skeleton-line skeleton-line-medium" /></div>)}</div></div>}
       {!report && !selectedReportId && categorySection === 'research' && <section className="studio-panel"><h2>{visibleReports.length ? 'Choose a saved briefing' : 'No saved research yet'}</h2><p>{visibleReports.length ? 'Choose a briefing above to read its sources and research notes.' : 'Research sources will appear here after your first confirmed research run.'}</p></section>}
-      {busy && <div className="studio-panel research-progress" role="status"><Radar size={25} /><div><strong>{busy}</strong><p>This can take a few minutes. Your previous work stays saved.</p></div></div>}
+      {busy && <div className="studio-panel research-progress" role="status"><Radar size={25} /><div><strong>{busy}</strong><p>{busy === 'Saving to Planner' ? 'Saving this idea for later…' : 'This can take a few minutes. Your previous work stays saved.'}</p></div></div>}
       {!report && !selectedReportId && categorySection === 'ideas' && <section className="studio-panel intelligence-empty category-empty" aria-label="No saved ideas"><CategoryCover name={niche.name} /><div className="category-empty-copy"><span className="category-empty-count">0 saved ideas</span><h2>Your ideas will appear here</h2><p>{currentJob && ['reserved', 'running'].includes(currentJob.status) ? 'After research finishes, choose an idea to explore its keywords, sources and content angle.' : 'Research this category to discover ideas with supporting sources. Then choose one to create your content.'}</p>{categoryId && <Link className="idea-action" to={`/ideas/${categoryId}/edit`}>{currentJob && ['reserved', 'running'].includes(currentJob.status) ? 'View category settings' : 'Set up research'} <ArrowRight size={16} aria-hidden="true" /></Link>}</div></section>}{report && <>
         {categorySection === 'ideas' && <><h2 className="sr-only">Pick your next idea</h2>
         {!report.opportunities.length && <div className="studio-panel"><h2>No supported ideas yet</h2><p>Try a wider research window or a more specific topic. No developments will be invented to fill this board.</p></div>}
-        <div className="discovery-cards">{report.opportunities.map((topic, index) => <article className="discovery-card" key={`${report.id}-${index}`}><span className="idea-card-top"><span className={`idea-verification is-${topic.verification}`}>{topic.verification === 'reported' ? 'Source reported' : topic.verification === 'disputed' ? 'Disputed claim' : 'Needs verification'}</span><span className="idea-date">{topic.eventDate ? new Date(`${topic.eventDate}T00:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' }) : 'Date unconfirmed'}</span></span><h3><button className="idea-title-action" disabled={Boolean(busy) || !canWrite} onClick={() => void create(index)}>{topic.title}</button></h3><span className="idea-card-summary">{topic.whatChanged}</span>{topic.keywords?.length > 0 && <span className="idea-card-keywords"><span className="idea-keyword-label">Keywords</span>{topic.keywords.slice(0, 3).map(keyword => <span key={keyword}>{keyword}</span>)}</span>}<span className="idea-card-bottom"><span>{topic.evidenceIds?.length ? `${topic.evidenceIds.length} supporting ${topic.evidenceIds.length === 1 ? 'source' : 'sources'}` : 'Sources unavailable'}</span></span><div className="idea-card-actions"><button className="primary-action" disabled={Boolean(busy) || !canWrite} onClick={() => void create(index)}>{existingDraft(index) ? 'Continue draft' : 'Create content'} <ArrowRight size={15} aria-hidden="true" /></button><button aria-haspopup="dialog" onClick={() => { setDetailSection('idea'); setSelectedTopic(index) }}>Quick details</button><button disabled={Boolean(busy) || !canWrite} onClick={() => void saveForLater(index)}>Save for later</button></div></article>)}</div></>}
+        <div className="discovery-cards">{report.opportunities.map((topic, index) => {
+          const saved = savedIdeas.has(`${report.id}:${index}`)
+          return <article className="discovery-card" key={`${report.id}-${index}`}>
+            <div className="idea-card-top">
+              <span className={`idea-verification is-${topic.verification}`}>{topic.verification === 'reported' ? 'Source reported' : topic.verification === 'disputed' ? 'Disputed claim' : 'Needs verification'}</span>
+              <button type="button" className="idea-save-action" disabled={Boolean(busy) || !canWrite || saved} aria-label={saved ? `Saved to Planner: ${topic.title}` : `Save for later: ${topic.title}`} title={saved ? 'Saved in Content Planner' : 'Save for later in Content Planner'} onClick={() => void saveForLater(index)}>{saved ? <Check size={18} aria-hidden="true" /> : <Bookmark size={18} aria-hidden="true" />}{saved ? 'Saved' : 'Save'}</button>
+            </div>
+            <h3><button className="idea-title-action" disabled={Boolean(busy) || !canWrite} onClick={() => void create(index)}>{topic.title}</button></h3>
+            <p className="idea-card-summary">{topic.whatChanged}</p>
+            {topic.keywords?.length > 0 && <div className="idea-card-keywords" role="group" aria-label="Suggested keywords">{topic.keywords.slice(0, 3).map(keyword => <span key={keyword}>{keyword}</span>)}</div>}
+            <div className="idea-card-bottom">
+              <span>{topic.evidenceIds?.length ? `${topic.evidenceIds.length} supporting ${topic.evidenceIds.length === 1 ? 'source' : 'sources'}` : 'Sources unavailable'}</span>
+              <span className="idea-date">{topic.eventDate ? <time dateTime={topic.eventDate}>{new Date(`${topic.eventDate}T00:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' })}</time> : 'Date unconfirmed'}</span>
+            </div>
+            <div className="idea-card-actions">
+              <button type="button" className="primary-action" disabled={Boolean(busy) || !canWrite} onClick={() => void create(index)}>{existingDraft(index) ? 'Continue draft' : 'Create content'} <ArrowRight size={18} aria-hidden="true" /></button>
+              <button type="button" className="idea-details-action" aria-haspopup="dialog" onClick={() => { setDetailSection('idea'); setSelectedTopic(index) }}>View details</button>
+            </div>
+          </article>
+        })}</div></>}
 
         {selectedTopic !== null && report.opportunities[selectedTopic] && (() => {
           const topic = report.opportunities[selectedTopic]
@@ -272,7 +297,7 @@ function IntelligenceWorkspace() {
                 <button type="button" className="idea-source-button" onClick={() => { setSelectedTopic(null); setCategorySection('research'); document.getElementById('main-content')?.focus(); document.getElementById('main-content')?.scrollIntoView({ behavior: 'instant' }) }}>View all research sources <ArrowRight size={16} aria-hidden="true" /></button>
               </div>}
             </div><aside className="idea-detail-aside" aria-label="Create content and keywords">
-              <section className="idea-create-card"><h2>Make this idea yours</h2><p>Turn this research into a post, carousel or script.</p><button type="button" className="primary-action" disabled={Boolean(busy) || !canWrite} onClick={() => void create(selectedTopic)}>{busy ? 'Opening Studio…' : existingDraft(selectedTopic) ? 'Continue draft' : 'Create content'} <ArrowRight size={17} aria-hidden="true" /></button><button type="button" disabled={Boolean(busy) || !canWrite} onClick={() => void run('Saving to Planner', async () => { await studioRequest('/planning/shortlist', { reportId: report.id, index: selectedTopic }, 'POST'); setNotice('Saved to Planner. No content was generated.') })}>Save for later</button><Link to="/planning">Open Planner</Link><p className="idea-card-hint">Next: choose your platforms and formats. Generation starts after you confirm.</p>{!canWrite && <p className="idea-card-hint">An owner or editor can create drafts in this workspace.</p>}</section>
+              <section className="idea-create-card"><h2>Make this idea yours</h2><p>Turn this research into a post, carousel or script.</p><button type="button" className="primary-action" disabled={Boolean(busy) || !canWrite} onClick={() => void create(selectedTopic)}>{busy ? 'Opening Studio…' : existingDraft(selectedTopic) ? 'Continue draft' : 'Create content'} <ArrowRight size={17} aria-hidden="true" /></button><button type="button" disabled={Boolean(busy) || !canWrite || savedIdeas.has(`${report.id}:${selectedTopic}`)} onClick={() => void saveForLater(selectedTopic)}>{savedIdeas.has(`${report.id}:${selectedTopic}`) ? 'Saved to Planner' : 'Save for later'}</button><Link to="/planning">Open Planner</Link><p className="idea-card-hint">Next: choose your platforms and formats. Generation starts after you confirm.</p>{!canWrite && <p className="idea-card-hint">An owner or editor can create drafts in this workspace.</p>}</section>
               <section className="idea-info-card idea-keyword-card"><h2>Suggested keywords</h2><div className="keyword-list">{topic.keywords?.length ? topic.keywords.map(keyword => <span key={keyword}>{keyword}</span>) : <p>No keywords suggested yet.</p>}</div><p className="idea-card-hint">Suggested terms, not measured search demand.</p></section>
               {detailSection === 'idea' && <button type="button" className="idea-review-link" onClick={() => setDetailSection('evidence')}>Check evidence & limitations <ArrowRight size={16} aria-hidden="true" /></button>}
             </aside></div>

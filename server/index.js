@@ -5,10 +5,12 @@ import { repository } from './storage/index.js'
 import { createApp } from './http/app.js'
 import { log } from './infrastructure/logger.js'
 import { localResearchDispatcher, localGenerationDispatcher } from './studio/local-research-dispatch.js'
+import { localAutomationDispatcher } from './automation/local-dispatch.js'
 
 const onResearchAdmitted = localResearchDispatcher({ repository, enabled: process.env.LOCAL_RESEARCH_DISPATCH, host: env.HOST, nodeEnv: env.NODE_ENV, vercel: process.env.VERCEL, report: entry => log('info', entry.event, { jobId: entry.jobId, status: entry.status, code: entry.code, diagnostics: entry.diagnostics }) })
 const onGenerationAdmitted = localGenerationDispatcher({ repository, enabled: process.env.LOCAL_GENERATION_DISPATCH, host: env.HOST, nodeEnv: env.NODE_ENV, vercel: process.env.VERCEL, report: entry => log('info', entry.event, { jobId: entry.jobId, status: entry.status, code: entry.code, diagnostics: entry.diagnostics }) })
-const app = createApp({ repository, sources, onResearchAdmitted, onGenerationAdmitted })
+const onAutomationAdmitted = localAutomationDispatcher({ repository, enabled: process.env.LOCAL_AUTOMATION_DISPATCH, host: env.HOST, nodeEnv: env.NODE_ENV, vercel: process.env.VERCEL, config: env, report: entry => log('info', entry.event, { requestId: entry.requestId, status: entry.status }) })
+const app = createApp({ repository, sources, onResearchAdmitted, onGenerationAdmitted, onAutomationAdmitted })
 // Local-only timer; hosted scheduling is not enabled by this change.
 if (onResearchAdmitted && env.STORAGE_PROVIDER === 'sqlite') {
   const timer = setInterval(() => { void refreshNextNiche({ repository, onResearchAdmitted }).catch(() => log('error', 'category_refresh_failed')) }, 60000)

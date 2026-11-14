@@ -7,6 +7,57 @@ import { generateContent, reviewContent } from '../studio/content.js'
 const config = { CONTENT_VERTEX_FALLBACK: 'true', VERTEX_FALLBACK_MODEL: 'gemini-3.8-flash', VERTEX_FALLBACK_PROJECT: 'approved-project', VERTEX_FALLBACK_CREDENTIALS: 'never-read-in-mock', VERTEX_FALLBACK_APPROVED_UNTIL: new Date(Date.now() + 3600000).toISOString() }
 const input = { system: 'Return data', input: {}, schema: { type: 'object' }, maxTokens: 1000 }
 
+test('confirmed Vertex HTTP429 settles documented zero exactly once while uncertain responses retain holds', async () => {
+  for (const scenario of ['known429', 'timeout', 'network', 'missing200usage', 'string429']) {
+    const repository = createRepository(':memory:'); let calls = 0
+    repository.budgetConfigure('USD', 'audit', 5000000, 5000000)
+    const request = async () => {
+      calls++
+      if (scenario === 'missing200usage') return { text: '{"ok":true}', candidates: [{ finishReason: 'STOP' }] }
+      throw Object.assign(new Error('Private provider payload'), scenario === 'known429' ? { status: 429 } : scenario === 'timeout' ? { status: 504 } : scenario === 'string429' ? { status: '429' } : {})
+    }
+    try {
+      const options = { repository, owner: 'audit', requestId: scenario, config, request }
+      if (scenario === 'missing200usage') await generateVertexJson(input, options)
+      else await assert.rejects(generateVertexJson(input, options), error => {
+        assert.equal(error.code, 'VERTEX_REQUEST_FAILED')
+        assert.equal(error.message.includes('Private provider payload'), false)
+        if (scenario === 'known429') assert.deepEqual(error.nonbillableRejection, { httpStatus: 429, actualMicros: 0, policyUrl: 'https://cloud.google.com/model-garden/pricing' })
+        else assert.equal(error.nonbillableRejection, undefined)
+        return true
+      })
+      assert.equal(calls, 1, 'No inline provider retry is permitted')
+      const cost = repository.budgetGet('audit', scenario)
+      assert.equal(cost.status, scenario === 'known429' ? 'settled' : 'dispatch_unknown')
+      if (scenario === 'known429') { assert.equal(cost.actualMicros, 0); assert.equal(repository.budgetSummary('audit').heldMicros, 0) }
+      else assert.ok(repository.budgetSummary('audit').heldMicros > 0)
+      await assert.rejects(generateVertexJson(input, options), /already exists/)
+      assert.equal(calls, 1)
+    } finally { repository.close() }
+  }
+})
+
+test('Flash-Lite uses its own verified rate without bypassing budget or model admission', async () => {
+  const repository = createRepository(':memory:')
+  let calls = 0
+  const options = { repository, owner: 'lite', requestId: 'lite-test', config: { ...config, VERTEX_FALLBACK_MODEL: 'gemini-3.1-flash-lite' }, request: async () => {
+    calls++
+    return { text: '{"ok":true}', candidates: [{ finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 200, thoughtsTokenCount: 10 } }
+  } }
+  try {
+    await assert.rejects(generateVertexJson(input, options), /budget exhausted/)
+    assert.equal(calls, 0)
+    repository.budgetConfigure('USD', 'lite', 5000000, 5000000)
+    await assert.rejects(generateVertexJson(input, { ...options, config: { ...options.config, VERTEX_FALLBACK_MODEL: 'unpriced-model' } }), /not authorized/)
+    assert.deepEqual(await generateVertexJson(input, options), { ok: true })
+    const cost = repository.budgetGet('lite', 'lite-test')
+    assert.equal(cost.actualMicros, 340)
+    assert.equal(cost.quote.priceVersion, 'gemini-3.1-flash-lite-global-2026-11-10')
+    assert.equal(cost.quote.upperBoundMicros, Math.ceil((Buffer.byteLength(JSON.stringify(input)) + 4096) * 0.25 + 1000 * 2 * 1.5))
+    assert.equal(calls, 1)
+  } finally { repository.close() }
+})
+
 test('Vertex fallback requires approval, monetary admission and unique dispatch; usage settles while failures retain holds', async () => {
   const repository = createRepository(':memory:')
   let calls = 0; let checks = 0

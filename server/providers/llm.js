@@ -4,6 +4,35 @@ import { z } from 'zod'
 
 const receipts = new WeakMap()
 const tokenCount = z.number().int().min(0).max(1000000000)
+export const providerLimitSources = Object.freeze(['openrouter_credits', 'openrouter_key_limit', 'openrouter_in_flight_budget', 'openrouter_guardrail_budget', 'openrouter_workspace_budget', 'openrouter_free_model_daily_requests', 'openrouter_free_model_rpm', 'provider'])
+async function rateLimitMetadata(response) {
+  const details = {}; const now = Date.now()
+  const retry = response.headers?.get('retry-after') || ''
+  const retrySeconds = /^\d{1,6}$/.test(retry) ? Number(retry) : retry.length <= 100 && retry ? Math.ceil((Date.parse(retry) - now) / 1000) : NaN
+  if (Number.isSafeInteger(retrySeconds) && retrySeconds >= 0 && retrySeconds <= 604800) details.retryAfterSeconds = retrySeconds
+  for (const [header, key] of [['x-ratelimit-limit', 'rateLimitLimit'], ['x-ratelimit-remaining', 'rateLimitRemaining']]) {
+    const raw = response.headers?.get(header) || ''
+    if (/^\d{1,10}$/.test(raw) && Number(raw) <= 1000000000) details[key] = Number(raw)
+  }
+  const reset = response.headers?.get('x-ratelimit-reset') || ''
+  if (/^\d{13}$/.test(reset) && Number(reset) >= now - 86400000 && Number(reset) <= now + 604800000) details.rateLimitResetAt = new Date(Number(reset)).toISOString()
+  const reader = response.body?.getReader?.()
+  if (!reader) return details
+  let timer
+  try {
+    const body = await Promise.race([new Promise((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Rate-limit metadata deadline')), 1000) }), (async () => {
+      const chunks = []; let bytes = 0
+      for (;;) { const { done, value } = await reader.read(); if (done) break; bytes += value.byteLength; if (bytes > 16384) throw new Error('Rate-limit metadata exceeds 16 KB'); chunks.push(Buffer.from(value)) }
+      return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    })()])
+    const metadata = body?.error?.metadata
+    if (providerLimitSources.includes(metadata?.limit_source)) details.limitSource = metadata.limit_source
+    if (metadata?.error_type === 'rate_limit_exceeded') details.rateLimitErrorType = 'rate_limit_exceeded'
+    if (Number.isInteger(metadata?.provider_code) && metadata.provider_code >= 400 && metadata.provider_code <= 599) details.rateLimitProviderCode = metadata.provider_code
+  } catch { /* Raw provider messages and incomplete/oversized metadata are never retained. */ }
+  finally { clearTimeout(timer); reader.cancel().catch(() => {}) }
+  return details
+}
 export const providerReceiptSchema = z.object({ method: z.literal('native-json-complete-at-length-v1'), model: z.string().regex(/^nvidia\/[a-z0-9.-]+:free$/), generationId: z.string().regex(/^gen-[A-Za-z0-9-]{1,100}$/), finishReason: z.literal('length'), transportStatus: z.literal(200), acceptedCompleteJsonAtLength: z.literal(true), schemaValidated: z.boolean(), billingVerified: z.literal(false), receivedAt: z.string().datetime(), promptTokens: tokenCount.optional(), completionTokens: tokenCount.optional(), reasoningTokens: tokenCount.optional(), outputChars: z.number().int().min(0).max(10000000), outputNonWhitespaceChars: z.number().int().min(0).max(10000000), startsSchemaDefinition: z.literal(false), wholeJsonObject: z.boolean().optional(), fullFence: z.boolean().optional(), missingExpectedFieldCount: z.number().int().min(0).max(1000).optional(), extraFieldCount: z.number().int().min(0).max(1000).optional(), providerReportedCost: z.number().min(0).max(1000000).optional() }).strict()
 export const generationReceipt = value => receipts.get(value)
 export function retainGenerationReceipt(target, source) {
@@ -48,7 +77,7 @@ export async function generateJson({ system, input, schema, maxTokens = 8000 }, 
     if (signal.aborted || error?.name === 'TimeoutError') throw timeoutError()
     throw error
   }
-  if (!response.ok) throw Object.assign(new Error(`Free model request failed (${response.status})`), { code: 'MODEL_HTTP_ERROR', status: response.status })
+  if (!response.ok) throw Object.assign(new Error(`Free model request failed (${response.status})`), { code: 'MODEL_HTTP_ERROR', status: response.status, ...(response.status === 429 ? await rateLimitMetadata(response) : {}) })
   let result
   try { result = await response.json() }
   catch (error) { if (signal.aborted || error?.name === 'TimeoutError') throw timeoutError(); throw error }

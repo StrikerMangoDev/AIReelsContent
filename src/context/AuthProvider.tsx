@@ -12,7 +12,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [configured, setConfigured] = useState(false)
   const [provider, setProvider] = useState<'firebase' | 'hexclave'>('firebase')
   useEffect(() => {
-    const updateIdentity = (value: Identity | null) => { setWorkspaceIdentity(value?.uid || null); setIdentity(value) }
+    let verifiedIdentity: Identity | null = null
+    const updateIdentity = (value: Identity | null) => { verifiedIdentity = value; setWorkspaceIdentity(value?.uid || null); setIdentity(value) }
+    const checkResponse = (response: Response) => {
+      if (response.ok) return
+      // A denied session clears local identity; a server outage does not prove revocation.
+      if (!response.status || response.status < 500) { updateIdentity(null); setUser(null) }
+      throw new Error(response.status >= 500 ? 'Session verification is temporarily unavailable. Your open draft is preserved; server access checks still apply.' : 'The server could not verify this account.')
+    }
+    const refreshError = (cause: unknown) => {
+      const failure = cause as { code?: string; status?: number; statusCode?: number } | null
+      const code = failure?.code
+      if ([failure?.status, failure?.statusCode].some(status => status === 401 || status === 403) || (code && ['auth/user-disabled', 'auth/user-token-expired', 'auth/invalid-user-token', 'auth/id-token-revoked'].includes(code))) updateIdentity(null)
+      if (!verifiedIdentity) setUser(null)
+      setError(cause instanceof Error ? cause.message : 'Authentication unavailable.')
+    }
     let disposed = false
     let sequence = 0
     let unsubscribe: (() => void) | undefined
@@ -37,11 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               updateIdentity(null); setUser(null); setLoading(true)
             }
             const response = account ? await authRead('/api/auth/me', await authHeaders()) : null
-            if (response && !response.ok) throw new Error('The server could not verify this account.')
+            if (disposed || request !== sequence) return
+            if (response) checkResponse(response)
             const profile = response ? await response.json() as Identity : null
             if (!disposed && request === sequence) { updateIdentity(profile); setUser(profile ? { uid: profile.uid } : null); setError('') }
           } catch (cause) {
-            if (!disposed && request === sequence) { updateIdentity(null); setUser(null); setError(cause instanceof Error ? cause.message : 'Authentication unavailable.') }
+            if (!disposed && request === sequence) refreshError(cause)
           } finally { if (!disposed && request === sequence) setLoading(false) }
         }
         await refresh()
@@ -65,17 +80,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const nextId = next?.uid || null
         if (firebaseAccountId !== nextId) updateIdentity(null)
         firebaseAccountId = nextId
-        setUser(next); setLoading(true)
+        setUser(next); if (!verifiedIdentity) setLoading(true)
         try {
           if (next) {
             const token = await next.getIdToken()
             const response = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
-            if (!response.ok) throw new Error('The server could not verify this account. Check the Firebase backend configuration.')
+            if (disposed || request !== sequence) return
+            checkResponse(response)
             const profile = await response.json() as Identity
             if (!disposed && request === sequence) updateIdentity(profile)
           }
           if (!disposed && request === sequence) setError('')
-        } catch (cause) { if (!disposed && request === sequence) { updateIdentity(null); setUser(null); setError(cause instanceof Error ? cause.message : 'Authentication unavailable.') } }
+        } catch (cause) { if (!disposed && request === sequence) refreshError(cause) }
         finally { if (!disposed && request === sequence) setLoading(false) }
       })
     }).catch(cause => { if (!disposed) { setError(cause instanceof Error ? cause.message : 'Authentication unavailable.'); setLoading(false) } })

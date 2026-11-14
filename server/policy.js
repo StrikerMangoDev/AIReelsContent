@@ -4,6 +4,7 @@ import { env } from './config/env.js'
 export function capabilityAllowed(capability, config = env) {
   if (capability === 'research' || capability === 'generation') return config.CONTENT_LIVE_FREE_CALLS === 'true'
   if (capability === 'media') return config.CONTENT_LOCAL_MEDIA === 'true'
+  if (capability === 'publishing') return config.CONTENT_NATIVE_WEBSITE_PUBLISHING === 'true'
   return false
 }
 

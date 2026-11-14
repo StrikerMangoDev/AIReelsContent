@@ -23,7 +23,7 @@ export function planningRouter({ repository, auth }) {
     return value
   }
   async function isReady(uid, pack) {
-    return (await assessRelease(repository, uid, pack)).eligible
+    return (await assessRelease(repository, uid, pack, { requireApproval: false, policy: 'owner-download' })).eligible
   }
   router.get('/', async (req, res) => {
     const uid = ownerScope(req)
@@ -67,7 +67,7 @@ export function planningRouter({ repository, auth }) {
   router.post('/board', async (req, res) => {
     const input = board.parse(req.body)
     const pack = await owned(ownerScope(req), 'package', input.packageId)
-    if (input.status === 'ready' && !await isReady(ownerScope(req), pack)) throw fail(422, 'Confirm valid saved content in Content Studio before marking it Ready')
+    if (input.status === 'ready' && !await isReady(ownerScope(req), pack)) throw fail(422, 'Save valid content and resolve source checks in Content Studio before marking it Ready')
     const key = digest(input.packageId)
     const current = await repository.studioGet(ownerScope(req), 'board', key)
     if (current && !current.archived) return res.json(current)
@@ -80,7 +80,7 @@ export function planningRouter({ repository, auth }) {
     if (expected !== current.revision) throw fail(409, 'This item changed. Reload before editing.')
     const pack = await owned(ownerScope(req), 'package', current.packageId)
     const next = { ...current, ...changes }
-    if (!next.archived && next.status === 'ready' && !await isReady(ownerScope(req), pack)) throw fail(422, 'Confirm valid saved content in Content Studio before marking it Ready')
+    if (!next.archived && next.status === 'ready' && !await isReady(ownerScope(req), pack)) throw fail(422, 'Save valid content and resolve source checks in Content Studio before marking it Ready')
     res.json(await repository.studioPut(ownerScope(req), 'board', current.id, next, current.revision))
   })
   router.use((error, _req, res, next) => {

@@ -5,6 +5,15 @@ import { evidencePassages } from '../studio/evidence-passages.js'
 const evidence = [{ id: 'E1', excerpt: 'A publisher announced a preview [C1, C2] with limited access.' }, { id: 'E2', excerpt: 'A publisher announced a preview [C1, C2] with limited access.' }]
 const draft = passages => ({ hooks: ['Preview [C1] [C2]'], script: 'Preview [C1, C2]', claims: ['C1', 'C2'].map(id => ({ id, text: 'An attributed preview', evidenceId: 'E1', passageId: passages[0].id, status: 'attributed' })) })
 
+test('bounded source passages preserve sentences and decimal model versions at chunk boundaries', () => {
+  const sentence = 'Claude Fable 5.2 and Mythos 5.2 share the same underlying model. '
+  const source = { id: 'E1', excerpt: 'Earlier context. '.repeat(34) + sentence + 'More context. '.repeat(60) }
+  const passages = evidencePassages([source])
+  assert.ok(passages.some(passage => passage.quote.includes(sentence)))
+  assert.ok(passages.every(passage => passage.quote.length <= 600 && source.excerpt.includes(passage.quote)))
+  assert.deepEqual(passages, evidencePassages([source]))
+})
+
 test('caption citations are required by the model schema and remain checked after generation', async () => {
   let calls = 0
   const value = await generateContent(evidence, { outputs: ['script', 'captions'] }, {}, async request => {
@@ -73,7 +82,7 @@ test('editorial correction preserves internal passage contract and never sends r
   let calls = 0
   await generateContent(evidence, { outputs: ['script'] }, {}, async request => {
     calls++
-    if (calls === 2) { assert.ok(request.input.draft.claims[0].passageId); assert.equal(request.input.draft.claims[0].quote, undefined) }
+    if (calls === 2) { assert.equal(request.input.draft, undefined); assert.ok(request.input.validatedClaims[0].passageId); assert.equal(request.input.validatedClaims[0].quote, undefined) }
     return { ...draft(request.input.passages), hooks: ['Preview [C1]'], script: calls === 1 ? 'Missing reference' : 'Preview [C1]' }
   })
   assert.equal(calls, 2)

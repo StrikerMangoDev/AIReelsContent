@@ -13,10 +13,6 @@
 .studio-quality-review .studio-check { align-items: flex-start; min-height: 44px; }
 .studio-quality-review .studio-check input { flex-shrink: 0; margin-top: 3px; }
 .studio-quality-review label, .studio-download-panel label { font-size: 16px; }
-.generation-confirmation { scroll-margin-top:24px; max-width:760px; margin-inline:auto; }
-.content-workflow .generation-confirmation { border-top:4px solid var(--brand-primary); }
-.generation-confirmation p { overflow-wrap:anywhere; }
-.content-workflow .generation-confirmation:focus { outline:2px solid #bcb5f6; outline-offset:4px; }
 .studio-download-panel h2 { margin-bottom: 8px; }
 .studio-download-panel p { font-size: 14px; color: #596579; }
 @media (max-width: 760px) {

@@ -16,6 +16,39 @@ import { createApp } from '../http/app.js'
 import { postizContentMatches } from '../publishing/readback.js'
 import { setTimeout as delay } from 'node:timers/promises'
 
+test('saved social preview is owner-scoped, uses exact server captions and current media metadata without release or provider side effects', async () => {
+  const repository = createRepository(':memory:'); const selected = ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']
+  const pack = repository.studioPut('alice', 'package', 'preview-pack', { settings: settingsSchema.parse({ platform: selected.join(', ') }), status: 'completed', content: { claims: [{ id: 'C1', evidenceId: 'E1' }], strategy: { platforms: selected.map(platform => ({ platform, body: `${platform} saved words [C1].` })) } }, evidence: [{ id: 'E1', url: 'https://example.com/original-source' }] }, 0)
+  repository.studioPut('alice', 'asset', 'current-image', { packageId: pack.id, packageContentHash: contentHash(pack), kind: 'image', mime: 'image/png', status: 'completed', bytes: 1024, operation: 'private-provider-operation', verification: { status: 'passed', privateNote: 'private reviewer details' } }, 0)
+  repository.studioPut('alice', 'asset', 'stale-image', { packageId: pack.id, packageContentHash: 'older-content', kind: 'image', mime: 'image/png', status: 'completed', bytes: 2048 }, 0)
+  repository.studioPut('bob', 'asset', 'other-owner-image', { packageId: pack.id, packageContentHash: contentHash(pack), kind: 'image', mime: 'image/png', status: 'completed' }, 0)
+  const app = express(); app.use(createPublishingRouter({ repository, auth: (req, res, next) => { if (!req.headers.authorization) return res.status(401).json({ error: 'Sign in' }); req.identity = { uid: req.headers.authorization }; next() }, config: () => ({ enabled: false, accounts: [] }), assessReady: () => assert.fail('Preview must not run release assessments or write machine approvals'), provider: { upload: () => assert.fail('Preview cannot upload'), create: () => assert.fail('Preview cannot post') } }))
+  const server = app.listen(0, '127.0.0.1'); await once(server, 'listening')
+  const read = (platform, actor = 'alice') => fetch(`http://127.0.0.1:${server.address().port}/packages/${pack.id}/social-preview?platform=${encodeURIComponent(platform)}`, { headers: actor ? { Authorization: actor } : {} })
+  try {
+    assert.equal((await read('Instagram', '')).status, 401)
+    assert.equal((await read('Instagram', 'bob')).status, 404)
+    assert.equal((await read('TikTok')).status, 400)
+    for (const platform of selected) {
+      const response = await read(platform); assert.equal(response.status, 200)
+      const preview = await response.json()
+      assert.equal(preview.platform, platform); assert.equal(preview.revision, pack.revision)
+      assert.equal(preview.contentHash, contentHash(pack)); assert.equal(preview.caption, approvedCaption(pack, platform))
+      assert.ok(preview.caption.endsWith('Source: https://example.com/original-source'))
+      assert.equal(preview.approval, 'not_assessed')
+      assert.equal(preview.assets.find(asset => asset.id === 'current-image').current, true)
+      assert.equal(preview.assets.find(asset => asset.id === 'stale-image').current, false)
+      assert.equal(preview.assets.some(asset => asset.id === 'other-owner-image'), false)
+      assert.equal(JSON.stringify(preview).includes('private-'), false)
+      assert.deepEqual(preview.assets.find(asset => asset.id === 'current-image').verification, { status: 'passed' })
+    }
+    assert.equal(repository.studioList('alice', 'social_publication').length, 0)
+    assert.equal(repository.studioGet('alice', 'package', pack.id).revision, pack.revision)
+    repository.studioPut('alice', 'package', pack.id, { ...pack, settings: { ...pack.settings, platform: 'LinkedIn' } }, pack.revision)
+    assert.equal((await read('X')).status, 422)
+  } finally { await new Promise(resolve => server.close(resolve)); repository.close() }
+})
+
 test('publishing binds exact approved text/assets/account, dispatches once and requires matching provider readback', async () => {
   const repository = createRepository(':memory:')
   const bytes = Buffer.from('controlled publishing fixture bytes')

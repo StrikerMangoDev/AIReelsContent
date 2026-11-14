@@ -27,7 +27,7 @@ async function sourcePage(value, redirects = 0, body) {
       if (response.statusCode !== 200 || !/^(text\/html|text\/plain|application\/json)/i.test(response.headers['content-type'] || '')) { response.resume(); reject(new Error('Source did not return readable text: ' + url.hostname + ' HTTP ' + response.statusCode + ' ' + response.headers['content-type'])); return }
       const chunks = []; let size = 0
       response.on('data', chunk => { size += chunk.length; if (size > 1024 * 1024) request.destroy(new Error('Source exceeds 1 MB limit')); else chunks.push(chunk) })
-      response.on('end', () => resolve({ body: Buffer.concat(chunks).toString('utf8') }))
+      response.on('end', () => resolve({ body: Buffer.concat(chunks).toString('utf8'), headers: { 'x-robots-tag': response.headers['x-robots-tag'], 'content-type': response.headers['content-type'] } }))
       response.on('error', reject)
     })
     const deadline = setTimeout(() => request.destroy(new Error('Source fetch timed out')), 12000)
@@ -35,8 +35,10 @@ async function sourcePage(value, redirects = 0, body) {
     request.end(body)
   })
   if (result.redirect) return sourcePage(new URL(result.redirect, url).href, redirects + 1)
-  return { url, body: result.body }
+  return { url, body: result.body, headers: result.headers }
 }
+
+export const fetchPublicPage = value => sourcePage(value)
 
 export async function fetchEvidence(value, redirects = 0) {
   let page = await sourcePage(value, redirects)

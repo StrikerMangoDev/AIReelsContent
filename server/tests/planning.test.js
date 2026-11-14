@@ -9,7 +9,7 @@ import { reviewFixture } from './fixtures/finalization.js'
 import { settingsSchema } from '../studio/content.js'
 import { buildAssurance } from '../studio/assurance.js'
 
-test('planning is owner-scoped, validates references, uses optimistic edits and requires current approval for Ready', async () => {
+test('planning is owner-scoped, validates references, uses optimistic edits and requires valid saved content for Ready', async () => {
   const repository = createRepository(':memory:')
   const settings = settingsSchema.parse({ platform: 'Instagram' })
   const text = 'The publisher announced a preview [C1].'
@@ -40,7 +40,9 @@ test('planning is owner-scoped, validates references, uses optimistic edits and 
     assert.equal((await call(`/templates/${template.id}`, 'PATCH', { revision: template.revision, name: 'Updated' })).status, 200)
     assert.equal((await call(`/templates/${template.id}`, 'PATCH', { revision: template.revision, archived: true })).status, 409)
     assert.equal((await call('/board', 'POST', { packageId: pack.id }, 'bob')).status, 404)
-    assert.equal((await call('/board', 'POST', { packageId: pack.id, status: 'ready' })).status, 422)
+    pack = repository.studioPut('alice', 'package', pack.id, { ...pack, review: { issues: ['Source changed. Recheck saved content.'] } }, pack.revision)
+    assert.equal((await call('/board', 'POST', { packageId: pack.id, status: 'ready' })).status, 422, 'unresolved source checks still block Ready')
+    pack = repository.studioPut('alice', 'package', pack.id, { ...pack, review: { issues: [] } }, pack.revision)
     assert.equal((await call('/board', 'POST', { packageId: pack.id, planningDate: '2026-02-31' })).status, 400)
     const card = await (await call('/board', 'POST', { packageId: pack.id, planningDate: '2026-12-01' })).json()
     const repeated = await (await call('/board', 'POST', { packageId: pack.id })).json(); assert.equal(repeated.id, card.id); assert.equal(repeated.revision, card.revision); assert.equal(repeated.planningDate, '2026-12-01')
@@ -53,7 +55,7 @@ test('planning is owner-scoped, validates references, uses optimistic edits and 
     assert.equal((await call(`/board/${card.id}`, 'PATCH', { revision: card.revision, status: 'ready' })).status, 200)
     assert.equal((await call(`/board/${card.id}`, 'PATCH', { revision: card.revision, status: 'idea' })).status, 409)
     assert.equal((await (await call()).json()).board[0].status, 'ready')
-    repository.studioPut('alice', 'package', pack.id, { ...pack, settings: { ...settings, audience: 'Changed audience' } }, pack.revision)
+    repository.studioPut('alice', 'package', pack.id, { ...pack, content: { ...content, website: { ...content.website, body: 'Unsupported statement [C99]' } } }, pack.revision)
     const after = await (await call()).json(); assert.equal(after.board[0].status, 'review'); assert.equal(after.board[0].approvalChanged, true)
     assert.equal(after.shortlist.length, 0); assert.equal(after.templates.length, 1)
     const other = await (await call('', 'GET', undefined, 'bob')).json(); for (const key of ['shortlist', 'templates', 'board', 'topics', 'packages']) assert.deepEqual(other[key], [])
@@ -78,6 +80,6 @@ test('planning is owner-scoped, validates references, uses optimistic edits and 
     assert.equal((await call('/board', 'POST', { packageId: pack.id, status: 'ready' }, 'alice', scope)).status, 201)
     assert.equal((await (await call('', 'GET', undefined, 'viewer', scope)).json()).board[0].status, 'ready')
     repository.studioPut('__workspace_control__', 'workspace', scope, { ...workspace, members: workspace.members.filter(member => member.uid !== 'bob') }, workspace.revision)
-    assert.equal((await (await call('', 'GET', undefined, 'alice', scope)).json()).board[0].status, 'review')
+    assert.equal((await (await call('', 'GET', undefined, 'alice', scope)).json()).board[0].status, 'ready', 'removing an optional reviewer does not block the owner')
   } finally { await new Promise(resolve => server.close(resolve)); repository.close() }
 })

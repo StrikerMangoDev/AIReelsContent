@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { studioRequest, studioAuthHeaders, type ContentStrategy, type StudioContent } from '@/services/studio-api'
+import { studioRequest, studioAssetBlob, type ContentStrategy, type StudioContent } from '@/services/studio-api'
 
 import { renderReel } from '@/services/reel'
 import { useAuth } from '@/context/auth-state'
@@ -75,9 +75,7 @@ export function StudioMedia({ packageId, initialPrompt, script, strategy, scenes
     try { await action() } catch (cause) { setError(cause instanceof Error ? cause.message : 'Media request failed.') } finally { setBusy('') }
   }
   async function assetFile(asset: Asset) {
-    const response = await fetch(`/api/studio/assets/${asset.id}/file`, { headers: await studioAuthHeaders() })
-    if (!response.ok) throw new Error('Could not load the generated asset.')
-    return response.blob()
+    return studioAssetBlob(asset.id)
   }
   async function assemble(asset: Asset) {
     controller.current = new AbortController(); setProgress(0)

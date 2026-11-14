@@ -62,9 +62,10 @@ export async function renderLocalMedia(kind, pack, { durationSeconds = 18 } = {}
     return rendered.asPng()
   })
   const provenance = { method: 'server-local-render', rights: 'original-text-and-vectors', rendererVersion, contentHash: contentHash(pack), sourceSvgHashes: svgs.map(hash), fonts: ['Plus Jakarta Sans', 'Source Sans 3'], silent: true, limitations: ['No voiceover, music, stock footage or documentary imagery.', 'Publisher-attributed text; rendering is not independent fact verification.'] }
+  const layoutVerification = { method: 'bounded-editorial-layout-v1', externalAssets: false, width: 1080, height: 1920, mainTextSize: 48, mainTextMaximumLines: 10, horizontalTextMargin: 80, completeTextRequired: true, renderedClaims: claims.map(claim => ({ id: claim.id, evidenceId: claim.evidenceId, textHash: hash(clean(claim.text)), sourceHash: pack.evidence.find(source => source.id === claim.evidenceId)?.hash || null })) }
   if (kind === 'image') {
     const bytes = frames[0]
-    return { bytes, mime: 'image/png', provenance, technicalReport: { method: 'server-render-verification-v1', rendererVersion, sha256: hash(bytes), bytes: bytes.length, mime: 'image/png', width: 1080, height: 1920, frameRenderVerified: true, sourceSvgHashes: provenance.sourceSvgHashes, contentHash: provenance.contentHash }, captions: { format: 'text', text: claims[0].text }, sourceSvg: svgs[0] }
+    return { bytes, mime: 'image/png', provenance, technicalReport: { method: 'server-render-verification-v1', rendererVersion, sha256: hash(bytes), bytes: bytes.length, mime: 'image/png', width: 1080, height: 1920, frameRenderVerified: true, sourceSvgHashes: provenance.sourceSvgHashes, contentHash: provenance.contentHash, layoutVerification }, captions: { format: 'text', text: claims[0].text }, sourceSvg: svgs[0] }
   }
   if (!ffmpeg) throw new Error('The local MP4 encoder is unavailable.')
   const seconds = Math.min(20, Math.max(8, Math.ceil(words / 2.5), Number.isFinite(durationSeconds) ? durationSeconds : 18))
@@ -83,7 +84,7 @@ export async function renderLocalMedia(kind, pack, { durationSeconds = 18 } = {}
     const bytes = await readFile(join(directory, 'output.mp4'))
     if (bytes.length > 32 * 1024 * 1024) throw new Error('Rendered video exceeds the storage limit.')
     const subtitles = claims.map((claim, index) => `${index + 1}\n${stamp(index * duration)} --> ${stamp((index + 1) * duration)}\n${claim.text}`).join('\n\n')
-    return { bytes, mime: 'video/mp4', provenance, technicalReport: { method: 'server-render-verification-v1', rendererVersion, sha256: hash(bytes), bytes: bytes.length, mime: 'video/mp4', width: 1080, height: 1920, durationSeconds: decodedFrames / 24, lastFrameSeconds: decodedSeconds, decodedFrames, fullDecodeVerified: true, captionsRendered: true, silent: true, sourceSvgHashes: provenance.sourceSvgHashes, contentHash: provenance.contentHash }, captions: { format: 'srt', text: subtitles }, sourceSvg: svgs[0] }
+    return { bytes, mime: 'video/mp4', provenance, technicalReport: { method: 'server-render-verification-v1', rendererVersion, sha256: hash(bytes), bytes: bytes.length, mime: 'video/mp4', width: 1080, height: 1920, durationSeconds: decodedFrames / 24, lastFrameSeconds: decodedSeconds, decodedFrames, fullDecodeVerified: true, captionsRendered: true, silent: true, sourceSvgHashes: provenance.sourceSvgHashes, contentHash: provenance.contentHash, layoutVerification }, captions: { format: 'srt', text: subtitles }, sourceSvg: svgs[0] }
   } finally {
     if (relative(resolve(tmpdir()), directory).startsWith('aireels-render-')) await rm(directory, { recursive: true, force: true })
   }

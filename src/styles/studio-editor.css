@@ -1,0 +1,105 @@
+.workspace-shell .studio-desk .editor-format-bar { justify-content:space-between; padding:12px 16px; gap:12px 24px; margin:0 0 16px; border:1px solid var(--brand-line); border-radius:8px; background:#fff; }
+.editor-format-controls { display:flex; flex:1 1 400px; align-items:center; flex-wrap:wrap; gap:8px 16px; min-width:0; }
+.workspace-shell .studio-desk .editor-format-bar label { display:flex; flex-direction:row; flex:0 1 auto; align-items:center; gap:12px; margin:0; font-size:14px; white-space:nowrap; }
+.workspace-shell .studio-desk .editor-format-bar select { width:190px; min-height:44px; margin:0; padding:8px 12px; font-size:16px; }
+.workspace-shell .studio-desk .editor-format-bar p { flex:0 1 auto; margin:0; font-size:14px; line-height:1.5; max-width:none; }
+.editor-next-tools { display:flex; flex-wrap:wrap; gap:8px; margin-left:auto; }
+.workspace-shell .studio-desk .editor-next-tools button { min-height:44px; padding:8px 12px; border:1px solid var(--brand-control); background:#fff; color:var(--brand-primary); font-size:15px; }
+.workspace-shell .studio-desk .composer-editor-heading { padding-bottom:16px; }
+.workspace-shell .studio-desk .composer-editor-heading h2 { font-size:22px; margin:0 0 8px; scroll-margin-top:24px; }
+.workspace-shell .studio-desk .composer-editor-heading p { color:var(--brand-muted); font-size:14px; margin:0; }
+.workspace-shell .studio-desk .composer-content-nav { gap:4px 8px; }
+.workspace-shell .studio-desk .composer-content-nav button { display:flex; flex-direction:column; gap:4px; }
+.workspace-shell .studio-desk .composer-content-nav button>span { display:block; font-size:13px; color:var(--brand-muted); font-weight:400; }
+.workspace-shell .studio-desk .composer-field-actions { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+.workspace-shell .studio-desk .composer-field-actions .composer-action-btn { min-height:44px; padding:8px; border:0; background:transparent; color:var(--brand-primary); font-size:14px; }
+.editor-post-preview>p { font-size:14px; color:var(--brand-muted); }
+.editor-exact-post { padding:20px 0; border-block:1px solid var(--brand-line); margin:16px 0; white-space:pre-wrap; overflow-wrap:anywhere; font-size:17px; line-height:1.6; }
+.workspace-shell .studio-desk .editor-alternative-copy { margin-top:24px; }
+.editor-alternative-copy>p { font-size:14px; color:var(--brand-muted); }
+.studio-keyword-usage { margin:0 0 16px; }
+.workspace-shell .studio-desk .editor-keyword-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+.workspace-shell .studio-desk .editor-keyword-heading h3 { font:600 18px/1.4 'Plus Jakarta Sans',Arial,sans-serif; margin:0; }
+.keyword-usage-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 16px; }
+.workspace-shell .studio-desk .studio-keyword-scope { display:flex; flex:0 1 320px; align-items:center; gap:12px; min-width:0; max-width:100%; margin:0; font-size:14px; font-weight:600; }
+.workspace-shell .studio-desk .studio-keyword-scope select { flex:1 1 160px; width:180px; min-width:0; min-height:44px; max-width:100%; margin:0; padding:8px 12px; font-size:16px; color:var(--brand-ink); background:#fff; }
+.keyword-usage-summary { font-size:14px; color:var(--brand-muted); }
+.workspace-shell .studio-desk .studio-keyword-usage p { color:var(--brand-muted); font-size:14px; line-height:1.5; margin:8px 0 12px; }
+.workspace-shell .studio-desk .studio-keyword-usage ul { padding:0; margin:12px 0 0; list-style:none; }
+.workspace-shell .studio-desk .studio-keyword-usage li { display:grid; grid-template-columns:minmax(100px,1fr) minmax(0,2fr); gap:16px; padding:12px 0; margin:0; border-top:1px solid var(--brand-line); overflow-wrap:anywhere; font-size:16px; line-height:1.5; }
+.studio-keyword-usage li>div { display:flex; flex-direction:column; gap:4px; font-size:14px; color:var(--brand-muted); }
+.studio-keyword-state { display:inline-flex; align-items:center; gap:6px; font-weight:600; color:#92400e; }
+.studio-keyword-state[data-found=true] { color:#187548; }
+.studio-keyword-state svg { flex:none; }
+.workspace-shell .studio-desk .keyword-placement-help { margin:8px 0 0; padding:0; border:0; background:transparent; }
+.workspace-shell .studio-desk .keyword-placement-help>summary { display:flex; align-items:center; gap:8px; min-height:44px; color:var(--brand-primary); font-size:14px; cursor:pointer; }
+.keyword-placement-help>summary::after { content:'⌄'; }
+.workspace-shell .studio-desk .studio-keyword-tags { border-top:1px solid var(--brand-line); margin-top:16px; padding-top:16px; }
+.workspace-shell .studio-desk .studio-keyword-tags h4 { margin:0; font:600 18px/1.4 'Plus Jakarta Sans',Arial,sans-serif; }
+.keyword-hashtag-group { padding:8px 0; }
+.keyword-hashtag-group>header { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:14px; }
+.keyword-hashtag-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.keyword-hashtag-chips>span { padding:4px 8px; border:1px solid var(--brand-line); border-radius:6px; background:var(--brand-canvas); color:var(--brand-ink); font-size:14px; overflow-wrap:anywhere; max-width:100%; }
+.workspace-shell .studio-desk .editor-workspace .editor-block.editor-block--keywords { margin-top:0; padding-top:16px; }
+.workspace-shell .studio-desk .editor-workspace .composer-content-nav { align-items:center; padding-block:8px; margin:0; gap:4px; }
+.workspace-shell .studio-desk .editor-workspace .composer-content-nav button { flex-direction:row; align-items:center; min-height:44px; }
+.workspace-shell .studio-desk .composer-content-nav .composer-section-hint { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.workspace-shell .studio-desk .editor-workspace .composer-content-nav .studio-icon-action { margin-left:auto; }
+.workspace-shell .studio-desk .editor-block--keywords .composer-keyword-chips { display:none; }
+.workspace-shell .studio-desk:has(.editor-workspace:not([hidden])) .composer-navigation { padding:0; border:0; border-bottom:1px solid var(--brand-line); border-radius:0; background:transparent; margin:16px 0; }
+.workspace-shell .studio.studio-desk.studio-composer:has(.editor-workspace:not([hidden])) { margin-top:0; }
+.workspace-shell .studio-desk:has(.editor-workspace:not([hidden])) .studio-editorial-header { margin-bottom:12px; }
+.workspace-shell .studio-desk:has(.editor-workspace:not([hidden])) .studio-editorial-actions { margin-bottom:12px; }
+.workspace-shell .studio-desk:has(.editor-workspace:not([hidden])) .studio-main-title { margin-bottom:8px; line-height:1.2; }
+.workspace-shell .studio-desk:has(.editor-workspace:not([hidden])) .desk-context { margin-top:8px; gap:8px 12px; }
+.workspace-shell .studio-desk:has(.editor-workspace:not([hidden])) .studio-section-nav button { min-height:44px; padding:8px 12px; }
+.workspace-shell .studio-desk:has(.editor-workspace:not([hidden])) .studio-section-nav button>svg { display:none; }
+.workspace-shell .studio-desk .editor-workspace .studio-compose-grid { grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr); align-items:start; gap:24px; }
+.workspace-shell .studio-desk .editor-workspace .studio-preview-column { position:static; display:grid; gap:16px; min-width:0; }
+.workspace-shell .studio-desk .editor-workspace .studio-preview-column>.studio-panel { margin:0; padding:20px; }
+.workspace-shell .studio-desk .editor-workspace .studio-preview-column h2 { font:600 18px/1.4 'Plus Jakarta Sans',Arial,sans-serif; margin:0 0 8px; }
+.workspace-shell .studio-desk .editor-save-badge { display:inline-flex; align-items:center; padding:4px 10px; border:1px solid var(--brand-line); border-radius:999px; white-space:nowrap; font-size:14px; color:#187548; background:#ecfdf3; }
+.workspace-shell .studio-desk .editor-save-badge[data-dirty=true] { color:#92400e; background:#fffbeb; }
+.workspace-shell .studio-desk .composer-editor-heading { display:flex; align-items:start; justify-content:space-between; gap:12px; }
+.workspace-shell .studio-desk .editor-workspace .composer-content-nav { padding-bottom:12px; border-bottom:1px solid var(--brand-line); }
+.workspace-shell .studio-desk .editor-workspace .composer-content-nav button { padding:8px 10px; min-height:44px; font-size:15px; }
+.workspace-shell .studio-desk .editor-workspace .editor-block { border-top:0; padding-top:16px; }
+.workspace-shell .studio-desk .editor-workspace .composer-readable-copy { background:var(--brand-canvas); border:1px solid var(--brand-line); border-radius:8px; padding:16px; font-size:17px; line-height:1.65; }
+.workspace-shell .studio-desk .editor-workspace .composer-creative-brief { border:1px solid var(--brand-line); border-radius:12px; padding:0 16px 16px; margin:24px 0; }
+.workspace-shell .studio-desk .editor-workspace .composer-creative-brief>summary { font:600 18px/1.4 'Plus Jakarta Sans',Arial,sans-serif; }
+.workspace-shell .studio-desk .editor-workspace .composer-creative-brief>summary>span { display:block; font:400 14px/1.5 'Source Sans 3',Arial,sans-serif; margin-top:4px; }
+.workspace-shell .studio-desk .editor-brief-group { margin:12px 0; padding:0 12px; border:1px solid var(--brand-line); border-radius:8px; background:#fff; }
+.workspace-shell .studio-desk .editor-brief-group>summary { min-height:44px; padding:12px 0; font-size:16px; font-weight:600; cursor:pointer; }
+.workspace-shell .studio-desk .editor-support>p,.workspace-shell .studio-desk .editor-checklist>p { color:var(--brand-muted); font-size:14px; line-height:1.5; }
+.workspace-shell .studio-desk .editor-support>div { display:grid; gap:8px; margin-top:16px; }
+.workspace-shell .studio-desk .editor-support button { display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:100%; min-height:64px; padding:12px; margin:0; text-align:left; border:1px solid var(--brand-control); border-radius:8px; color:var(--brand-ink); background:#fff; }
+.workspace-shell .studio-desk .editor-support button:hover:not(:disabled) { border-color:var(--brand-primary); background:var(--brand-soft); }
+.workspace-shell .studio-desk .editor-support button>span { font-size:14px; font-weight:400; color:var(--brand-muted); }
+.editor-checklist ul { list-style:none; padding:0; margin:16px 0; }
+.workspace-shell .studio-desk .editor-checklist li { display:flex; gap:8px; margin:12px 0; font-size:14px; line-height:1.5; }
+.editor-checklist li::before { content:''; flex:none; width:8px; height:8px; border:2px solid #92400e; border-radius:50%; margin-top:5px; }
+.editor-checklist li[data-state=ready]::before { border-color:#187548; background:#187548; }
+.workspace-shell .studio-desk .editor-checklist button { width:100%; min-height:44px; font-size:15px; }
+.workspace-shell .studio-desk .editor-workspace .editor-actionbar { position:sticky; bottom:0; z-index:10; display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:24px 0 0; padding:16px 24px; border:1px solid var(--brand-line); border-radius:12px; background:#fff; box-shadow:0 -4px 12px #142c3808; }
+.workspace-shell .studio-desk .editor-actionbar>span { order:-1; margin-right:auto; color:var(--brand-muted); font-size:14px; }
+.workspace-shell .studio-desk .editor-actionbar button { min-height:44px; font-size:15px; }
+.workspace-shell .studio-desk .editor-actionbar .editor-save-button { background:#fff; color:var(--brand-primary); border:1px solid var(--brand-control); }
+.workspace-shell .studio-desk .editor-workspace :is(textarea,input,summary) { scroll-margin-block:160px; }
+@media(max-width:1000px) { .workspace-shell .studio-desk .editor-workspace .studio-compose-grid { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:900px) { .editor-next-tools { margin-left:0; width:100%; } }
+@media(max-width:700px) {
+  .workspace-shell .studio-desk .editor-format-bar { align-items:stretch; gap:12px; padding:12px; }
+  .editor-format-controls { flex-basis:100%; }
+  .workspace-shell .studio-desk .editor-format-bar label { flex:1 1 100%; justify-content:space-between; white-space:normal; }
+  .workspace-shell .studio-desk .editor-format-bar select { width:60%; min-width:0; }
+  .workspace-shell .studio-desk .editor-format-bar p { flex:1 1 100%; }
+  .workspace-shell .studio-desk .editor-next-tools { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); width:100%; margin:0; }
+  .workspace-shell .studio-desk .editor-next-tools button { padding:8px; overflow-wrap:anywhere; }
+  .workspace-shell .studio-desk .composer-editor-heading h2 { font-size:20px; }
+  .workspace-shell .studio-desk .composer-content-nav button { flex:0 1 auto; }
+  .workspace-shell .studio-desk .studio-keyword-usage li { grid-template-columns:minmax(0,1fr); gap:4px; }
+  .workspace-shell .studio-desk .studio-save-row>span { flex:1 1 100%; order:-1; }
+  .workspace-shell .studio-desk .studio-save-row>button { flex:1 1 100%; }
+  .workspace-shell .studio-desk .editor-save-badge { white-space:normal; }
+  .workspace-shell .studio-desk .editor-workspace .editor-actionbar { position:static; padding:16px; }
+}

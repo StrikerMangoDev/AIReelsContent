@@ -4,13 +4,14 @@ import { readFile } from 'node:fs/promises'
 import { runInNewContext } from 'node:vm'
 import ts from 'typescript'
 
-async function harness(categoryId, failures) {
+async function harness(categoryId, failures, research = {}) {
   const source = await readFile(new URL('../../src/pages/app/IntelligencePage.tsx', import.meta.url), 'utf8')
   const slots = []; const dependencies = []; const cleanup = []; let cursor = 0; let pending = []
   const element = (type, props) => ({ type, props })
   const niche = { id: 'astrology', name: 'Astrology', referenceUrls: [] }
   const report = { id: 'report', nicheId: niche.id, niche, opportunities: [{ title: 'Saved astrology idea', keywords: [] }], evidence: [], unknowns: [], searchQueries: [], researchedAt: new Date().toISOString() }
   const calls = []
+  const timers = new Map(); let timerId = 0
   const modules = {
     './CategorySetupFields': { CategorySetupFields: 'CategorySetupFields' },
     '@/services/category-setup': { categoryDefaults: { topics: [], refreshIntervalDays: 7 } },
@@ -28,7 +29,7 @@ async function harness(categoryId, failures) {
       if (failures.has(path)) throw new Error('Temporary read failure')
       if (path === '/packages') return { packages: [] }
       if (path === '/config') return { capabilities: { research: true } }
-      if (path === '/intelligence') return { niches: [niche], collections: [{ niche, reportId: report.id }], reports: [], workspace: { personal: true, role: 'owner' } }
+      if (path === '/intelligence') return { niches: [niche], collections: research.status && research.status !== 'completed' ? [] : [{ niche, reportId: report.id, topicCount: 1 }], reports: [], states: research.status ? [{ id: niche.id, jobId: 'research-job', status: research.status }] : [], workspace: { personal: true, role: 'owner' } }
       return report
     }, studioRequest: () => { throw new Error('No mutations allowed') } },
     '@/services/topic-research-details': {}, '@/services/analytics': {}, 'lucide-react': {},
@@ -37,15 +38,29 @@ async function harness(categoryId, failures) {
   const exports = {}
   runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
     exports, require: name => { assert.ok(name in modules, name); return modules[name] }, URLSearchParams,
-    sessionStorage: { getItem: () => null }, document: { getElementById: () => null }, window: {},
+    sessionStorage: { getItem: () => null }, document: { getElementById: () => null }, window: { setTimeout: fn => { const id = ++timerId; timers.set(id, fn); return id }, clearTimeout: id => timers.delete(id) },
   })
   const component = exports.IntelligencePage().type
   const render = () => { cursor = 0; return component() }
   const settle = async () => { let tree; for (let i = 0; i < 4; i++) { tree = render(); const effects = pending; pending = []; effects.forEach(fn => fn()); await new Promise(resolve => setImmediate(resolve)) } return tree }
-  return { settle, calls }
+  return { settle, calls, timers, tick: () => { const due = [...timers.values()]; timers.clear(); due.forEach(fn => fn()) }, unmount: () => cleanup.forEach(fn => fn?.()) }
 }
 const flatten = node => !node ? [] : Array.isArray(node) ? node.flatMap(flatten) : typeof node === 'object' ? [node, ...flatten(node.props?.children)] : []
 const text = tree => JSON.stringify(tree)
+test('library refreshes pending research into saved ideas without another AI request and stops after completion or unmount', async () => {
+  const research = { status: 'running' }
+  const app = await harness(undefined, new Set(), research)
+  let tree = await app.settle()
+  assert.equal(flatten(tree).find(node => node.type === 'IdeaLibrary').props.collections.length, 0)
+  assert.equal(app.timers.size, 1)
+  research.status = 'completed'; app.tick(); tree = await app.settle()
+  assert.equal(flatten(tree).find(node => node.type === 'IdeaLibrary').props.collections[0].topicCount, 1)
+  assert.equal(app.timers.size, 0)
+  assert.ok(app.calls.every(path => ['/packages', '/config', '/intelligence'].includes(path)))
+  const pending = await harness(undefined, new Set(), { status: 'running' })
+  await pending.settle(); assert.equal(pending.timers.size, 1)
+  pending.unmount(); assert.equal(pending.timers.size, 0)
+})
 for (const category of [undefined, 'astrology']) {
   test(`${category || 'library'} recovers from failed list loading without remount or reload`, async () => {
     const failures = new Set(['/intelligence']); const app = await harness(category, failures)

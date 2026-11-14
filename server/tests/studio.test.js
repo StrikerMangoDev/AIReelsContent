@@ -96,8 +96,9 @@ test('studio preserves generation checks and requires evidence-rated independent
   let admin = false
   const auth = (req, res, next) => { if (!req.headers.authorization) return res.sendStatus(401); req.identity = { uid: req.headers.authorization, role: admin ? 'admin' : 'user' }; next() }
   let calls = 0; let sourceHash = 'original'
+  const config = { CONTENT_NATIVE_WEBSITE_PUBLISHING: 'false' }
   const generatedContent = withPlatforms(['Instagram'])
-  app.use('/api/studio', studioRouter({ repository, dispatchMode: 'inline', auth, generate: async () => { calls++; return generatedContent }, fetchSource: async () => ({ id: 'E1', title: 'Example', url: 'https://example.com', excerpt, hash: sourceHash, retrievedAt: new Date().toISOString(), limitations: [] }) }))
+  app.use('/api/studio', studioRouter({ repository, config, dispatchMode: 'inline', auth, generate: async () => { calls++; return generatedContent }, fetchSource: async () => ({ id: 'E1', title: 'Example', url: 'https://example.com', excerpt, hash: sourceHash, retrievedAt: new Date().toISOString(), limitations: [] }) }))
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}/api/studio`
   const call = (path, method = 'GET', body, owner = 'alice') => fetch(base + path, { method, headers: { Authorization: owner, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
@@ -118,7 +119,7 @@ test('studio preserves generation checks and requires evidence-rated independent
     assert.equal(confirmed.status, 422)
     const reset = await (await call(`/packages/${draft.id}`, 'PATCH', { revision: generated.revision, editorialStatus: 'needs_review' })).json()
     generated.revision = reset.revision
-    assert.equal((await call(`/packages/${draft.id}/export`)).status, 409)
+    assert.equal((await call(`/packages/${draft.id}/export`)).status, 200, 'valid owner content needs no reviewer')
     assert.equal((await call(`/packages/${draft.id}/assign-reviewer`, 'POST', { revision: generated.revision, reviewerId: 'alice' })).status, 422)
     const assigned = await (await call(`/packages/${draft.id}/assign-reviewer`, 'POST', { revision: generated.revision, reviewerId: 'bob' })).json()
     assert.equal((await call(`/reviews/alice/${draft.id}`, 'GET', undefined, 'charlie')).status, 404)
@@ -131,15 +132,30 @@ test('studio preserves generation checks and requires evidence-rated independent
     const reviewed = await reviewedResponse.json()
     assert.equal((await call(`/packages/${draft.id}`, 'PATCH', { revision: reviewed.revision, editorialStatus: 'approved' })).status, 200)
     const exportedResponse = await call(`/packages/${draft.id}/export`); assert.equal(exportedResponse.status, 200)
-    const exported = await exportedResponse.json(); assert.equal(exported.manifest.approvedBy, 'alice'); assert.equal(exported.manifest.reviewerId, 'bob'); assert.equal(exported.manifest.quality.overall, 8); assert.equal(exported.package.editorialStatus, 'approved')
+    const exported = await exportedResponse.json(); assert.equal(exported.manifest.downloadedBy, 'alice'); assert.equal(exported.manifest.releasePolicy, 'owner-download-v1'); assert.equal(exported.manifest.reviewerId, undefined); assert.equal(exported.package.editorialStatus, 'approved')
     assert.ok(exported.manifest.contentHash)
     assert.equal((await call(`/packages/${draft.id}/publish`, 'POST', {})).status, 403)
     admin = true
     assert.equal((await call(`/packages/${draft.id}/publish`, 'POST', {})).status, 503)
+    config.CONTENT_NATIVE_WEBSITE_PUBLISHING = 'true'
+    const destination = await (await call('/config')).json()
+    assert.equal(destination.capabilities.publishing, true)
+    assert.equal(destination.websiteDestination.id, 'native_website')
+    assert.equal(destination.websiteDestination.automatic, false)
+    const publicationResponse = await call(`/packages/${draft.id}/publish`, 'POST', {})
+    assert.equal(publicationResponse.status, 201)
+    const publication = await publicationResponse.json()
+    assert.equal(publication.title, generatedContent.website.title)
+    assert.equal(publication.body, generatedContent.website.body)
+    assert.deepEqual(publication.claims, generatedContent.claims)
+    assert.equal((await (await call(`/packages/${draft.id}/publish`, 'POST', {})).json()).id, publication.id)
+    assert.equal((await repository.studioList('public', 'publication')).length, 1)
     sourceHash = 'changed'
     const refreshed = await (await call(`/packages/${draft.id}/refresh-evidence`, 'POST', { confirmed: true })).json()
     assert.equal(refreshed.editorialStatus, 'needs_review')
     assert.equal((await call(`/packages/${draft.id}/export`)).status, 409)
+    assert.equal((await call(`/packages/${draft.id}/publish`, 'POST', {})).status, 422)
+    assert.equal((await (await call(`/publications/${publication.id}`)).json()).correctionRequired, true)
     const history = await (await call(`/packages/${draft.id}/history`)).json(); assert.ok(history.revisions.length >= 3)
   } finally { await new Promise(resolve => server.close(resolve)); repository.close() }
 })

@@ -54,36 +54,43 @@ test('automation requires current account consent and rejects forged body capabi
   assert.equal(runs, 0)
 })
 
-test('GET fanout admits enabled owners and POST retains exactly one stage before deferred continuation', async () => {
-  const retained = []; const dispatched = []; const executed = []
+test('GET fanout and POST await durable queue admission without executing inline', async () => {
+  const dispatched = []; let inlineRuns = 0
   const profile = { id: 'profile-a', accountId: 'account-a', enabled: true, automationConsent: true }
-  const repository = {
-    studioList: async (owner, kind) => { assert.equal(owner, automationRegistryOwner); assert.equal(kind, 'automation_owner'); return [{ enabled: true, ownerScope: 'owner-a' }, { enabled: false, ownerScope: 'disabled' }, { enabled: true, ownerScope: 'owner-b' }, { enabled: true }] },
-    studioGet: async (owner, kind, id) => kind === 'automation_owner' ? { enabled: true, ownerScope: owner } : (assert.equal(id, 'profile-a'), profile),
-  }
-  let finish
-  const handler = createAutomationHandler({ repository, config, retain: promise => retained.push(promise), dispatch: async (input, repo, retain) => { assert.equal(repo, repository); dispatched.push(input); if (!input.accountIds) retain(Promise.resolve()) }, execute: input => { executed.push(input); return new Promise(resolve => { finish = resolve }) } })
-  const get = response(); await handler(request('GET'), get)
-  assert.equal(get.statusCode, 202); assert.equal(get.body.workspaces, 2)
-  assert.deepEqual(dispatched.map(item => item.owner), ['owner-a', 'owner-b']); assert.equal(retained.length, 2)
-  retained.length = 0; dispatched.length = 0
-  const post = response(); await handler(request(), post)
-  assert.equal(post.statusCode, 202); assert.equal(executed.length, 1); assert.equal(retained.length, 1)
-  assert.equal(executed[0].repository, repository); assert.equal(dispatched.length, 0)
-  finish({ deferred: true }); await retained[0]
-  assert.deepEqual(dispatched, [{ owner: 'owner-a', requestId: '46584f0a-d5fc-45c0-b89f-1d35de5a96f1', accountIds: ['account-a'] }])
+  const repository = { studioList: async () => [{ enabled: true, ownerScope: 'owner-a' }], studioGet: async (_owner, kind) => kind === 'automation_owner' ? { enabled: true } : profile }
+  const handler = createAutomationHandler({ repository, config, retain: () => {}, maintenance: async () => {}, execute: () => { inlineRuns++ }, dispatch: async input => { dispatched.push(input) } })
+  const get = response(); await handler(request('GET'), get); assert.equal(get.statusCode, 202)
+  const post = response(); await handler(request(), post); assert.equal(post.statusCode, 202)
+  assert.equal(inlineRuns, 0)
+  assert.deepEqual(dispatched, [{ owner: 'owner-a' }, { owner: 'owner-a', requestId: '46584f0a-d5fc-45c0-b89f-1d35de5a96f1', accountIds: ['account-a'] }])
 })
 
-test('dispatcher retains owner/account-specific network work without waiting for transport', async () => {
+test('dispatcher durably admits references with stable dedupe and rejects transport failure visibly', async () => {
   const prior = { CONTENT_ACCOUNT_AUTOMATION: env.CONTENT_ACCOUNT_AUTOMATION, CRON_SECRET: env.CRON_SECRET }
   env.CONTENT_ACCOUNT_AUTOMATION = 'true'; env.CRON_SECRET = secret
-  const retained = []; const calls = []; let finish
   try {
-    const repository = { studioList: async () => [{ id: 'profile-a', accountId: 'account-a', enabled: true, automationConsent: true }, { id: 'profile-b', accountId: 'account-b', enabled: true, automationConsent: true }, { id: 'profile-c', accountId: 'account-a', enabled: false, automationConsent: true }] }
-    await dispatchAutomation({ owner: 'owner-a', requestId: '46584f0a-d5fc-45c0-b89f-1d35de5a96f1', accountIds: ['account-a'] }, repository, promise => retained.push(promise), (url, options) => { calls.push({ url, options }); return new Promise(resolve => { finish = resolve }) })
-    assert.equal(calls.length, 1); assert.equal(retained.length, 1)
-    assert.equal(calls[0].options.headers.Authorization, `Bearer ${secret}`)
-    assert.deepEqual(JSON.parse(calls[0].options.body), { owner: 'owner-a', profileId: 'profile-a', requestId: '46584f0a-d5fc-45c0-b89f-1d35de5a96f1' })
-    finish({ ok: true }); await retained[0]
+    const calls = []
+    const repository = { studioList: async () => [{ id: 'profile-a', accountId: 'account-a', enabled: true, automationConsent: true }, { id: 'profile-b', accountId: 'account-b', enabled: true, automationConsent: true }] }
+    const input = { owner: 'owner-a', requestId: '46584f0a-d5fc-45c0-b89f-1d35de5a96f1', accountIds: ['account-a'] }
+    const publish = async (...args) => { calls.push(args); return { messageId: 'controlled-message' } }
+    await dispatchAutomation(input, repository, () => assert.fail('Queue admission is awaited'), publish)
+    await dispatchAutomation(input, repository, () => {}, publish)
+    assert.equal(calls.length, 2); assert.equal(calls[0][0], 'content-account-automation-v1'); assert.equal(calls[0][1].owner, input.owner); assert.equal(calls[0][1].profileId, 'profile-a'); assert.equal(calls[0][1].requestId, input.requestId)
+    assert.equal(calls[0][2].retentionSeconds, 86400); assert.equal(calls[0][2].idempotencyKey, calls[1][2].idempotencyKey)
+    await assert.rejects(dispatchAutomation(input, repository, () => {}, async () => { throw new Error('transport') }), /Durable automation admission failed/)
   } finally { Object.assign(env, prior) }
+})
+
+test('new deployment can readmit the same saved job without deduplicating against an acknowledged older release', async () => {
+  const previous = { enabled: env.CONTENT_ACCOUNT_AUTOMATION, secret: env.CRON_SECRET, deployment: process.env.VERCEL_DEPLOYMENT_ID }
+  env.CONTENT_ACCOUNT_AUTOMATION = 'true'; env.CRON_SECRET = secret
+  try {
+    const keys = []; const refs = []
+    const repository = { studioList: async () => [{ id: 'profile-a', accountId: 'account-a', enabled: true, automationConsent: true }] }
+    const publish = async (_topic, ref, options) => { keys.push(options.idempotencyKey); refs.push(ref); return {} }
+    const input = { owner: 'owner-a', requestId: '46584f0a-d5fc-45c0-b89f-1d35de5a96f1' }
+    for (const deployment of ['release-one', 'release-one', 'release-two']) { process.env.VERCEL_DEPLOYMENT_ID = deployment; await dispatchAutomation(input, repository, () => {}, publish) }
+    assert.equal(keys[0], keys[1]); assert.notEqual(keys[1], keys[2])
+    assert.ok(refs.every(ref => ref.requestId === input.requestId && ref.profileId === 'profile-a'))
+  } finally { env.CONTENT_ACCOUNT_AUTOMATION = previous.enabled; env.CRON_SECRET = previous.secret; if (previous.deployment === undefined) delete process.env.VERCEL_DEPLOYMENT_ID; else process.env.VERCEL_DEPLOYMENT_ID = previous.deployment }
 })

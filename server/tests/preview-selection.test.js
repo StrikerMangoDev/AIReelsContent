@@ -11,7 +11,7 @@ function component(file) {
   const module = { exports: {} }
   const source = readFileSync(new URL(`../../src/pages/app/${file}.tsx`, import.meta.url), 'utf8')
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText
-  new Function('require', 'module', 'exports', compiled)(id => id.endsWith('.css') ? {} : id === './ContentPreview' ? component('ContentPreview') : require(id), module, module.exports)
+  new Function('require', 'module', 'exports', compiled)(id => id.endsWith('.css') ? {} : id === '../../../shared/social-caption.js' ? require('../../shared/social-caption.js') : id === './ContentPreview' ? component('ContentPreview') : require(id), module, module.exports)
   return module.exports
 }
 

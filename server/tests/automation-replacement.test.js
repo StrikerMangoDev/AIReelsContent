@@ -9,6 +9,7 @@ import { settingsSchema, generateContent } from '../studio/content.js'
 import { generateJson } from '../providers/llm.js'
 import { runContentJob } from '../studio/job-worker.js'
 import { env } from '../config/env.js'
+import { ratingsFixture } from './fixtures/finalization.js'
 
 const now = new Date('2026-11-09T06:00:00Z')
 const excerpt = 'The publisher announced a limited model preview for developers. Availability remains restricted and independent results are not established.'
@@ -223,5 +224,28 @@ test('actual automatic model adapter caps writing output at 6000 tokens and reta
     assert.equal(native.package.providerReceipt.billingVerified, false)
     const job = await repository.studioJobGet('alice', native.jobId)
     assert.equal(job.result.providerReceipt.generationId, 'gen-123-schema-accepted')
+  } finally { globalThis.fetch = priorFetch; env.OPENROUTER_API_KEY = saved.key; env.LLM_MODEL = saved.model; env.CONTENT_LIVE_FREE_CALLS = saved.capability; repository.close() }
+})
+
+test('the actual automated evaluator uses native JSON for the JSON-capable free model while the writer retains its named-tool protocol', async () => {
+  const repository = createRepository(':memory:'); const priorFetch = globalThis.fetch
+  const saved = { key: env.OPENROUTER_API_KEY, model: env.LLM_MODEL, capability: env.CONTENT_LIVE_FREE_CALLS }
+  try {
+    env.OPENROUTER_API_KEY = 'controlled-test-only'; env.LLM_MODEL = 'nvidia/nemotron-3.5-super-vl:free'; env.CONTENT_LIVE_FREE_CALLS = 'true'
+    const initial = await fixture(repository)
+    const profile = repository.studioPut('alice', 'account_profile', initial.id, { ...initial, automaticPolicy: { ...initial.automaticPolicy, consentedAt: new Date(Date.now() - 1000).toISOString() } }, initial.revision)
+    const pack = repository.studioPut('alice', 'package', 'native-review-pack', { createdBy: 'alice', content, settings: settingsSchema.parse({ outputs: ['website'] }), evidence: [{ id: 'E1', hash: 'capture', url: 'https://example.com/update', retrievedAt: new Date().toISOString(), excerpt }], sourceIds: [], status: 'completed' }, 0)
+    let calls = 0
+    globalThis.fetch = async (_url, init) => {
+      calls++; const body = JSON.parse(init.body)
+      assert.equal(body.tools, undefined)
+      assert.equal(body.response_format.type, 'json_schema')
+      assert.ok(body.response_format.json_schema.schema.properties.ratings)
+      assert.deepEqual(body.provider.max_price, { prompt: 0, completion: 0, request: 0 })
+      const result = { claims: [{ id: 'C1', verdict: 'supported', evidenceIds: ['E1'], supportQuote: excerpt, reason: 'The exact selected publisher passage supports the limited preview claim.' }], ratings: ratingsFixture(), checks: { semanticSupport: true, contradictionsResolved: true, scopePreserved: true, promisesAligned: true, privacySafe: true, audienceClaimsSupported: true, provenanceClear: true }, issues: [], summary: 'Controlled native evaluator fixture; no measured performance or human approval is claimed.' }
+      return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(result) } }], usage: { cost: 0 } })
+    }
+    const outcome = await createAutomationServices(repository).review({ owner: 'alice', actorUid: 'alice', profile, run: { packageId: pack.id }, requestId: randomUUID() })
+    assert.equal(outcome.status, 'passed'); assert.equal(calls, 1)
   } finally { globalThis.fetch = priorFetch; env.OPENROUTER_API_KEY = saved.key; env.LLM_MODEL = saved.model; env.CONTENT_LIVE_FREE_CALLS = saved.capability; repository.close() }
 })

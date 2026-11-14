@@ -172,6 +172,10 @@ test('default HTTP generation queues without provider calls; worker claims once,
     assert.equal(repository.studioJobGet('tool-owner', legacyToolPack.jobId).status, 'failed')
     assert.equal(repository.budgetGet('tool-owner', legacyToolPack.jobId).status, 'dispatch_unknown')
     const invalidPack = repository.studioGet('alice', 'package', 'unknown')
+    await queue('routing-rejected', content, 'routing-owner')
+    const rejectedRoute = await runContentJob({ repository, uid: 'routing-owner', requestId: 'request-routing-rejected', generate: async () => { throw Object.assign(new Error('No matching endpoint'), { code: 'MODEL_HTTP_ERROR', status: 404 }) } })
+    assert.equal(rejectedRoute.status, 'failed')
+    assert.equal(repository.budgetGet('routing-owner', 'request-routing-rejected').status, 'dispatch_unknown', 'routing rejection permits explicit retry without inventing a refund')
     await assert.rejects(recoverRejectedGeneration({ repository, uid: 'alice', packageId: invalidPack.id, revision: invalidPack.revision }), /no confirmed validation rejection/)
     const vertexRepository = { ...repository, budgetGet: (uid, id) => id === 'vertex-request-unknown-0' ? { quote: { priceVersion: 'gemini-3.8-flash-global-2026-10-29' } } : repository.budgetGet(uid, id), studioJobGet: (uid, id) => {
       const value = repository.studioJobGet(uid, id)

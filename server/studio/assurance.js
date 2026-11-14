@@ -54,7 +54,7 @@ export function buildAssurance(value, { actorId = null, runId = null, checkedAt 
     stageResults: [...priorStages, { runId: runId || `validation-${scopeHash}`, stage, scopeHash, result: issues.length ? 'failed' : 'review_required', startedAt: checkedAt, completedAt: checkedAt, actorId }] }
 }
 
-export function assessAssurance(value, { now = Date.now() } = {}) {
+export function assessAssurance(value, { now = Date.now(), requireIndependentReview = true } = {}) {
   const parsed = assuranceSchema.safeParse(value.assurance)
   const issues = []
   if (!parsed.success) return { eligible: false, policyVersion: assurancePolicyVersion, contentHash: contentHash(value), checks: [], issues: ['Run the required content assurance checks for this version.'] }
@@ -64,8 +64,8 @@ export function assessAssurance(value, { now = Date.now() } = {}) {
   if (digest(saved.checks) !== digest(expected.checks) || digest(saved.issues) !== digest(expected.issues)) issues.push('Content assurance checks are incomplete or inconsistent; run them again.')
   if (!saved.stageResults.some(result => result.scopeHash === expected.contentHash && Date.parse(result.completedAt) <= now)) issues.push('A completed assurance stage for this version is required.')
   issues.push(...expected.issues.filter(issue => issue.severity === 'blocker').map(issue => issue.rationale))
-  const reviewed = independentlyReviewed(value, now)
-  if (!reviewed) issues.push('A current independent human semantic and creative review is required.')
+  const reviewed = requireIndependentReview && independentlyReviewed(value, now)
+  if (requireIndependentReview && !reviewed) issues.push('A current independent human semantic and creative review is required.')
   const checks = saved.checks.map(check => check.method === 'human' && reviewed ? { ...check, status: 'passed', evaluator: value.independentReview.reviewerId, checkedAt: value.independentReview.reviewedAt, limitations: ['Human editorial judgment, not a guarantee of factual truth or audience performance.'] } : check)
   return { eligible: issues.length === 0, policyVersion: assurancePolicyVersion, contentHash: expected.contentHash, checks, issues: [...new Set(issues)] }
 }

@@ -4,7 +4,39 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "installCommand": "npm ci --include=dev",
-  "functions": { "api/**/*.js": { "maxDuration": 300, "includeFiles": "{server/prompts/**,public/fonts/*.ttf,node_modules/ffmpeg-static/ffmpeg}" } },
-  "rewrites": [{ "source": "/api/studio/:path+", "destination": "/api/studio?__studioPath=:path" }, { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }],
-  "crons": [{ "path": "/api/automation", "schedule": "0 1 * * *" }]
+  "functions": {
+    "api/automation-worker.js": {
+      "maxDuration": 300,
+      "includeFiles": "{server/prompts/**,public/fonts/*.ttf,node_modules/ffmpeg-static/ffmpeg}",
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "content-account-automation-v1",
+          "maxConcurrency": 1,
+          "maxDeliveries": 96,
+          "retryAfterSeconds": 30
+        }
+      ]
+    },
+    "api/**/*.js": {
+      "maxDuration": 300,
+      "includeFiles": "{server/prompts/**,public/fonts/*.ttf,node_modules/ffmpeg-static/ffmpeg}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/studio/:path+",
+      "destination": "/api/studio?__studioPath=:path"
+    },
+    {
+      "source": "/((?!api/|assets/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/automation",
+      "schedule": "0 1 * * *"
+    }
+  ]
 }

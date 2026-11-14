@@ -78,7 +78,7 @@ test('invitations expire or revoke and the final owner cannot be removed or demo
   assert.equal((await (await call('/workspaces', { uid: 'bob' })).json()).invitations.length, 0)
 }))
 
-test('independent reviews reject contributors and revoked reviewers cannot authorize exports', async () => fixture(async (repo, call) => {
+test('independent reviews reject contributors while owners retain source-checked downloads after reviewer revocation', async () => fixture(async (repo, call) => {
   const workspace = await (await call('/workspaces', { method: 'POST', body: { name: 'Independent review', requestId: randomUUID() } })).json()
   for (const [uid, role] of [['bob', 'editor'], ['carol', 'editor'], ['dave', 'reviewer']]) {
     const current = await (await call(`/workspaces/${workspace.id}`)).json()
@@ -104,6 +104,7 @@ test('independent reviews reject contributors and revoked reviewers cannot autho
   assert.equal((await call('/studio/packages/shared-draft/export', { workspace: workspace.id })).status, 200)
   const current = await (await call(`/workspaces/${workspace.id}`)).json()
   assert.equal((await call(`/workspaces/${workspace.id}/members/dave`, { method: 'DELETE', body: { revision: current.revision } })).status, 200)
-  assert.equal((await call('/studio/packages/shared-draft/export', { workspace: workspace.id })).status, 422)
+  assert.equal((await call('/studio/packages/shared-draft/export', { workspace: workspace.id })).status, 200)
+  assert.equal((await call('/studio/packages/shared-draft/export', { uid: 'dave', workspace: workspace.id })).status, 403)
   assert.equal((await call('/studio/packages/shared-draft', { uid: 'bob' })).status, 404)
 }))

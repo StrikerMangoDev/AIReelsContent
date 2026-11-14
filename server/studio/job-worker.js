@@ -1,5 +1,6 @@
 import { researchChanges } from './research-changes.js'
 import { env } from '../config/env.js'
+import { prepareAutomaticCompletePackage } from './complete-package-automation.js'
 import { createHash } from 'node:crypto'
 import { generateContent, reviewContent } from './content.js'
 import { contentHash } from './approval.js'
@@ -8,12 +9,14 @@ import { workspaceRole } from './workspaces.js'
 import { dispatchFreeOperation } from '../budget/free-operation.js'
 import { costScopeHash } from '../budget/policy.js'
 import { assertCapability } from '../policy.js'
-import { readFreeGenerationReceipt, generationReceipt } from '../providers/llm.js'
+import { readFreeGenerationReceipt, generationReceipt, providerLimitSources } from '../providers/llm.js'
 import { generateVertexJson, vertexFallbackAllowed } from '../providers/vertex-fallback.js'
+import { workflowGenerationContext } from './strategy-workflow.js'
+import { contentAlignment } from './content-alignment.js'
 
 const failure = message => Object.assign(new Error(message), { code: 'JOB_BLOCKED', status: 409, publicMessage: message })
 const reportId = id => createHash('sha256').update(id).digest('hex').slice(0, 32)
-const rejectedGeneration = error => error?.code === 'EVIDENCE_VALIDATION' || (error?.code === 'MODEL_INCOMPLETE' && error.transportStatus === 200 && (['length', 'error'].includes(error.finishReason) || (error.finishReason === 'tool_calls' && Number.isInteger(error.toolCallCount) && error.toolCallCount >= 0 && error.toolCallCount <= 30 && error.expectedTool === false) || (Number.isInteger(error.providerErrorCode) && error.providerErrorCode >= 400 && error.providerErrorCode <= 599)))
+const rejectedGeneration = error => error?.code === 'EVIDENCE_VALIDATION' || (error?.code === 'MODEL_HTTP_ERROR' && [404, 422].includes(error.status || error.httpStatus)) || (error?.code === 'MODEL_INCOMPLETE' && error.transportStatus === 200 && (['length', 'error'].includes(error.finishReason) || (error.finishReason === 'tool_calls' && Number.isInteger(error.toolCallCount) && error.toolCallCount >= 0 && error.toolCallCount <= 30 && error.expectedTool === false) || (Number.isInteger(error.providerErrorCode) && error.providerErrorCode >= 400 && error.providerErrorCode <= 599)))
 
 export function safeJobFailure(error) {
   const codes = ['JOB_BLOCKED', 'BUDGET_BLOCKED', 'STUDIO_CONFLICT', 'STUDIO_QUOTA', 'EVIDENCE_VALIDATION', 'MODEL_JSON_INVALID', 'MODEL_INCOMPLETE', 'MODEL_HTTP_ERROR', 'MODEL_TIMEOUT', 'VERTEX_REQUEST_FAILED']
@@ -31,6 +34,14 @@ export function safeJobFailure(error) {
     ...(['stop', 'length', 'content_filter', 'tool_calls', 'error'].includes(error?.finishReason) ? { finishReason: error.finishReason } : {}),
     ...(Number.isInteger(error?.toolCallCount) && error.toolCallCount >= 0 && error.toolCallCount <= 30 ? { toolCallCount: error.toolCallCount } : {}),
     ...(typeof error?.expectedTool === 'boolean' ? { expectedTool: error.expectedTool } : {}),
+    ...(error?.code === 'MODEL_HTTP_ERROR' && error.status === 429 ? {
+      ...(Number.isSafeInteger(error.retryAfterSeconds) && error.retryAfterSeconds >= 0 && error.retryAfterSeconds <= 604800 ? { retryAfterSeconds: error.retryAfterSeconds } : {}),
+      ...(typeof error.rateLimitResetAt === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(error.rateLimitResetAt) && Date.parse(error.rateLimitResetAt) >= Date.now() - 86400000 && Date.parse(error.rateLimitResetAt) <= Date.now() + 604800000 ? { rateLimitResetAt: error.rateLimitResetAt } : {}),
+      ...Object.fromEntries(['rateLimitLimit', 'rateLimitRemaining'].filter(key => Number.isSafeInteger(error[key]) && error[key] >= 0 && error[key] <= 1000000000).map(key => [key, error[key]])),
+      ...(providerLimitSources.includes(error.limitSource) ? { limitSource: error.limitSource } : {}),
+      ...(error.rateLimitErrorType === 'rate_limit_exceeded' ? { rateLimitErrorType: error.rateLimitErrorType } : {}),
+      ...(Number.isInteger(error.rateLimitProviderCode) && error.rateLimitProviderCode >= 400 && error.rateLimitProviderCode <= 599 ? { rateLimitProviderCode: error.rateLimitProviderCode } : {}),
+    } : {}),
     ...(['string', 'object', 'undefined'].includes(error?.argumentKind) ? { argumentKind: error.argumentKind } : {}),
     ...Object.fromEntries(['promptTokens', 'completionTokens', 'reasoningTokens'].filter(key => Number.isSafeInteger(error?.[key]) && error[key] >= 0 && error[key] <= 1000000000).map(key => [key, error[key]])),
     ...Object.fromEntries(['outputChars', 'outputNonWhitespaceChars'].filter(key => Number.isSafeInteger(error?.[key]) && error[key] >= 0 && error[key] <= 10000000).map(key => [key, error[key]])),
@@ -41,7 +52,7 @@ export function safeJobFailure(error) {
   }
 }
 
-export async function runContentJob({ repository, uid, requestId, generate = generateContent, research }) {
+export async function runContentJob({ repository, uid, requestId, generate = generateContent, research, prepareCompletePackage = prepareAutomaticCompletePackage }) {
   let job = await repository.studioJobGet(uid, requestId)
   if (!job || job.status !== 'reserved' || job.ready !== true) return { status: 'skipped', jobId: requestId }
   const scope = job.scope
@@ -49,12 +60,13 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
   if ((scope.operation === 'generation' && generate === generateContent) || (scope.operation === 'research' && !research)) assertCapability(scope.operation)
   try { job = await repository.studioJobUpdate(uid, requestId, { status: 'running' }, job.revision, 'reserved') }
   catch (error) { if (error.code === 'STUDIO_CONFLICT') return { status: 'skipped', jobId: requestId }; throw error }
-  let cost; let pack; let state; let result; let dispatched = false
+  let cost; let pack; let state; let result; let workflowContext; let dispatched = false
   async function checkActor() {
     if (!scope.actorUid || !['owner', 'editor'].includes(await workspaceRole(repository, uid, scope.actorUid))) throw failure('The requesting account no longer has permission to dispatch this job.')
   }
   async function beforeAttempt() {
     await checkActor()
+    if (scope.operation === 'generation' && ((await repository.studioGet(uid, 'complete_context', scope.packageId))?.revision || 0) !== (workflowContext?.revision || 0)) throw failure('Strategy workflow changed during generation. Saved writing is preserved.')
     if (scope.automatic) {
       const niche = await repository.studioGet(uid, 'niche', scope.nicheId)
       if (!niche?.autoRefresh || niche.autoRefreshConsent !== 1 || niche.revision !== scope.revision || niche.autoRefreshActor !== scope.actorUid) throw failure('Automatic refresh settings changed. Saved research is preserved.')
@@ -70,6 +82,9 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
     if (!cost || cost.status !== 'reserved' || cost.cancellationRequested || cost.scopeHash !== costScopeHash(scope, cost.quote)) throw failure('A matching reserved budget is required before dispatch.')
     if (scope.operation === 'generation') {
       pack = await repository.studioGet(uid, 'package', scope.packageId)
+      const savedContext = await repository.studioGet(uid, 'complete_context', scope.packageId)
+      workflowContext = savedContext
+      if (scope.contextRevision !== undefined && scope.contextRevision !== (savedContext?.revision || 0)) throw failure('Strategy changed after generation was confirmed. Review the current question and goal before generating.')
       if (!pack || pack.jobId !== job.id || pack.status !== 'generating' || pack.revision !== scope.revision + 1 || contentHash(pack) !== scope.contentHash) throw failure('The queued package changed before dispatch.')
       for (const [index, id] of (pack.sourceIds || []).entries()) {
         const source = await repository.studioGet(uid, 'library_source', id)
@@ -85,10 +100,11 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
     dispatched = true
     if (scope.operation === 'generation') {
       const fallback = generate === generateContent && vertexFallbackAllowed() ? (request, attempt) => generateVertexJson(request, { repository, owner: uid, requestId: `vertex-${job.id}-${attempt}`, beforeAttempt }) : undefined
-      const content = await generate(pack.evidence, pack.settings, { ...pack.researchContext, revisionInstruction: scope.instruction || null, previousContent: scope.instruction ? pack.content : null }, undefined, { beforeAttempt, fallback, startWithFallback: scope.generationProvider === 'vertex-fallback' })
+      const content = await generate(pack.evidence, pack.settings, { ...pack.researchContext, topicTitle: pack.title, ...(workflowContext ? { strategyWorkflow: workflowGenerationContext(workflowContext.context) } : {}), revisionInstruction: scope.instruction || null, previousContent: scope.instruction ? pack.content : null }, undefined, { beforeAttempt, fallback, startWithFallback: scope.generationProvider === 'vertex-fallback' })
+      await beforeAttempt()
       const review = reviewContent(content, pack.evidence, pack.settings)
       if (review.issues.length) throw Object.assign(new Error('Generated output failed validation'), { code: 'EVIDENCE_VALIDATION', issues: review.issues, issueCount: review.issues.length })
-      const completed = { ...pack, content, review, providerReceipt: generationReceipt(content) || null, status: 'completed', editorialStatus: 'needs_review', independentReview: null, approval: null }
+      const completed = { ...pack, content, review, strategyAlignment: contentAlignment(content), providerReceipt: generationReceipt(content) || null, status: 'completed', editorialStatus: 'needs_review', independentReview: null, approval: null }
       completed.assurance = buildAssurance(completed, { actorId: scope.actorUid, runId: job.id, stage: 'generation' })
       result = await repository.studioPut(uid, 'package', pack.id, completed, pack.revision)
     } else {
@@ -100,6 +116,7 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
       result = await repository.studioPut(uid, 'research', reportId(job.id), { ...briefing, changes: researchChanges(briefing, previous), nicheId: scope.nicheId, nicheRevision: scope.revision, niche: { ...scope.niche, id: scope.nicheId, revision: scope.revision } }, 0)
     }
     job = await repository.studioJobUpdate(uid, job.id, { status: 'completed', result }, job.revision, 'running')
+    if (scope.operation === 'generation') await prepareCompletePackage({ repository, owner: uid, actor: scope.actorUid, pack: result, config: env })
     if (state) await repository.studioPut(uid, 'research_state', scope.nicheId, { jobId: job.id, status: 'completed', reportId: result.id }, state.revision)
     return { status: 'completed', jobId: job.id, result }
   } catch (error) {

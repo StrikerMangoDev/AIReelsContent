@@ -87,3 +87,135 @@ test('local media describes actual silent captioned output while preserving conf
     } else assert.equal(text(video), '8-second illustrative clip')
   }
 })
+
+async function packagePublishingHarness({ enabled = true, submit, storage = new Map(), reviewed = true, previewRevision = 4 } = {}) {
+  const source = await readFile(new URL('../../src/pages/app/StudioPublishing.tsx', import.meta.url), 'utf8')
+  const slots = []; const refs = []; const effects = []; const pending = []; let cursor = 0; let refCursor = 0; let effectCursor = 0; let tracking = false; let ids = 0
+  const calls = []; const received = []
+  const platforms = ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']
+  const accounts = platforms.map(platform => ({ id: `account-${platform}`, platform, name: `${platform} fixture` }))
+  const pack = { id: 'manual-package', revision: 4, status: 'completed', settings: { platform: platforms.join(', ') }, content: { claims: [] }, independentReview: reviewed ? { status: 'passed' } : null, approval: reviewed ? { method: 'independent-human' } : null, mediaReview: reviewed ? { status: 'passed', method: 'independent-human' } : null, mediaApproval: reviewed ? { method: 'independent-human' } : null }
+  const element = (type, props) => ({ type, props })
+  const modules = {
+    react: {
+      useState(initial) { if (!tracking) return [typeof initial === 'function' ? initial() : initial, () => {}]; const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value }] },
+      useRef(initial) { const index = refCursor++; refs[index] ||= { current: initial }; return refs[index] }, useCallback: value => value,
+      useEffect(action, deps) { if (!tracking) return; const index = effectCursor++; const prior = effects[index]; if (!prior || JSON.stringify(prior.deps) !== JSON.stringify(deps)) { effects[index] = { deps, cleanup: prior?.cleanup }; pending.push(() => { effects[index].cleanup?.(); effects[index].cleanup = action() }) } },
+    },
+    'react/jsx-runtime': { jsx: element, jsxs: element },
+    '@/services/studio-api': { async studioRequest(path, body, method = 'GET') {
+      calls.push({ path, body, method })
+      if (path.includes('/social-preview?')) {
+        const platform = decodeURIComponent(path.split('platform=')[1])
+        return { packageId: pack.id, revision: previewRevision, contentHash: 'saved-hash', platform, caption: `${platform} exact saved copy.\n\nSource: https://example.com/actual-source`, assets: [
+          { id: 'image-a', kind: 'image', status: 'completed', current: true, mime: 'image/png', bytes: 1024 },
+          { id: 'image-b', kind: 'image', status: 'completed', current: true, mime: 'image/png', bytes: 2048 },
+          { id: 'video-a', kind: 'video', status: 'completed', current: true, mime: 'video/mp4', bytes: 4096 },
+          { id: 'stale-image', kind: 'image', status: 'completed', current: false, mime: 'image/png', bytes: 1024 },
+          { id: 'running-image', kind: 'image', status: 'running', current: true, mime: 'image/png', bytes: 1024 },
+        ] }
+      }
+      if (method === 'POST') return submit ? submit(body) : { id: 'receipt', requestId: body.requestId, status: 'submitted', ...body }
+      if (path.endsWith('/social-publications')) return { publications: received }
+      throw new Error(`Unexpected read ${path}`)
+    } },
+  }
+  const exports = {}
+  runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
+    exports, require: name => { assert.ok(name in modules, name); return modules[name] }, Date, crypto: { randomUUID: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, '0')}` },
+    sessionStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
+  })
+  const root = exports.StudioPublishing({ packageId: pack.id, pack })
+  const child = flatten(root).find(node => typeof node.type === 'function' && node.type.name === 'PackagePublication')
+  assert.ok(child, 'The current package exposes the actual manual-publication component')
+  tracking = true
+  let props = { pack, accounts, enabled, loading: false, disabled: false, publications: [], onReceipt: receipt => { received.unshift(receipt); props = { ...props, publications: [...received] } } }
+  const render = () => { cursor = 0; refCursor = 0; effectCursor = 0; return child.type(props) }
+  const settle = async () => { let tree; for (let index = 0; index < 4; index++) { tree = render(); pending.splice(0).forEach(effect => effect()); await new Promise(resolve => setImmediate(resolve)) } return tree }
+  const field = (tree, name) => flatten(tree).find(node => node.props?.name === name)
+  const button = (tree, label) => flatten(tree).find(node => node.type === 'button' && text(node) === label)
+  const writes = () => calls.filter(call => call.method === 'POST')
+  return { settle, render, field, button, writes, calls, storage, received }
+}
+
+test('opening and selecting manual publishing reads only saved previews, supports five platforms and hides stale media', async () => {
+  const h = await packagePublishingHarness()
+  let tree = await h.settle()
+  assert.equal(h.calls.length, 0)
+  assert.equal(h.writes().length, 0)
+  assert.equal(flatten(h.field(tree, 'package-publishing-account')).filter(node => node.type === 'option').length, 6)
+  for (const platform of ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']) {
+    h.field(tree, 'package-publishing-account').props.onChange({ target: { value: `account-${platform}` } }); tree = await h.settle()
+    assert.ok(text(tree).includes(`${platform} exact saved copy.\n\nSource: https://example.com/actual-source`))
+    assert.ok(h.field(tree, 'publish-asset-image-a'))
+    assert.equal(h.field(tree, 'publish-asset-stale-image'), undefined)
+    assert.equal(h.field(tree, 'publish-asset-running-image'), undefined)
+    assert.equal(h.writes().length, 0)
+  }
+})
+
+test('manual publishing requires explicit confirmation and sends exact server copy, ordered assets and a single stable request on all five platforms', async () => {
+  for (const platform of ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']) {
+    const h = await packagePublishingHarness(); let tree = await h.settle()
+    h.field(tree, 'package-publishing-account').props.onChange({ target: { value: `account-${platform}` } }); tree = await h.settle()
+    const assets = platform === 'YouTube' ? ['video-a'] : ['image-b', 'image-a']
+    for (const id of assets) { h.field(tree, `publish-asset-${id}`).props.onChange({ target: { checked: true } }); tree = await h.settle() }
+    h.button(tree, 'Send draft to Postiz').props.onClick(); await h.settle(); assert.equal(h.writes().length, 0)
+    h.field(tree, 'package-publishing-confirmed').props.onChange({ target: { checked: true } }); tree = await h.settle()
+    const send = h.button(tree, 'Send draft to Postiz'); assert.equal(send.props.disabled, false)
+    send.props.onClick(); send.props.onClick(); tree = await h.settle()
+    const [request] = h.writes(); assert.equal(h.writes().length, 1, platform)
+    assert.equal(request.path, '/packages/manual-package/social-publications')
+    assert.deepEqual(JSON.parse(JSON.stringify(request.body)), { requestId: '00000000-0000-4000-8000-000000000001', revision: 4, accountId: `account-${platform}`, platform, mode: 'draft', caption: `${platform} exact saved copy.\n\nSource: https://example.com/actual-source`, assetIds: assets, confirmed: true, automatic: false })
+    send.props.onClick(); await h.settle(); assert.equal(h.writes().length, 1, 'A stale click handler cannot resubmit a recorded attempt')
+  }
+})
+
+test('an uncertain manual publication stays held across action changes and remount without a blind retry', async () => {
+  const storage = new Map()
+  const h = await packagePublishingHarness({ storage, submit: async () => { throw new TypeError('Connection closed after dispatch') } })
+  let tree = await h.settle()
+  h.field(tree, 'package-publishing-account').props.onChange({ target: { value: 'account-Facebook' } }); tree = await h.settle()
+  h.field(tree, 'publish-asset-image-a').props.onChange({ target: { checked: true } }); tree = await h.settle()
+  h.field(tree, 'package-publishing-confirmed').props.onChange({ target: { checked: true } }); tree = await h.settle()
+  const send = h.button(tree, 'Send draft to Postiz'); send.props.onClick(); tree = await h.settle()
+  assert.equal(h.writes().length, 1); assert.match(text(tree), /previous post for this account is pending or uncertain/)
+  send.props.onClick(); await h.settle(); assert.equal(h.writes().length, 1)
+  h.field(tree, 'package-publishing-mode').props.onChange({ target: { value: 'now' } }); tree = await h.settle()
+  assert.equal(h.button(tree, 'Publish now').props.disabled, true)
+  const resumed = await packagePublishingHarness({ storage }); tree = await resumed.settle()
+  resumed.field(tree, 'package-publishing-account').props.onChange({ target: { value: 'account-Facebook' } }); tree = await resumed.settle()
+  assert.match(text(tree), /previous post for this account is pending or uncertain/)
+  assert.equal(resumed.button(tree, 'Send draft to Postiz').props.disabled, true)
+  assert.equal(resumed.writes().length, 0)
+})
+
+test('manual publishing reports missing connection, review and changed version without inventing readiness', async () => {
+  for (const options of [{ enabled: false }, { reviewed: false }, { previewRevision: 5 }]) {
+    const h = await packagePublishingHarness(options); let tree = await h.settle()
+    h.field(tree, 'package-publishing-account').props.onChange({ target: { value: 'account-Facebook' } }); tree = await h.settle()
+    assert.equal(h.button(tree, 'Send draft to Postiz').props.disabled, true)
+    assert.equal(h.field(tree, 'package-publishing-confirmed').props.disabled, true)
+    assert.match(text(tree), options.enabled === false ? /Publishing is not connected/ : options.reviewed === false ? /independent content review and owner approval/ : /Reload the saved publication preview/)
+    h.button(tree, 'Send draft to Postiz').props.onClick(); await h.settle()
+    assert.equal(h.writes().length, 0)
+  }
+})
+
+test('schedule selection invalidates confirmation and sends a future UTC time without changing saved copy', async () => {
+  const h = await packagePublishingHarness(); let tree = await h.settle()
+  h.field(tree, 'package-publishing-account').props.onChange({ target: { value: 'account-YouTube' } }); tree = await h.settle()
+  h.field(tree, 'publish-asset-video-a').props.onChange({ target: { checked: true } }); tree = await h.settle()
+  h.field(tree, 'package-publishing-confirmed').props.onChange({ target: { checked: true } }); tree = await h.settle()
+  h.field(tree, 'package-publishing-mode').props.onChange({ target: { value: 'schedule' } }); tree = await h.settle()
+  assert.equal(h.field(tree, 'package-publishing-confirmed').props.checked, false)
+  assert.equal(h.button(tree, 'Schedule this post').props.disabled, true)
+  const time = new Date(Date.now() + 86400000).toISOString().slice(0, 16)
+  h.field(tree, 'package-publishing-time').props.onChange({ target: { value: time } }); tree = await h.settle()
+  h.field(tree, 'package-publishing-confirmed').props.onChange({ target: { checked: true } }); tree = await h.settle()
+  h.button(tree, 'Schedule this post').props.onClick(); await h.settle()
+  assert.equal(h.writes().length, 1)
+  assert.equal(h.writes()[0].body.publishAt, new Date(time).toISOString())
+  assert.equal(h.writes()[0].body.mode, 'schedule')
+  assert.equal(h.writes()[0].body.caption, 'YouTube exact saved copy.\n\nSource: https://example.com/actual-source')
+})

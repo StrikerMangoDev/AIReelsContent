@@ -19,6 +19,9 @@ import { categoryImageAssets } from './category-images.js'
 import { vertexFallbackAllowed } from '../providers/vertex-fallback.js'
 import { findAlternativeEvidence } from './alternative-evidence.js'
 import { ratingsSchema, assessQuality, finalizationPolicy } from './finalization.js'
+import { nativeWebsiteDestination } from './native-website.js'
+import { workflowGenerationContext } from './strategy-workflow.js'
+import { contentContract } from './content-alignment.js'
 
 const requestId = z.string().regex(/^[a-zA-Z0-9_-]{8,100}$/)
 const createSchema = z.object({ reuseExisting: z.boolean().optional(), articleId: z.string().max(100).optional(), sourceUrl: z.string().url().max(2000).optional(), sourceIds: z.array(z.string().max(100)).min(1).max(5).optional(), researchId: z.string().max(100).optional(), opportunityIndex: z.number().int().min(0).max(11).optional(), settings: settingsSchema.optional(), requestId }).strict().refine(value => [value.articleId, value.sourceUrl, value.sourceIds, value.researchId].filter(Boolean).length === 1)
@@ -27,7 +30,7 @@ const fail = (status, message) => Object.assign(new Error(message), { status, pu
 const lineageId = (uid, id) => createHash('sha256').update(`${uid}:${id}`).digest('hex')
 const evidenceHash = evidence => createHash('sha256').update(JSON.stringify(evidence.map(item => item.hash))).digest('hex')
 
-export function studioRouter({ repository, auth, generate = generateContent, fetchSource = fetchEvidence, findAlternatives = findAlternativeEvidence, dispatchMode = 'queue', onResearchAdmitted, onGenerationAdmitted }) {
+export function studioRouter({ repository, auth, generate = generateContent, fetchSource = fetchEvidence, findAlternatives = findAlternativeEvidence, dispatchMode = 'queue', onResearchAdmitted, onGenerationAdmitted, config = env }) {
   const router = Router()
   router.use('/category-images', categoryImageAssets(repository))
   const publicationStatus = async publication => {
@@ -48,7 +51,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
   router.use('/library', createLibraryRouter({ repository, auth, fetchSource }))
   router.use('/planning', planningRouter({ repository, auth }))
   router.use('/intelligence', intelligenceRouter({ repository, auth, onResearchAdmitted }))
-  router.get('/config', (_req, res) => res.json({ finalizationPolicy, assurancePolicyVersion, industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: capabilityAllowed('generation') && Boolean(env.OPENROUTER_API_KEY), research: capabilityAllowed('research') && Boolean(env.OPENROUTER_API_KEY), media: capabilityAllowed('media'), publishing: false, accountAutomation: env.CONTENT_ACCOUNT_AUTOMATION === 'true', researchScheduling: false, vertexFallback: vertexFallbackAllowed() }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS, creditCoverage: 'unconfirmed', paidBudget: vertexFallbackAllowed() ? null : 0 }))
+  router.get('/config', (_req, res) => res.json({ downloadPolicy: 'owner-download-v1', finalizationPolicy, assurancePolicyVersion, industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: capabilityAllowed('generation') && Boolean(env.OPENROUTER_API_KEY), research: capabilityAllowed('research') && Boolean(env.OPENROUTER_API_KEY), media: capabilityAllowed('media'), publishing: capabilityAllowed('publishing', config), accountAutomation: env.CONTENT_ACCOUNT_AUTOMATION === 'true', researchScheduling: false, vertexFallback: vertexFallbackAllowed() }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS, websiteDestination: nativeWebsiteDestination(config), creditCoverage: 'unconfirmed', paidBudget: vertexFallbackAllowed() ? null : 0 }))
   router.get('/publications', async (_req, res) => res.json({ publications: await Promise.all((await repository.studioList('public', 'publication')).map(publicationStatus)) }))
   router.get('/publications/:publicationId', async (req, res) => {
     const publication = await repository.studioGet('public', 'publication', req.params.publicationId)
@@ -160,7 +163,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     req.package = value; next()
   })
   router.get('/packages/:id', (req, res) => res.json(req.package))
-  router.get('/packages/:id/assurance', async (req, res) => res.json({ assurance: req.package.assurance || null, releaseAssessment: await assessRelease(repository, ownerScope(req), req.package) }))
+  router.get('/packages/:id/assurance', async (req, res) => res.json({ assurance: req.package.assurance || null, releaseAssessment: await assessRelease(repository, ownerScope(req), req.package, { requireApproval: false, policy: 'owner-download' }) }))
   router.post('/packages/:id/prepare-sources', async (req, res) => {
     const current = req.package; const uid = ownerScope(req)
     if (!current.researchId || current.content || current.jobId || current.status !== 'draft') return res.json(current)
@@ -218,10 +221,11 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
   })
   router.get('/packages/:id/export', async (req, res) => {
     const current = req.package
+    if (ownerScope(req).startsWith('ws:') && await workspaceRole(repository, ownerScope(req), req.identity.uid) !== 'owner') throw fail(403, 'Only the workspace owner can download this content package.')
     await requireCurrentLibrary(ownerScope(req), current)
-    if (!approvedVersion(current) || reviewContent(current.content, current.evidence, current.settings).issues.length) throw fail(409, 'Save valid content and confirm this version before downloading.')
-    await requireCurrentApproval(ownerScope(req), current)
-    res.json({ manifest: { scope: 'text-package', assurance: { ...current.assurance, assessment: assessAssurance(current) }, mediaVerification: 'Production directions are not verification of rendered media or publishing readiness.', packageId: current.id, revision: current.revision, contentHash: contentHash(current), approvedAt: current.approval.approvedAt, approvedBy: current.approval.approvedBy, approvalMethod: current.approval.method, reviewerId: current.reviewerId, quality: current.independentReview.quality, exportedAt: new Date().toISOString(), sources: current.evidence.map(({ id, url, retrievedAt, hash }) => ({ id, url, retrievedAt, hash })) }, package: current })
+    const release = await assessRelease(repository, ownerScope(req), current, { requireApproval: false, policy: 'owner-download' })
+    if (!release.eligible) throw fail(409, release.issues.join(' '))
+    res.json({ manifest: { scope: 'text-package', releasePolicy: 'owner-download-v1', downloadedBy: req.identity.uid, ownerScope: ownerScope(req), assurance: { ...release.assuranceSnapshot, assessment: release.assurance }, limitations: ['Owner-managed download. Automatic checks validate citations and structure; no independent human review or factual guarantee is claimed.'], mediaVerification: 'Production directions are not verification of rendered media or publishing readiness.', packageId: current.id, revision: current.revision, contentHash: contentHash(current), exportedAt: new Date().toISOString(), sources: current.evidence.map(({ id, url, retrievedAt, hash }) => ({ id, url, retrievedAt, hash })) }, package: current })
   })
   router.patch('/packages/:id', async (req, res) => {
     const input = patchSchema.parse(req.body); const current = req.package
@@ -258,7 +262,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     res.json(await repository.studioPut(ownerScope(req), 'package', current.id, { ...current, evidence, editorialStatus: versionChanged ? 'needs_review' : current.editorialStatus, independentReview: versionChanged ? null : current.independentReview, approval: versionChanged ? null : current.approval, evidenceChanged: changed, review: changed ? { issues: ['Source text changed. Review or regenerate content before approving again.'] } : current.review }, current.revision))
   })
   router.post('/packages/:id/publish', requireAdmin, async (req, res) => {
-    assertCapability('publishing')
+    assertCapability('publishing', config)
     const current = req.package
     if (!current.content?.website) throw fail(422, 'This package does not contain website content')
     await requireCurrentLibrary(ownerScope(req), current)
@@ -296,12 +300,14 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     }
     if (current.status === 'generating' || current.status === 'dispatch_unknown') throw fail(409, 'Previous dispatch needs reconciliation; do not retry with a new request.')
     await requireCurrentLibrary(uid, current)
+    const strategy = await repository.studioGet(uid, 'complete_context', current.id)
+    contentContract(current.settings, { ...current.researchContext, topicTitle: current.title, strategyWorkflow: workflowGenerationContext(strategy?.context || {}) })
     if (generate === generateContent) assertCapability('generation')
     if (dispatchMode === 'inline' && generate === generateContent) throw fail(503, 'Inline dispatch is available only with an injected test provider')
     if (!current.evidence.some(item => item.excerpt.length >= 100)) throw fail(422, 'Insufficient source evidence. Create a package from the original article URL.')
     const priorFailure = current.jobId && await repository.studioJobGet(uid, current.jobId)
     const generationProvider = vertexFallbackAllowed() && priorFailure?.status === 'failed' && (priorFailure.scope?.generationProvider === 'vertex-fallback' || /"code":"(?:MODEL_|EVIDENCE_VALIDATION)/.test(priorFailure.error || '')) ? 'vertex-fallback' : 'free'
-    const scope = { packageId: current.id, revision: input.revision, instruction: input.instruction || '', operation: 'generation', actorUid: req.identity.uid, contentHash: contentHash(current), generationProvider }
+    const scope = { packageId: current.id, revision: input.revision, instruction: input.instruction || '', operation: 'generation', actorUid: req.identity.uid, contentHash: contentHash(current), contextRevision: strategy?.revision || 0, generationProvider }
     const scopeHash = createHash('sha256').update(JSON.stringify(scope)).digest('hex')
     const reservation = await repository.studioJobReserve(uid, input.requestId, scopeHash, env.STUDIO_DAILY_GENERATIONS, scope)
     if (!reservation.reserved) return res.status(202).json({ ...current, jobId: reservation.job.id, jobStatus: reservation.job.status })

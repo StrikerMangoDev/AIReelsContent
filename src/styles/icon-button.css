@@ -1,0 +1,12 @@
+.workspace-shell .studio-desk .studio-icon-action { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:0 0 44px; width:44px; min-width:44px; max-width:44px; height:44px; min-height:44px; padding:0; gap:0; border:1px solid transparent; border-radius:8px; background:transparent; color:var(--brand-primary); vertical-align:middle; overflow:visible; }
+.workspace-shell .studio-desk .studio-icon-action:hover:not(:disabled),.workspace-shell .studio-desk .studio-icon-action[aria-expanded=true] { background:var(--brand-soft); border-color:var(--brand-line); }
+.workspace-shell .studio-desk .studio-icon-action:focus-visible { outline:3px solid var(--brand-primary); outline-offset:3px; }
+.studio-icon-action>svg { flex:none; pointer-events:none; }
+.workspace-shell .studio-desk .studio-icon-action>.studio-action-tooltip { display:none; position:absolute; top:calc(100% + 6px); right:0; z-index:40; width:max-content; max-width:min(220px,70vw); padding:6px 10px; border-radius:6px; background:var(--brand-ink); color:#fff; font:400 14px/1.5 'Source Sans 3',Arial,sans-serif; text-align:left; white-space:normal; box-shadow:0 4px 12px #142c3826; }
+.workspace-shell .studio-desk .studio-icon-action:not([data-tooltip-dismissed=true]):is(:hover,:focus-visible)>.studio-action-tooltip { display:block; }
+.workspace-shell .studio-desk .composer-content-nav .studio-icon-action { flex:0 0 44px; padding:0; width:44px; }
+.workspace-shell .studio-desk .editor-next-tools { align-items:center; }
+.workspace-shell .studio-desk .editor-next-tools .studio-icon-action { border-color:var(--brand-control); background:#fff; }
+.workspace-shell .studio-desk .editor-actionbar .studio-icon-action { flex:0 0 44px; width:44px; padding:0; }
+.workspace-shell .studio-desk .editor-actionbar .studio-icon-action>.studio-action-tooltip { top:auto; bottom:calc(100% + 6px); }
+@media(max-width:700px) { .workspace-shell .studio-desk .editor-next-tools { display:flex; justify-content:flex-end; width:auto; margin-left:auto; } }

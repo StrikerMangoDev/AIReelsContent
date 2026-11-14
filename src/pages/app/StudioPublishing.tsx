@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react'
-import { studioRequest } from '@/services/studio-api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { studioRequest, type StudioPackage } from '@/services/studio-api'
 
 type Account = { id: string; name: string; platform: string }
 type Profile = { accountId: string; revision: number; weeklyBrief: string; audience: string; tone: string; contentPillars: string[]; weeklyCadence: number; dailyNews: boolean; maxDailyPosts: number; enabled: boolean; automationConsent: boolean }
-type Publication = { id: string; status: string; mode: string; accountId: string; platform: string; caption: string; createdAt: string; releaseUrl?: string; error?: string }
+type Publication = { id: string; requestId?: string; status: string; mode: string; accountId: string; platform: string; caption: string; createdAt: string; releaseUrl?: string; error?: string }
+type PublishPackage = StudioPackage & { mediaReview?: { status?: string; method?: string }; mediaApproval?: { method?: string } }
+type PublicationPreview = { packageId: string; revision: number; contentHash: string; platform: string; caption: string; assets: { id: string; kind: string; status: string; current: boolean; mime: string; bytes: number; verification?: { status: string } | null }[] }
+type PublicationAttempt = { scope: string; requestId: string; accountId: string; status: 'sending' | 'uncertain' | 'recorded' | 'rejected' }
 type AutomationRun = { id: string; accountId: string; status: string; stage?: string; packageId?: string; error?: string; findings?: string[]; releaseUrl?: string }
 type AutomationState = { plans: { id: string; accountId: string; weekStart: string; timezone: string; days: { date: string; slots: { kind: string }[] }[] }[]; runs: AutomationRun[]; requests: { id: string; status: string; accountIds: string[] }[]; requestResults: { requestId: string; accountId: string; outcome: { deferred?: boolean } }[] }
 const emptyAutomation: AutomationState = { plans: [], runs: [], requests: [], requestResults: [] }
 const emptyProfile = (accountId: string): Profile => ({ accountId, revision: 0, weeklyBrief: '', audience: '', tone: '', contentPillars: [], weeklyCadence: 3, dailyNews: true, maxDailyPosts: 1, enabled: false, automationConsent: false })
 
-export function StudioPublishing({ packageId, disabled = false }: { packageId?: string; disabled?: boolean }) {
+export function StudioPublishing({ packageId, pack, disabled = false }: { packageId?: string; pack?: PublishPackage; disabled?: boolean }) {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [profile, setProfile] = useState<Profile>(emptyProfile(''))
@@ -103,6 +106,7 @@ export function StudioPublishing({ packageId, disabled = false }: { packageId?: 
   }
 
   return <section className="studio-readable-section" aria-busy={loading || busy}>
+    {pack && <PackagePublication key={`${pack.id}:${pack.revision}`} pack={pack} accounts={accounts} enabled={providerEnabled} loading={loading} disabled={disabled || busy} publications={publications} onReceipt={receipt => setPublications(previous => [receipt, ...previous.filter(item => item.id !== receipt.id)])} />}
     <h2>Account content plan</h2>
     <p>Set each account’s audience, voice and weekly direction. Daily news supplements that account’s plan when enabled.</p>
     {loading && <p role="status">Loading connected accounts…</p>}
@@ -133,5 +137,86 @@ export function StudioPublishing({ packageId, disabled = false }: { packageId?: 
     <h3>Publishing receipts</h3>
     {!loading && !publications.length && <p>{packageId ? 'No post has been sent for this content.' : 'No publishing receipt has been recorded in this workspace.'}</p>}
     {publications.map(item => <article className="studio-evidence" key={item.id}><h4>{accountLabel(item.accountId, item.platform)} · {item.status.replaceAll('_', ' ')}</h4><p className="studio-muted">{item.mode} · {new Date(item.createdAt).toLocaleString()}</p><details><summary>Sent caption</summary><p className="preserve-lines">{item.caption}</p></details>{item.error && <p role="alert">{item.error}</p>}{item.releaseUrl?.startsWith('https://') ? <a href={item.releaseUrl} target="_blank" rel="noreferrer">Open published post</a> : <p>The platform has not returned a published link.</p>}<button type="button" disabled={busy || disabled} onClick={() => void refreshReceipt(item.id)}>Check post status</button></article>)}
+  </section>
+}
+
+function PackagePublication({ pack, accounts, enabled, loading, disabled, publications, onReceipt }: { pack: PublishPackage; accounts: Account[]; enabled: boolean; loading: boolean; disabled: boolean; publications: Publication[]; onReceipt: (receipt: Publication) => void }) {
+  const [accountId, setAccountId] = useState('')
+  const [mode, setMode] = useState<'draft' | 'schedule' | 'now'>('draft')
+  const [publishAt, setPublishAt] = useState('')
+  const [assetIds, setAssetIds] = useState<string[]>([])
+  const [confirmed, setConfirmed] = useState(false)
+  const [preview, setPreview] = useState<PublicationPreview | null>(null)
+  const [error, setError] = useState('')
+  const [sending, setSending] = useState(false)
+  const [refresh, setRefresh] = useState(0)
+  const [checkedAt, setCheckedAt] = useState(() => Date.now())
+  const storageKey = `studio:publication-attempts:${pack.id}`
+  const [attempts, setAttempts] = useState<PublicationAttempt[]>(() => {
+    try { const saved = JSON.parse(sessionStorage.getItem(storageKey) || '[]'); return Array.isArray(saved) ? saved.filter(item => item && typeof item.scope === 'string' && typeof item.requestId === 'string' && typeof item.accountId === 'string' && ['sending', 'uncertain', 'recorded', 'rejected'].includes(item.status)) : [] } catch { return [] }
+  })
+  const attemptsRef = useRef(attempts); const dispatching = useRef(false)
+  const account = accounts.find(item => item.id === accountId)
+  const platform = account?.platform || ''
+  const selectedPlatforms = pack.settings.platform.split(',').map(value => value.trim() === 'Reels' ? 'Instagram' : value.trim())
+  const availableAccounts = accounts.filter(item => selectedPlatforms.includes(item.platform))
+  const persist = useCallback((next: PublicationAttempt[]) => { attemptsRef.current = next; setAttempts(next); try { sessionStorage.setItem(storageKey, JSON.stringify(next)) } catch { /* Server scope deduplication remains authoritative when browser storage is unavailable. */ } }, [storageKey])
+  const record = (attempt: PublicationAttempt) => persist([...attemptsRef.current.filter(item => item.scope !== attempt.scope), attempt])
+  const pending = (status: string) => ['preparing', 'dispatching', 'submitted', 'dispatch_unknown'].includes(status)
+  useEffect(() => {
+    const next = attemptsRef.current.map(attempt => {
+      const receipt = publications.find(item => item.requestId === attempt.requestId)
+      return receipt ? { ...attempt, status: receipt.status === 'blocked' ? 'rejected' as const : receipt.status === 'dispatch_unknown' ? 'uncertain' as const : 'recorded' as const } : attempt
+    })
+    if (JSON.stringify(next) !== JSON.stringify(attemptsRef.current)) persist(next)
+  }, [publications, persist])
+  useEffect(() => {
+    if (!platform) return
+    let active = true
+    studioRequest<PublicationPreview>(`/packages/${encodeURIComponent(pack.id)}/social-preview?platform=${encodeURIComponent(platform)}`).then(value => { if (active) setPreview(value) }).catch(cause => { if (active) setError(cause instanceof Error ? cause.message : 'Saved publication preview could not load.') })
+    return () => { active = false }
+  }, [pack.id, pack.revision, accountId, platform, refresh])
+  const current = preview?.packageId === pack.id && preview.revision === pack.revision && preview.platform === platform
+  const previewBusy = Boolean(account && !preview && !error)
+  const availableAssets = current ? preview.assets.filter(asset => asset.current && asset.status === 'completed' && ['image', 'video'].includes(asset.kind)) : []
+  const scheduledAt = mode === 'schedule' && publishAt && Number.isFinite(Date.parse(publishAt)) ? new Date(publishAt).toISOString() : undefined
+  const scope = JSON.stringify({ packageId: pack.id, revision: pack.revision, contentHash: preview?.contentHash, accountId, platform, mode, publishAt: scheduledAt, assetIds })
+  const prior = attempts.find(item => item.scope === scope)
+  const heldAccount = attempts.some(item => item.accountId === accountId && ['sending', 'uncertain'].includes(item.status)) || publications.some(item => item.accountId === accountId && pending(item.status))
+  const reason = loading ? 'Loading publishing connection.' : !enabled ? 'Publishing is not connected. Your saved writing and media remain available.' : !availableAccounts.length ? 'No configured account matches the platforms selected for this package.' : !account ? 'Choose an account for this saved content.' : !pack.content || ['generating', 'dispatch_unknown'].includes(pack.status) ? 'Finish or reconcile content generation before publishing.' : previewBusy ? 'Loading the exact saved caption and media.' : !current ? 'Reload the saved publication preview before continuing.' : !preview.caption.trim() ? 'Save posting copy for this platform before publishing.' : heldAccount ? 'A previous post for this account is pending or uncertain. Check its receipt before sending another.' : prior?.status === 'recorded' ? 'This selection already has a saved submission. Check its publication receipt below.' : pack.independentReview?.status !== 'passed' || pack.approval?.method !== 'independent-human' ? 'Current independent content review and owner approval are required before publishing.' : pack.mediaReview?.status !== 'passed' || pack.mediaReview?.method !== 'independent-human' || pack.mediaApproval?.method !== 'independent-human' ? 'The selected media needs independent review and owner approval before publishing.' : !assetIds.length || assetIds.some(id => !availableAssets.some(asset => asset.id === id)) ? 'Choose completed media from this saved content version.' : platform === 'YouTube' && (assetIds.length !== 1 || availableAssets.find(asset => asset.id === assetIds[0])?.mime !== 'video/mp4') ? 'YouTube requires one completed MP4 video.' : mode === 'schedule' && (!scheduledAt || Date.parse(scheduledAt) <= checkedAt) ? 'Choose a future publication time.' : ''
+  async function send() {
+    if (dispatching.current || disabled || sending || reason || !confirmed || !preview || !account) return
+    if (attemptsRef.current.some(item => item.accountId === accountId && (['sending', 'uncertain'].includes(item.status) || item.scope === scope && item.status === 'recorded'))) return
+    if (mode === 'schedule' && (!scheduledAt || Date.parse(scheduledAt) <= Date.now())) { setError('Choose a future publication time.'); setCheckedAt(Date.now()); setConfirmed(false); return }
+    dispatching.current = true; setSending(true); setError(''); setConfirmed(false)
+    const attempt = attemptsRef.current.find(item => item.scope === scope) || { scope, requestId: crypto.randomUUID(), accountId, status: 'sending' as const }
+    record({ ...attempt, status: 'sending' })
+    try {
+      const receipt = await studioRequest<Publication>(`/packages/${encodeURIComponent(pack.id)}/social-publications`, { requestId: attempt.requestId, revision: pack.revision, accountId, platform, mode, ...(scheduledAt ? { publishAt: scheduledAt } : {}), caption: preview.caption, assetIds, confirmed: true, automatic: false }, 'POST')
+      record({ ...attempt, status: receipt.status === 'blocked' ? 'rejected' : receipt.status === 'dispatch_unknown' ? 'uncertain' : 'recorded' }); onReceipt(receipt)
+    } catch (cause) {
+      record({ ...attempt, status: 'uncertain' })
+      setError(cause instanceof Error ? cause.message : 'The publication outcome is uncertain. Check the saved receipt; no automatic retry was sent.')
+      try {
+        const saved = await studioRequest<{ publications: Publication[] }>(`/packages/${encodeURIComponent(pack.id)}/social-publications`)
+        const receipt = saved.publications.find(item => item.requestId === attempt.requestId)
+        if (receipt) { record({ ...attempt, status: receipt.status === 'blocked' ? 'rejected' : receipt.status === 'dispatch_unknown' ? 'uncertain' : 'recorded' }); onReceipt(receipt) }
+        else if ([400, 401, 403, 404, 409, 422, 429, 503].includes((cause as { status?: number }).status || 0)) record({ ...attempt, status: 'rejected' })
+      } catch { /* Missing readback cannot authorize a second publication request. */ }
+    } finally { dispatching.current = false; setSending(false) }
+  }
+  return <section aria-label="Publish this saved content">
+    <h2>Publish this content</h2><p>Choose one account, inspect the saved caption and select its media. Each account is submitted separately.</p>
+    {error && <p role="alert">{error}</p>}{reason && <p role="status">{reason}</p>}
+    <fieldset disabled={disabled || sending || loading}>
+      <label>Publishing destination<select name="package-publishing-account" value={accountId} onChange={event => { setAccountId(event.target.value); setConfirmed(false); setPreview(null); setAssetIds([]); setError('') }}><option value="">Choose an account</option>{availableAccounts.map(item => <option key={item.id} value={item.id}>{item.name} · {item.platform}</option>)}</select></label>
+      {current && <><h3>Exact saved caption and source links</h3><p className="preserve-lines">{preview.caption}</p><p>Revision {preview.revision}. Edit public copy in Content; this preview does not approve a release.</p>
+        <fieldset><legend>Media to send, in selection order</legend>{availableAssets.length ? availableAssets.map(asset => <label className="studio-check" key={asset.id}><input type="checkbox" name={`publish-asset-${asset.id}`} checked={assetIds.includes(asset.id)} onChange={event => { setAssetIds(previous => event.target.checked ? [...previous, asset.id] : previous.filter(id => id !== asset.id)); setConfirmed(false) }} />{asset.kind} · {asset.mime} · {Math.ceil(asset.bytes / 1024)} KB{assetIds.includes(asset.id) ? ` · position ${assetIds.indexOf(asset.id) + 1}` : ''}</label>) : <p>No completed media matches this content version. Create and review media in the Production kit.</p>}</fieldset>
+      </>}
+      <label>Posting action<select name="package-publishing-mode" value={mode} onChange={event => { setMode(event.target.value as typeof mode); setConfirmed(false) }}><option value="draft">Save a draft in Postiz</option><option value="schedule">Schedule a post</option><option value="now">Publish now</option></select></label>
+      {mode === 'schedule' && <label>Publication time (your browser timezone)<input type="datetime-local" name="package-publishing-time" value={publishAt} onChange={event => { setPublishAt(event.target.value); setConfirmed(false); setCheckedAt(Date.now()) }} /></label>}
+      <label className="studio-check"><input name="package-publishing-confirmed" type="checkbox" checked={confirmed} disabled={Boolean(reason)} onChange={event => { setConfirmed(event.target.checked); setCheckedAt(Date.now()) }} />I confirm this account, exact saved caption, ordered media and posting action.</label>
+      <div className="studio-toolbar"><button type="button" disabled={Boolean(reason) || !confirmed || sending} onClick={() => void send()}>{sending ? 'Submitting saved content…' : mode === 'now' ? 'Publish now' : mode === 'schedule' ? 'Schedule this post' : 'Send draft to Postiz'}</button><button type="button" disabled={sending} onClick={() => { setRefresh(value => value + 1); setPreview(null); setAssetIds([]); setConfirmed(false); setError(''); void studioRequest<{ publications: Publication[] }>(`/packages/${encodeURIComponent(pack.id)}/social-publications`).then(value => value.publications.forEach(onReceipt)).catch(cause => setError(cause instanceof Error ? cause.message : 'Saved receipts could not load.')) }}>Reload saved preview & receipts</button></div>
+    </fieldset><p className="studio-muted">The server rechecks account access, saved copy, content and media approvals, platform limits and workflow rules before sending. A submitted receipt is not proof of publication.</p>
   </section>
 }

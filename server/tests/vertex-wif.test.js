@@ -7,6 +7,15 @@ import { demoAuthorizationActive } from '../automation/demo.js'
 import { firebaseCredentials } from '../auth/firebase.js'
 
 const config = { CONTENT_VERTEX_FALLBACK: 'true', VERTEX_FALLBACK_PROJECT: vertexProductionProject, VERTEX_FALLBACK_MODEL: 'gemini-3.8-flash', VERTEX_FALLBACK_APPROVED_UNTIL: new Date(Date.now() + 3600000).toISOString(), VERTEX_WIF_AUDIENCE: vertexWifAudience, VERTEX_WIF_SERVICE_ACCOUNT: vertexWifServiceAccount }
+
+test('dedicated Vertex JSON does not replace Firebase credentials and rejects a mismatched project', async () => {
+  const vertex = { type: 'service_account', project_id: 'new-vertex-project', client_email: 'inference@new-vertex-project.iam.gserviceaccount.com', private_key: 'test-key' }
+  const firebase = { type: 'service_account', project_id: 'existing-auth-project', client_email: 'auth@existing-auth-project.iam.gserviceaccount.com', private_key: 'existing-auth-key' }
+  const settings = { VERTEX_FALLBACK_PROJECT: vertex.project_id, VERTEX_FALLBACK_SERVICE_ACCOUNT_JSON: JSON.stringify(vertex), GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify(firebase) }
+  assert.deepEqual((await vertexGoogleAuthOptions(settings)).credentials, vertex)
+  assert.deepEqual(firebaseCredentials(settings), firebase)
+  await assert.rejects(vertexGoogleAuthOptions({ ...settings, VERTEX_FALLBACK_PROJECT: 'wrong-project' }), error => error.configurationFailure && error.preDispatch)
+})
 test('installed federation libraries construct and retrieve the supplied subject without network', async () => {
   const { ExternalAccountClient, IdentityPoolClient } = await import('google-auth-library')
   const { getVercelOidcToken } = await import('@vercel/functions/oidc')

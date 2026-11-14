@@ -1,0 +1,250 @@
+{
+  "provenance": "Actual production writing/strategy saved 12 November and read 14 November 2026; workspace identities omitted. Evidence narrowed to the exact saved claim quote for this regression.",
+  "settings": {
+    "tone": "Concise, precise and evidence-led",
+    "voice": "Auto",
+    "outputs": [
+      "platforms",
+      "website"
+    ],
+    "audience": "Developers building AI agents",
+    "duration": 18,
+    "industry": "Artificial intelligence",
+    "language": "English",
+    "platform": "X"
+  },
+  "content": {
+    "claims": [
+      {
+        "id": "C1",
+        "text": "Anthropic reported Claude Fable 5.2 and Claude Mythos 5.2 show coding improvements.",
+        "quote": "November 9, 2026Claude Fable 5.2 and Mythos 5.2We’ve upgraded Claude Fable and Claude Mythos—models that are designed to tackle the most daunting technical challenges.Claude Fable 5.2 and Claude Mythos 5.2 show improvements in areas like coding, reasoning, and vision.",
+        "status": "attributed",
+        "evidenceId": "E1"
+      }
+    ],
+    "website": {
+      "body": "Anthropic reported that Claude Fable 5.2 and Claude Mythos 5.2 show improvements in coding, reasoning, and vision [C1].",
+      "title": "Anthropic Claude Fable 5.2 and Claude Mythos 5.2 [C1]"
+    },
+    "strategy": {
+      "angle": "Present vendor-reported updates for Claude Fable 5.2 and Claude Mythos 5.2 without claiming independent verification.",
+      "voice": "Female",
+      "whyNow": "Anthropic announced Claude Fable 5.2 and Claude Mythos 5.2 on November 9, 2026.",
+      "audience": "Developers building AI agents seeking attributed technical updates.",
+      "delivery": "Direct and concise delivery focusing on vendor attribution.",
+      "keywords": [
+        "Claude Fable 5.2 Claude Mythos 5.2"
+      ],
+      "language": "English",
+      "factCheck": "All capability gains are vendor-reported by Anthropic and lack independent third-party benchmark verification in the source passages.",
+      "platforms": [
+        {
+          "cta": "Read the full system card details.",
+          "body": "Anthropic reported Claude Fable 5.2 and Claude Mythos 5.2 show coding improvements [C1].",
+          "hook": "Anthropic reported Claude Fable 5.2 improvements [C1].",
+          "format": "Single-fact text post",
+          "hashtags": [
+            "#AI",
+            "#Claude"
+          ],
+          "headline": "Anthropic Claude Fable 5.2 Claude Mythos 5.2 [C1]",
+          "platform": "X",
+          "testPlan": "A/B test direct announcement hook versus capability-focused hook.",
+          "thumbnail": "Minimalist graphic showing Claude Fable 5.2 and Mythos 5.2 release text.",
+          "retentionPlan": "Front-load the attributed model release fact immediately.",
+          "alternativeHook": "Claude Fable 5.2 and Mythos 5.2 coding gains reported [C1]."
+        }
+      ],
+      "experiments": [
+        {
+          "metric": "Impressions and click-through rate over 48 hours",
+          "variable": "Hook phrasing",
+          "variantA": "Anthropic reported Claude Fable 5.2 improvements [C1].",
+          "variantB": "Claude Fable 5.2 and Mythos 5.2 coding gains reported [C1].",
+          "decisionRule": "Adopt the hook variant generating higher link clicks to source documentation."
+        }
+      ],
+      "voiceReason": "Clear, professional, and neutral delivery suited to technical developer updates.",
+      "languageReason": "Matches user settings and target technical developer audience."
+    }
+  },
+  "evidence": [
+    {
+      "id": "E1",
+      "excerpt": "November 9, 2026Claude Fable 5.2 and Mythos 5.2We’ve upgraded Claude Fable and Claude Mythos—models that are designed to tackle the most daunting technical challenges.Claude Fable 5.2 and Claude Mythos 5.2 show improvements in areas like coding, reasoning, and vision.",
+      "type": "submitted-source"
+    }
+  ],
+  "context": {
+    "objective": "Explain the vendor-reported model positioning in Anthropic’s November 9 announcement for the five existing audiences. Attribute claims, preserve access qualifications and do not present it as today’s announcement or an independently tested result.",
+    "brand": "Approved editorial desk identity: ink #142C38, cobalt #2344C7, sea glass #D7EEE8, white surfaces; Plus Jakarta Sans headings and Source Sans 3 body. Use original text/vector layouts, readable captions and explicit source attribution.",
+    "workflow": {
+      "version": "strategy-workflow-v1",
+      "destinations": [
+        {
+          "goal": {
+            "kpi": "Impressions",
+            "primary": "reach",
+            "targetAction": "Read or watch the qualified explanation and consult the linked original source.",
+            "reviewAfterHours": 48
+          },
+          "keywords": [
+            {
+              "phrase": "Claude Fable 5.2 Claude Mythos 5.2",
+              "rationale": "Descriptive terms from the public topic query; not measured search volume or guaranteed discovery.",
+              "placements": [
+                "caption",
+                "title"
+              ],
+              "researchIds": [
+                "public-source-2f3194e4d86b",
+                "public-hn-r-50433540"
+              ]
+            }
+          ],
+          "platform": "X",
+          "accountId": "cmv1z86e90009om67goqw6a2u",
+          "checklist": {
+            "linksChecked": false,
+            "hookFulfilled": false,
+            "soundOffChecked": false,
+            "livePostInspected": false,
+            "originalityChecked": false,
+            "phonePreviewChecked": false
+          },
+          "community": {
+            "cases": [],
+            "owner": "[workspace-owner-redacted]",
+            "escalationOwner": "Mango Tree workspace owner",
+            "escalationRules": "Escalate sensitive personal requests, complaints and individual professional advice. Do not disclose private identifiers or fabricate account conversations.",
+            "responseGuidance": "Keep any replies source-linked, relevant and respectful. Public-source research is not a private-message connection or authorization to send replies."
+          },
+          "learnings": [],
+          "candidates": [
+            {
+              "id": "public-hn-idea-54a7e0290c",
+              "angle": "Explain the supported development and address this observed public question: However, during the model’s training, we took steps to limit advances in the specific research capabilities that could most directly accelerate AI development.This means that they are blocking the research of AI to different people other than their own?",
+              "topic": "Introducing Claude Fable 5.2 and Claude Mythos 5.2 \\ Anthropic",
+              "scores": {
+                "risk": 2,
+                "effort": 2,
+                "timing": 5,
+                "brandFit": 4,
+                "evidence": 3,
+                "topicFit": 5,
+                "audienceUsefulness": 3
+              },
+              "selected": true,
+              "rationale": "Publish a concise, attributed developer update on Claude Fable 5.2 and Mythos 5.2, clearly labeling Anthropic's claims as vendor-reported and avoiding\ntopicFit: Directly covers Anthropic's Claude Fable 5.2 and Mythos 5.2 release for developers.\naudienceUsefulness: One observed HN question about training restrictions is low-confidence and not established\nbrandFit: Matches AI product updates pillar and concise developer tone; brand style is specified but\nevidence: Publisher excerpt E1 supports model claims; independent verification is not available.\ntiming: Publisher excerpt dated Nov 9, 2026 and retrieved Nov 12, 2026; highly current.\neffort: Short post under 140 characters with one cited source is low production effort.\nrisk: Risk is low if vendor claims are attributed and no independent benchmarks or pricing are\nAI editorial ratings; demand and performance remain unmeasured.",
+              "questionIds": [
+                "public-hn-q-50433540"
+              ],
+              "researchIds": [
+                "public-source-2f3194e4d86b",
+                "public-hn-r-50433540"
+              ]
+            }
+          ],
+          "researchLog": [
+            {
+              "id": "public-hn-r-50433540",
+              "url": "https://news.ycombinator.com/item?id=50433540",
+              "type": "audience",
+              "response": "Test a source-backed explanation if the saved account audience and goal fit.",
+              "confidence": "low",
+              "hypothesis": true,
+              "observedAt": "2026-11-12T10:27:51.878Z",
+              "observation": "A public comment asks: However, during the model’s training, we took steps to limit advances in the specific research capabilities that could most directly accelerate AI development.This means that they are blocking the research of AI to different people other than their own?",
+              "questionIds": [
+                "public-hn-q-50433540"
+              ],
+              "interpretation": "This is one observed public question, not repeated account demand or a representative audience finding."
+            },
+            {
+              "id": "public-hn-r-50430544",
+              "url": "https://news.ycombinator.com/item?id=50430544",
+              "type": "audience",
+              "response": "Test a source-backed explanation if the saved account audience and goal fit.",
+              "confidence": "low",
+              "hypothesis": true,
+              "observedAt": "2026-11-12T10:27:51.878Z",
+              "observation": "A public comment asks: Why dont I feel any urge to even try Fable 5.2 and Mythos 5.2 unless it will force up on me?Compared Opus 5.5 200 usd a month with Codex 200 usd (Astra High) and Kimi Pro 100 usd a month ...",
+              "questionIds": [
+                "public-hn-q-50430544"
+              ],
+              "interpretation": "This is one observed public question, not repeated account demand or a representative audience finding."
+            },
+            {
+              "id": "public-hn-peer-50429068",
+              "url": "https://news.ycombinator.com/item?id=50429068",
+              "type": "audience",
+              "response": "Use only as discussion context; keep the angle original and verify factual claims in publisher passages.",
+              "confidence": "low",
+              "hypothesis": true,
+              "observedAt": "2026-11-12T10:27:51.878Z",
+              "observation": "Public peer discussion title: Claude Fable 5.2 and Mythos 5.2. Capture snapshot: 913 points; 1043 comments.",
+              "questionIds": [],
+              "interpretation": "A public peer conversation was found; this is not a reviewed competitor social account or proof of outcome."
+            },
+            {
+              "id": "public-hn-peer-50430693",
+              "url": "https://news.ycombinator.com/item?id=50430693",
+              "type": "audience",
+              "response": "Use only as discussion context; keep the angle original and verify factual claims in publisher passages.",
+              "confidence": "low",
+              "hypothesis": true,
+              "observedAt": "2026-11-12T10:27:51.878Z",
+              "observation": "Public peer discussion title: System Card: Claude Fable 5.2 and Claude Mythos 5.2 [pdf]. Capture snapshot: 3 points; 1 comments.",
+              "questionIds": [],
+              "interpretation": "A public peer conversation was found; this is not a reviewed competitor social account or proof of outcome."
+            },
+            {
+              "id": "public-source-2f3194e4d86b",
+              "url": "https://www.anthropic.com/claude-fable-and-mythos-5-2",
+              "type": "fact",
+              "response": "Explain only the saved supported claims and their limitations.",
+              "confidence": "medium",
+              "hypothesis": false,
+              "observedAt": "2026-11-12T11:05:04.326Z",
+              "observation": "Captured publisher passage for Introducing Claude Fable 5.2 and Claude Mythos 5.2 \\ Anthropic; factual statements must cite its saved claim passages.",
+              "questionIds": [],
+              "interpretation": "Publisher attribution is not independent factual verification."
+            }
+          ],
+          "expertReview": {
+            "note": "Fresh content requires fresh review; no prior approval was copied.",
+            "status": "not_required",
+            "required": false
+          },
+          "trendDecision": {
+            "mode": "not_relevant",
+            "reason": "A source-led educational explanation of the November 9 announcement; no measured trend or search-demand claim is required or available."
+          },
+          "audienceQuestions": [
+            {
+              "id": "public-hn-q-50433540",
+              "source": "community",
+              "audience": "Observed Hacker News public discussion; social-account audience fit is an untested hypothesis.",
+              "question": "However, during the model’s training, we took steps to limit advances in the specific research capabilities that could most directly accelerate AI development.This means that they are blocking the research of AI to different people other than their own?",
+              "sourceUrl": "https://news.ycombinator.com/item?id=50433540",
+              "anonymized": true,
+              "observedAt": "2026-11-12T10:27:51.878Z",
+              "occurrences": 1
+            },
+            {
+              "id": "public-hn-q-50430544",
+              "source": "community",
+              "audience": "Observed Hacker News public discussion; social-account audience fit is an untested hypothesis.",
+              "question": "Why dont I feel any urge to even try Fable 5.2 and Mythos 5.2 unless it will force up on me?Compared Opus 5.5 200 usd a month with Codex 200 usd (Astra High) and Kimi Pro 100 usd a month ...",
+              "sourceUrl": "https://news.ycombinator.com/item?id=50430544",
+              "anonymized": true,
+              "observedAt": "2026-11-12T10:27:51.878Z",
+              "occurrences": 1
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

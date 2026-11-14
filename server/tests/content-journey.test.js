@@ -9,8 +9,9 @@ import { studioRouter } from '../studio/routes.js'
 import { generateContent } from './helpers/passage-model.js'
 import { runContentJob } from '../studio/job-worker.js'
 import { ratingsFixture } from './fixtures/finalization.js'
+import { assessRelease } from '../studio/release.js'
 
-for (const platform of ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']) test(`${platform}: queued research to selected-output export requires rated independent review, owner confirmation and workspace access`, async () => {
+for (const platform of ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']) test(`${platform}: queued research to owner download preserves source checks, workspace access and separate release approval`, async () => {
   const repository = createRepository(':memory:')
   const uid = `ws:${randomUUID()}`
   const members = [{ uid: 'alice', role: 'owner' }, { uid: 'bob', role: 'editor' }, { uid: 'carol', role: 'reviewer' }]
@@ -51,26 +52,31 @@ for (const platform of ['Facebook', 'Instagram', 'X', 'LinkedIn', 'YouTube']) te
     assert.equal((await call(`/packages/${pack.id}/generate`, 'POST', { revision: pack.revision, confirmed: true, requestId: generationId })).status, 202)
     await json(`/packages/${pack.id}`); assert.equal(generateCalls, 0)
     assert.equal((await runContentJob({ repository, uid, requestId: generationId, generate })).status, 'completed')
-    assert.equal((await call(`/packages/${pack.id}/export`)).status, 409)
+    assert.equal((await call(`/packages/${pack.id}/export`)).status, 200)
+    assert.equal((await call(`/packages/${pack.id}/export`, 'GET', undefined, 'bob')).status, 403, 'editing access does not grant owner download')
     pack = await confirmForDownload(pack.id)
     let exported = await json(`/packages/${pack.id}/export`)
     assert.deepEqual(Object.keys(exported.package.content).sort(), ['claims', 'hooks', 'script', 'strategy'])
-    assert.equal(exported.manifest.approvedBy, 'bob'); assert.equal(exported.manifest.approvalMethod, 'independent-human'); assert.equal(exported.manifest.reviewerId, 'carol'); assert.ok(exported.manifest.contentHash)
+    assert.equal(exported.manifest.releasePolicy, 'owner-download-v1'); assert.equal(exported.manifest.downloadedBy, 'alice'); assert.equal(exported.manifest.reviewerId, undefined); assert.ok(exported.manifest.contentHash)
     assert.equal((await call(`/packages/${pack.id}/export`, 'GET', undefined, 'outsider')).status, 403)
     const planned = await json('/planning/board', 'POST', { packageId: pack.id, status: 'ready' })
-    assert.equal(planned.status, 'ready', 'rated review and separate owner confirmation unlock planner readiness')
+    assert.equal(planned.status, 'ready', 'ready means source-checked saved content, not a published post')
     let workspace = repository.studioGet('__workspace_control__', 'workspace', uid)
     repository.studioPut('__workspace_control__', 'workspace', uid, { ...workspace, members: [members[0]] }, workspace.revision)
-    assert.equal((await call(`/packages/${pack.id}/export`)).status, 422)
+    assert.equal((await call(`/packages/${pack.id}/export`)).status, 200)
+    assert.equal((await assessRelease(repository, uid, repository.studioGet(uid, 'package', pack.id))).eligible, false, 'revoked reviewer still blocks independent publishing release')
     assert.equal((await call(`/reviews/${encodeURIComponent(uid)}/${pack.id}`, 'GET', undefined, 'bob')).status, 403)
     workspace = repository.studioGet('__workspace_control__', 'workspace', uid)
     repository.studioPut('__workspace_control__', 'workspace', uid, { ...workspace, members }, workspace.revision)
     pack = await json(`/packages/${pack.id}`, 'PATCH', { revision: pack.revision, content: { ...content, hooks: ['New preview hook [C1]'] } })
-    assert.equal((await call(`/packages/${pack.id}/export`)).status, 409)
-    await confirmForDownload(pack.id)
+    assert.equal((await call(`/packages/${pack.id}/export`)).status, 409, 'Edited copy cannot reuse the prior strategy assessment')
+    content.hooks = ['New preview hook [C1]']
+    const revisedGenerationId = randomUUID()
+    await json(`/packages/${pack.id}/generate`, 'POST', { revision: pack.revision, confirmed: true, requestId: revisedGenerationId })
+    assert.equal((await runContentJob({ repository, uid, requestId: revisedGenerationId, generate })).status, 'completed')
     exported = await json(`/packages/${pack.id}/export`); assert.equal(exported.package.content.hooks[0], 'New preview hook [C1]')
     await json(`/packages/${pack.id}/refresh-evidence`, 'POST', { confirmed: true })
     assert.equal((await call(`/packages/${pack.id}/export`)).status, 409)
-    assert.equal(researchCalls, 1); assert.equal(generateCalls, 1)
+    assert.equal(researchCalls, 1); assert.equal(generateCalls, 2)
   } finally { await new Promise(resolve => server.close(resolve)); repository.close() }
 })

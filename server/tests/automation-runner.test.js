@@ -20,7 +20,7 @@ function servicesFixture(repository, calls) {
     generate: async ctx => { record('generate')(ctx); return repository.studioPut(ctx.owner, 'package', `pack-${ctx.profile.accountId}`, { content: { website: { title: 'Controlled fixture content' } } }, 0) },
     review: async ctx => { record('review')(ctx); return { eligible: true, method: 'controlled-fixture-review' } },
     render: async ctx => { record('render')(ctx); return { assets: [{ id: `asset-${ctx.profile.accountId}` }] } },
-    publish: async ctx => { record('publish')(ctx); return { id: `receipt-${ctx.profile.accountId}`, status: 'published', providerPostId: `provider-${ctx.profile.accountId}`, releaseUrl: 'https://example.com/controlled-test-receipt' } },
+    publish: async ctx => { record('publish')(ctx); return { id: `receipt-${ctx.profile.accountId}`, status: 'published', providerPostId: `provider-${ctx.profile.accountId}`, releaseUrl: 'https://www.linkedin.com/posts/controlled-test-receipt' } },
   }
 }
 
@@ -68,7 +68,7 @@ test('uncertain generation, changed consent, existing daily posts and pending re
     const revoked = await runAccountAutomation({ repository, owner: 'alice', profile, services: later, now }); assert.equal(revoked.results[0].status, 'blocked'); assert.equal(laterCalls.length, 2)
     profile = profileFixture(repository, 'account-four'); const waitingCalls = []; const waiting = servicesFixture(repository, waitingCalls)
     waiting.publish = async ctx => ({ id: `receipt-${ctx.profile.accountId}`, status: 'submitted', providerPostId: 'actual-provider-receipt' })
-    waiting.readback = async () => ({ status: 'published', providerPostId: 'actual-provider-receipt', releaseUrl: 'https://example.com/readback' })
+    waiting.readback = async () => ({ status: 'published', providerPostId: 'actual-provider-receipt', releaseUrl: 'https://www.linkedin.com/posts/readback' })
     const pending = await runAccountAutomation({ repository, owner: 'alice', profile, services: waiting, now }); assert.equal(pending.results[0].status, 'awaiting_receipt')
     const reconciled = await runAccountAutomation({ repository, owner: 'alice', profile, services: waiting, now }); assert.equal(reconciled.results[0].status, 'completed'); assert.equal(waitingCalls.length, 4)
   } finally { repository.close() }
@@ -197,14 +197,14 @@ test('queued publications continue automatic readback until native publication w
   const repository = createRepository(':memory:'); const calls = []; const profile = profileFixture(repository)
   const services = servicesFixture(repository, calls); let creates = 0; let readbacks = 0
   services.publish = async () => { creates++; return { id: 'queued-receipt', status: 'scheduled', providerPostId: 'actual-provider-id', releaseUrl: null } }
-  services.readback = async ctx => { readbacks++; assert.equal(ctx.run.publicationId, 'queued-receipt'); return { id: 'queued-receipt', status: readbacks === 1 ? 'scheduled' : 'published', providerPostId: 'actual-provider-id', releaseUrl: readbacks === 1 ? null : 'https://example.com/native-post' } }
+  services.readback = async ctx => { readbacks++; assert.equal(ctx.run.publicationId, 'queued-receipt'); return { id: 'queued-receipt', status: readbacks === 1 ? 'scheduled' : 'published', providerPostId: 'actual-provider-id', releaseUrl: readbacks === 1 ? null : 'https://www.linkedin.com/posts/native-post' } }
   try {
     const queued = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
     assert.equal(queued.results[0].status, 'awaiting_receipt'); assert.equal(queued.results[0].publicationId, 'queued-receipt'); assert.equal(queued.results[0].releaseUrl, null)
     const pending = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
     assert.equal(pending.results[0].status, 'awaiting_receipt'); assert.equal(pending.results[0].providerPostId, 'actual-provider-id'); assert.equal(pending.results[0].releaseUrl, null)
     const published = await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
-    assert.equal(published.results[0].status, 'completed'); assert.equal(published.results[0].releaseUrl, 'https://example.com/native-post')
+    assert.equal(published.results[0].status, 'completed'); assert.equal(published.results[0].releaseUrl, 'https://www.linkedin.com/posts/native-post')
     await runAccountAutomation({ repository, owner: 'alice', profile, services, now })
     assert.equal(creates, 1); assert.equal(readbacks, 2)
   } finally { repository.close() }

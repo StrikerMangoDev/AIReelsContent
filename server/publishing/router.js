@@ -7,10 +7,13 @@ import { assessRelease } from '../studio/release.js'
 import { assessMediaAcceptance } from '../media/acceptance.js'
 import { readMediaFile } from '../media/files.js'
 import { costScopeHash } from '../budget/policy.js'
-import { createPostizProvider, publishingConfig } from './provider.js'
+import { createPostizProvider, publishingConfig, nativePublishedUrl } from './provider.js'
 import { platformSettings, renderSocialCaption, socialSourceUrls } from './constraints.js'
 import { postizContentMatches } from './readback.js'
 import { setTimeout as delay } from 'node:timers/promises'
+import { workflowPrepublicationIssues } from '../studio/strategy-workflow.js'
+import { automaticStrategyMediaId } from '../media/strategy-evidence.js'
+import { platforms, selectedPlatforms } from '../studio/content.js'
 
 const fail = (status, message) => Object.assign(new Error(message), { status, publicMessage: message })
 const inputSchema = z.object({ requestId: z.guid(), revision: z.number().int().positive(), accountId: z.string().min(1).max(200), platform: z.string().min(1).max(80), mode: z.enum(['draft', 'schedule', 'now']), publishAt: z.iso.datetime().optional(), caption: z.string().trim().min(1).max(12000), assetIds: z.array(z.string().min(1).max(100)).min(1).max(10), confirmed: z.literal(true), automatic: z.boolean().default(false) }).strict().superRefine((input, ctx) => {
@@ -52,7 +55,13 @@ export function createPublishingService({ repository, provider = createPostizPro
     if (assets.some(asset => !asset || asset.packageId !== pack.id || !['image', 'video'].includes(asset.kind))) throw fail(422, 'Choose completed image or video assets from this package')
     const providerSettings = platformSettings(pack, account, assets)
     const profile = await repository.studioGet(owner, 'account_profile', profileId(account.accountId))
+    const workflowContext = await repository.studioGet(owner, 'complete_context', pack.id)
+    const machineRecord = input.automatic && profile ? await repository.studioGet(owner, 'automatic_strategy_media', automaticStrategyMediaId(pack.id, input.platform, input.accountId)) : null
+    const workflowIssues = workflowPrepublicationIssues(pack, workflowContext?.context || {}, input.platform, input.accountId, new Date(), machineRecord ? [{ record: machineRecord, profile, assets }] : [])
+    if (workflowIssues.length) throw fail(422, workflowIssues.join(' '))
     const ready = await assessReady({ repository, owner, pack, assets, input, profile, actorUid: actorUid })
+    const checkedWorkflow = await repository.studioGet(owner, 'complete_context', pack.id)
+    if ((checkedWorkflow?.revision || 0) !== (workflowContext?.revision || 0)) throw fail(409, 'Strategy workflow changed during publication checks')
     if (!ready.eligible) throw fail(422, ready.issues.join(' '))
     const scope = { packageId: pack.id, contentHash: contentHash(pack), profileHash: profile ? costScopeHash(profile, null) : null, accountId: account.accountId, platform: account.platform, provider: account.provider, providerSettings, mode: input.mode, publishAt: input.publishAt || null, caption: input.caption, assets: assets.map(asset => ({ id: asset.id, sha256: asset.sha256 })), automatic: input.automatic }
     const scopeHash = costScopeHash(scope, null); const id = scopeHash.slice(0, 32)
@@ -97,6 +106,9 @@ export function createPublishingService({ repository, provider = createPostizPro
       const currentProfile = await repository.studioGet(owner, 'account_profile', profileId(account.accountId))
       const currentAccount = accountFor(owner, account.accountId, account.platform)
       const currentReady = await assessReady({ repository, owner, pack: current, assets: currentAssets, input, profile: currentProfile, actorUid: actorUid })
+      const currentWorkflow = await repository.studioGet(owner, 'complete_context', pack.id)
+      const currentMachineRecord = input.automatic && currentProfile ? await repository.studioGet(owner, 'automatic_strategy_media', automaticStrategyMediaId(current.id, input.platform, input.accountId)) : null
+      if ((currentWorkflow?.revision || 0) !== (workflowContext?.revision || 0) || workflowPrepublicationIssues(current, currentWorkflow?.context || {}, input.platform, input.accountId, new Date(), currentMachineRecord ? [{ record: currentMachineRecord, profile: currentProfile, assets: currentAssets }] : []).length) throw fail(409, 'Strategy workflow changed before publication dispatch')
       if (!currentReady.eligible || !config().enabled || !currentAccount || (currentProfile ? costScopeHash(currentProfile, null) : null) !== scope.profileHash || costScopeHash(platformSettings(current, currentAccount, currentAssets), null) !== costScopeHash(scope.providerSettings, null)) throw fail(409, 'Publication authorization changed before dispatch')
       await actorCanWrite(owner, actorUid)
       receipt = await repository.studioPut(owner, 'social_publication', id, { ...receipt, status: 'dispatching', dispatchedAt: new Date().toISOString() }, receipt.revision)
@@ -124,8 +136,8 @@ export function createPublishingService({ repository, provider = createPostizPro
     const post = posts.find(value => value.id === receipt.providerPostId && value.integration?.id === receipt.accountId)
     if (!post || !postizContentMatches(receipt.caption, post.content)) throw fail(409, 'Provider readback does not match this publication; no retry was sent')
     const state = String(post.state || '').toUpperCase()
-    const status = state === 'PUBLISHED' ? 'published' : state === 'QUEUE' ? 'scheduled' : state === 'DRAFT' ? 'draft' : state === 'ERROR' ? 'failed' : 'submitted'
-    const releaseUrl = typeof post.releaseURL === 'string' && /^https:\/\//.test(post.releaseURL) ? post.releaseURL : null
+    const releaseUrl = nativePublishedUrl(receipt.platform, post.releaseURL)
+    const status = state === 'PUBLISHED' && releaseUrl ? 'published' : state === 'QUEUE' ? 'scheduled' : state === 'DRAFT' ? 'draft' : state === 'ERROR' ? 'failed' : 'submitted'
     return await repository.studioPut(owner, 'social_publication', receipt.id, { ...receipt, status, providerState: state, releaseUrl, lastReadbackAt: new Date().toISOString(), error: status === 'failed' ? 'Provider reported a publication failure. No automatic retry was sent.' : null }, receipt.revision)
   } }
 }
@@ -133,12 +145,21 @@ export function createPublishingService({ repository, provider = createPostizPro
 export function createPublishingRouter({ repository, auth, provider = createPostizProvider(), config = publishingConfig, readFile = readMediaFile, assessReady = defaultReady }) {
   const router = Router()
   const service = createPublishingService({ repository, provider, config, readFile, assessReady })
-  router.use((req, _res, next) => /^\/(?:publishing(?:\/|$)|social-publications(?:\/|$)|packages\/[^/]+\/social-publications\/?$)/.test(req.path) ? next() : next('router'))
+  router.use((req, _res, next) => /^\/(?:publishing(?:\/|$)|social-publications(?:\/|$)|packages\/[^/]+\/(?:social-publications|social-preview)\/?$)/.test(req.path) ? next() : next('router'))
   router.use(workspaceAuth(repository, auth), requireWriteRole)
   const accounts = owner => config().accounts.filter(account => account.ownerScope === owner)
   const publicAccount = account => ({ id: account.accountId, name: account.name, platform: account.platform, provider: account.provider })
   const profileId = accountId => createHash('sha256').update(accountId).digest('hex').slice(0, 32)
   async function packFor(owner, id) { const pack = await repository.studioGet(owner, 'package', id); if (!pack) throw fail(404, 'Content package not found'); return pack }
+
+  router.get('/packages/:id/social-preview', async (req, res) => {
+    const { platform } = z.object({ platform: z.enum(platforms) }).strict().parse(req.query)
+    const owner = ownerScope(req); const pack = await packFor(owner, req.params.id)
+    if (!pack.content || !selectedPlatforms(pack.settings).includes(platform)) throw fail(422, 'Choose a platform with saved content in this package')
+    const hash = contentHash(pack)
+    const assets = (await repository.studioList(owner, 'asset')).filter(asset => asset.packageId === pack.id).map(({ id, kind, mime, status, packageContentHash, bytes, verification }) => ({ id, kind, mime, status, current: packageContentHash === hash, bytes, verification: verification ? { status: verification.status } : null }))
+    res.json({ packageId: pack.id, revision: pack.revision, contentHash: hash, platform, caption: approvedCaption(pack, platform), assets, approval: 'not_assessed', limitations: ['This is a saved-content preview, not publication approval. Content, media, account and workflow checks run again before dispatch.'] })
+  })
 
   router.get('/publishing/config', (req, res) => res.json({ enabled: config().enabled, accounts: accounts(ownerScope(req)).map(publicAccount) }))
   router.get('/publishing/receipts', async (req, res) => res.json({ publications: await repository.studioList(ownerScope(req), 'social_publication') }))

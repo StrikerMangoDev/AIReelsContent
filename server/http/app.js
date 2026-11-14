@@ -13,6 +13,9 @@ import { studioRouter } from '../studio/routes.js'
 import { createPublishingRouter } from '../publishing/router.js'
 import { createAutomationRouter } from '../automation/router.js'
 import { assessAutomationRelease } from '../automation/services.js'
+import { createCompletePackageRouter } from '../studio/complete-package-router.js'
+import { createCompletePackageMetricsRouter } from '../studio/complete-package-metrics-router.js'
+import { prepareAutomaticCompletePackage } from '../studio/complete-package-automation.js'
 
 const querySchema = z.object({ region: z.enum(['Global', ...regions]).optional(), category: z.enum(['All signals', ...categories]).optional(), q: z.string().max(200).optional(), page: z.coerce.number().int().min(1).max(200).default(1), limit: z.coerce.number().int().min(1).max(60).default(24), timezone: z.string().max(100).default('UTC') })
 export function createApp({ repository, sources, verifyIdentity, onResearchAdmitted, onGenerationAdmitted, onAutomationAdmitted }) {
@@ -58,6 +61,8 @@ export function createApp({ repository, sources, verifyIdentity, onResearchAdmit
   app.use(createMediaRouter({ repository, auth }))
   app.use('/api/studio', createPublishingRouter({ repository, auth, assessReady: assessAutomationRelease }))
   app.use('/api/studio', createAutomationRouter({ repository, auth, onAutomationAdmitted }))
+  app.use('/api/studio', createCompletePackageMetricsRouter({ repository, auth }))
+  app.use('/api/studio', createCompletePackageRouter({ repository, auth, onContextSaved: prepareAutomaticCompletePackage }))
   app.use('/api/studio', studioRouter({ repository, auth, onResearchAdmitted, onGenerationAdmitted, onAutomationAdmitted }))
   app.use('/api', (_request, response) => response.status(404).json({ error: 'Endpoint not found' }))
   app.use((error, _request, response, _next) => {

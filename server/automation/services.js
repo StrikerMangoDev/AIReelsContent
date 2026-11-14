@@ -4,6 +4,7 @@ import { costScopeHash } from '../budget/policy.js'
 import { reserveFreeOperation } from '../budget/free-operation.js'
 import { createResearch, nicheSchema, researchNiche, refreshAvailableAt, researchScopeKey, freeTextReplacementJob } from '../studio/intelligence.js'
 import { generateContent, reviewContent, settingsSchema } from '../studio/content.js'
+import { contentAlignment } from '../studio/content-alignment.js'
 import { runContentJob } from '../studio/job-worker.js'
 import { contentHash } from '../studio/approval.js'
 import { fetchEvidence } from '../studio/evidence.js'
@@ -17,10 +18,14 @@ import { inspectMediaBytes, assessAutomaticMedia, assessMediaAcceptance } from '
 import { approvedCaption, createPublishingService } from '../publishing/router.js'
 import { runAccountAutomation } from './runner.js'
 import { assertCapability } from '../policy.js'
-import { assertDemoAuthorization, createDemoGenerator, demoStageRequestId } from './demo.js'
+import { assertDemoAuthorization, createDemoGenerator, demoStageRequestId, assertDemoRunContinuation } from './demo.js'
 import { buildAssurance } from '../studio/assurance.js'
 import { generationReceipt } from '../providers/llm.js'
 import { safeJobFailure } from '../studio/job-worker.js'
+import { accountStrategyFeedback, accountWorkflowTemplate, workflowPrepublicationIssues, workflowGenerationContext } from '../studio/strategy-workflow.js'
+import { enrichPackagePublicResearch } from './public-research-intake.js'
+import { assertFreeCampaign } from './campaign.js'
+import { recordAutomaticStrategyMedia } from './strategy-media.js'
 
 const hash = value => createHash('sha256').update(value).digest('hex')
 const uuid = value => { const digest = hash(value); return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20, 32)}` }
@@ -57,6 +62,7 @@ function normalizedResearch(report, context) {
 
 export async function assessAutomationRelease({ repository, owner, pack, assets, profile, actorUid, input, readFile = readMediaFile }) {
   if (!input?.automatic) {
+    if (pack.paidContinuation) return { eligible: false, issues: ['This paid continuation clone requires its exact authorized automatic release path.'] }
     const text = await assessRelease(repository, owner, pack)
     const media = assessMediaAcceptance(pack, assets)
     const issues = [...text.issues, ...media.issues]
@@ -64,6 +70,11 @@ export async function assessAutomationRelease({ repository, owner, pack, assets,
     return { eligible: issues.length === 0, issues, text, media }
   }
   const issues = []
+  if (pack.paidContinuation) {
+    const run = await repository.studioGet(owner, 'automation_run', pack.paidContinuation.runId)
+    try { if (!run || run.demoAuthorizationId !== pack.paidContinuation.demoAuthorizationId || !await assertDemoRunContinuation({ repository, owner, actorUid, run, profile })) issues.push('The one-off paid continuation is no longer authorized.') } catch { issues.push('The one-off paid continuation changed or expired before release.') }
+  }
+  const strategyContext = await repository.studioGet(owner, 'complete_context', pack.id)
   if (!input.automatic || !profile || profile.accountId !== input.accountId || profile.platform !== input.platform || profile.automaticPolicy?.consentedBy !== actorUid || await workspaceRole(repository, owner, actorUid) !== 'owner') issues.push('Current account owner consent is required for automatic publishing.')
   const text = assessAutomaticText(pack, profile)
   issues.push(...text.issues)
@@ -78,10 +89,12 @@ export async function assessAutomationRelease({ repository, owner, pack, assets,
   }
   const media = assessAutomaticMedia(pack, assets || [], inspections)
   issues.push(...media.issues)
-  return { eligible: issues.length === 0, issues: [...new Set(issues)], text, media }
+  const strategyMedia = profile ? await recordAutomaticStrategyMedia(repository, owner, pack, profile, assets || [], inspections) : null
+  issues.push(...workflowPrepublicationIssues(pack, strategyContext?.context || {}, input.platform, input.accountId, new Date(), strategyMedia ? [{ record: strategyMedia, profile, assets: assets || [] }] : []))
+  return { eligible: issues.length === 0, issues: [...new Set(issues)], text, media, strategyMedia }
 }
 
-export function createAutomationServices(repository, { research = researchNiche, fetchSource = fetchEvidence, write = generateContent, evaluate = reviewAutomaticText, render = renderLocalMedia, saveFile = saveMediaFile, readFile = readMediaFile, publisher, demoGenerate = createDemoGenerator } = {}) {
+export function createAutomationServices(repository, { research = researchNiche, fetchSource = fetchEvidence, write = generateContent, evaluate = reviewAutomaticText, render = renderLocalMedia, saveFile = saveMediaFile, readFile = readMediaFile, publisher, demoGenerate = createDemoGenerator, publicResearch = enrichPackagePublicResearch } = {}) {
   const publishing = publisher || createPublishingService({ repository, readFile, assessReady: context => assessAutomationRelease({ ...context, readFile }) })
   async function savedPack(context) {
     const pack = await repository.studioGet(context.owner, 'package', context.run.packageId)
@@ -91,8 +104,10 @@ export function createAutomationServices(repository, { research = researchNiche,
   async function checkConsent(context) {
     const current = await repository.studioGet(context.owner, 'account_profile', context.profile.id)
     if (!current?.enabled || !current.automationConsent || costScopeHash(current, null) !== costScopeHash(context.profile, null) || await workspaceRole(repository, context.owner, context.actorUid) !== 'owner') throw Object.assign(blocked('The account plan or owner consent changed before dispatch.'), { code: 'JOB_BLOCKED' })
+    await assertFreeCampaign({ ...context, repository })
+    await assertDemoRunContinuation({ ...context, repository })
   }
-  const boundedGenerate = request => generateJson({ ...request, maxTokens: Math.min(request.maxTokens || 8000, 6000) }, { preferTools: Boolean(request.schema?.properties?.claims), acceptCompleteJsonAtLength: Boolean(request.schema?.properties?.claims), request: (url, init) => fetch(url, { ...init, signal: AbortSignal.any([init.signal, AbortSignal.timeout(110000)]) }) })
+  const boundedGenerate = request => generateJson({ ...request, maxTokens: Math.min(request.maxTokens || 8000, 6000) }, { preferTools: Boolean(request.schema?.properties?.claims && !request.schema?.properties?.ratings), acceptCompleteJsonAtLength: Boolean(request.schema?.properties?.claims), request: (url, init) => fetch(url, { ...init, signal: AbortSignal.any([init.signal, AbortSignal.timeout(110000)]) }) })
   async function generateDemo(context, pack) {
     const demoContext = { ...context, repository, phase: 'generate' }
     const authorization = await assertDemoAuthorization(demoContext)
@@ -100,6 +115,12 @@ export function createAutomationServices(repository, { research = researchNiche,
     if (!pack || pack.id !== binding?.packageId) throw blocked('The paid demo draft does not match its authorized package.')
     if (context.requestId !== demoStageRequestId(context.run, 'generate')) throw blocked('The paid demo operation identifier does not match this exact run.')
     await checkConsent(context)
+    const strategy = await repository.studioGet(context.owner, 'complete_context', pack.id)
+    const strategyRevision = strategy?.revision || 0; const strategyHash = costScopeHash(strategy?.context || {}, null)
+    const checkStrategy = async () => {
+      const current = await repository.studioGet(context.owner, 'complete_context', pack.id)
+      if ((current?.revision || 0) !== strategyRevision || costScopeHash(current?.context || {}, null) !== strategyHash) throw blocked('The saved strategy changed during paid writing; its draft was preserved.')
+    }
     const quality = context.run.qualityRevision
     let automaticReviewFeedback
     if (quality) {
@@ -113,7 +134,7 @@ export function createAutomationServices(repository, { research = researchNiche,
       if (previous.scope?.demoId !== context.run.demoAuthorizationId || previous.scope?.packageId !== pack?.id) throw blocked('The paid demo operation belongs to different content.')
       return { status: previous.status, jobId: previous.id, package: previous.result }
     }
-    const scope = { operation: 'generation', generationProvider: `${authorization.authorization.provider || 'vertex'}-demo`, demoId: context.run.demoAuthorizationId, packageId: pack.id, revision: pack.revision, actorUid: context.actorUid, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null), model: authorization.model, ...(quality ? { qualityRevisionOf: quality.reviewId } : {}) }
+    const scope = { operation: 'generation', generationProvider: `${authorization.authorization.provider || 'vertex'}-demo`, demoId: context.run.demoAuthorizationId, packageId: pack.id, revision: pack.revision, actorUid: context.actorUid, contentHash: contentHash(pack), profileHash: costScopeHash(context.profile, null), strategyRevision, strategyHash, model: authorization.model, ...(quality ? { qualityRevisionOf: quality.reviewId } : {}) }
     let admission
     try { admission = await repository.studioJobReserve(context.owner, context.requestId, costScopeHash(scope, null), env.STUDIO_DAILY_GENERATIONS, scope) }
     catch (error) { throw Object.assign(error, { preDispatch: true }) }
@@ -122,23 +143,31 @@ export function createAutomationServices(repository, { research = researchNiche,
     try {
       job = await repository.studioJobUpdate(context.owner, job.id, { status: 'running' }, job.revision, 'reserved')
       const settings = settingsSchema.parse({ ...pack.settings, platform: context.profile.platform, outputs: ['platforms', 'website'] })
-      const provider = demoGenerate(demoContext, { beforeAttempt: () => checkConsent(context) })
+      const provider = demoGenerate(demoContext, { beforeAttempt: async () => { await checkConsent(context); await checkStrategy() } })
       const generate = async request => { dispatched = true; return provider(request) }
-      const content = await write(pack.evidence, settings, { ...pack.researchContext, automationAccountId: context.profile.accountId, outputConstraint: writingConstraint, previousContent: quality ? pack.content : null, revisionInstruction: quality?.instruction || 'Write a fresh compact account-specific post and website article from the supplied source passages. Preserve attribution and scope; omit unsupported claims.', ...(automaticReviewFeedback ? { automaticReviewFeedback } : {}) }, generate, { beforeAttempt: () => checkConsent(context), fallback: undefined, startWithFallback: false })
+      const content = await write(pack.evidence, settings, { ...pack.researchContext, topicTitle: pack.title, strategyWorkflow: workflowGenerationContext(strategy?.context || {}), automationAccountId: context.profile.accountId, outputConstraint: writingConstraint, previousContent: quality ? pack.content : null, revisionInstruction: quality?.instruction || 'Write a fresh compact account-specific post and website article from the supplied source passages. Preserve attribution and scope; omit unsupported claims.', ...(automaticReviewFeedback ? { automaticReviewFeedback } : {}) }, generate, { beforeAttempt: async () => { await checkConsent(context); await checkStrategy() }, fallback: undefined, startWithFallback: false })
       const review = reviewContent(content, pack.evidence, settings, { automationAccountId: context.profile.accountId })
       if (review.issues.length) throw Object.assign(new Error('Demo writing did not pass evidence validation'), { code: 'EVIDENCE_VALIDATION', issues: review.issues, issueCount: review.issues.length })
       await checkConsent(context)
+      await checkStrategy()
       await assertDemoAuthorization(demoContext)
       const current = await repository.studioGet(context.owner, 'package', pack.id)
       if (!current || current.revision !== pack.revision || contentHash(current) !== scope.contentHash) throw blocked('The saved draft changed during the demo operation.')
-      const completed = { ...pack, content, settings, jobId: job.id, status: 'completed', editorialStatus: 'needs_review', review, automaticReview: null, independentReview: null, approval: null, providerReceipt: generationReceipt(content) || null }
+      const completed = { ...pack, content, settings, strategyAlignment: contentAlignment(content), jobId: job.id, status: 'completed', editorialStatus: 'needs_review', review, automaticReview: null, independentReview: null, approval: null, providerReceipt: generationReceipt(content) || null }
+      if (authorization.authorization.sourceCampaignContinuation) completed.paidContinuation = { demoAuthorizationId: context.run.demoAuthorizationId, runId: context.run.id, sourceCampaignId: authorization.authorization.sourceCampaignContinuation.sourceCampaignId, method: 'one-off-paid-generation-and-review' }
       completed.assurance = buildAssurance(completed, { actorId: context.actorUid, runId: job.id, stage: 'generation' })
       const result = await repository.studioPut(context.owner, 'package', pack.id, completed, pack.revision)
       await repository.studioJobUpdate(context.owner, job.id, { status: 'completed', result }, job.revision, 'running')
       return { status: 'completed', jobId: job.id, package: result }
     } catch (error) {
       const diagnostics = safeJobFailure(error)
-      const rejected = !dispatched || error.preDispatch === true || error.code === 'EVIDENCE_VALIDATION' || (error.transportStatus === 200 && ['MODEL_INCOMPLETE', 'MODEL_JSON_INVALID'].includes(error.code))
+      const rejection = error.nonbillableRejection
+      if (rejection?.httpStatus === 429 && rejection.actualMicros === 0 && rejection.policyUrl === 'https://cloud.google.com/model-garden/pricing') {
+        const requestId = `demo:${job.id}:0`
+        const cost = await repository.budgetGet(authorization.budgetOwner, requestId)
+        if (cost?.status === 'settled' && cost.actualMicros === 0 && !cost.overage) await repository.studioPut(context.owner, 'provider_rejection', job.id, { version: 'vertex-http-rejection-v1', jobId: job.id, requestId, runId: context.run.id, packageId: pack.id, demoAuthorizationId: context.run.demoAuthorizationId, provider: 'vertex', projectId: authorization.projectId, model: authorization.model, httpStatus: 429, actualMicros: 0, noOutput: true, settledAt: new Date().toISOString(), evidenceHash: costScopeHash({ diagnostics, rejection, requestId, jobId: job.id, scope }, null), evidencePath: 'server-observed-provider-http-rejection', policyUrl: rejection.policyUrl }, 0)
+      }
+      const rejected = !dispatched || error.preDispatch === true || Boolean(rejection?.httpStatus === 429 && rejection.actualMicros === 0) || error.code === 'EVIDENCE_VALIDATION' || (error.transportStatus === 200 && ['MODEL_INCOMPLETE', 'MODEL_JSON_INVALID'].includes(error.code))
       const status = rejected ? 'failed' : 'dispatch_unknown'
       const current = await repository.studioJobGet(context.owner, job.id)
       if (current?.status === 'running') await repository.studioJobUpdate(context.owner, job.id, { status, error: `Paid demo writing did not complete; existing saved content preserved. Diagnostics: ${JSON.stringify(diagnostics)}` }, current.revision, 'running')
@@ -148,9 +177,22 @@ export function createAutomationServices(repository, { research = researchNiche,
   return {
     async research(context) {
       const { owner, profile, slot, requestId, actorUid } = context
+      const campaign = await assertFreeCampaign({ ...context, repository })
+      if (campaign) {
+        await checkConsent(context)
+        const id = hash(['campaign-reference', campaign.id, profile.accountId, campaign.referenceUrl].join(':')).slice(0, 32)
+        const prior = await repository.studioGet(owner, 'research', id)
+        if (prior?.campaignHash === context.run.campaignHash && prior.evidence?.[0]?.url && Date.parse(prior.researchedAt) > Date.now() - 6 * 3600000 && Date.parse(prior.researchedAt) <= Date.now()) return normalizedResearch(prior, context)
+        const source = { ...await fetchSource(campaign.referenceUrl), id: 'E1' }
+        await checkConsent(context)
+        if (!source.excerpt?.trim() || source.excerpt.trim().length < 100 || !source.title?.trim() || !Number.isFinite(Date.parse(source.retrievedAt)) || Date.parse(source.retrievedAt) > Date.now()) throw blocked('The campaign reference did not provide a current readable publisher capture.')
+        const report = await repository.studioPut(owner, 'research', id, { campaignId: campaign.id, campaignHash: context.run.campaignHash, requestedTopic: campaign.topic, researchedAt: new Date().toISOString(), evidence: [source], opportunities: [{ title: source.title.slice(0, 200), whatChanged: 'Source-led editorial opportunity from the frozen campaign reference; factual claims must be supported by the captured publisher passages.', eventDate: null, verification: 'reported', whyItMatters: 'Explain the selected publisher material for the saved account audience without claiming independent verification.', evidenceIds: ['E1'], positive: [], negative: [], audienceReaction: { status: 'insufficient-evidence', summary: 'Publisher material does not establish audience reactions.', evidenceIds: [], limitations: 'Public audience intake is collected separately; no reactions are invented.' } }], methodology: 'Direct retrieval of the exact owner-authorized campaign reference. This is a source-led editorial lead, not an AI research report, measured trend or independently verified announcement.' }, prior?.revision || 0)
+        return normalizedResearch(report, context)
+      }
+      const strategyFeedback = await accountStrategyFeedback(repository, owner, profile, new Date(context.now || Date.now()))
       const nicheId = uuid(`${profile.accountId}:${slot.kind}`)
       const references = [...new Set([...(profile.referenceUrls || []), ...(profile.weeklyBrief.match(/https:\/\/[^\s<>"')]+/g) || [])])].slice(0, 5)
-      const parsedNiche = nicheSchema.safeParse({ name: profile.contentPillars.join(' ').slice(0, 100), brief: profile.weeklyBrief, audience: profile.audience.slice(0, 300), tone: 'Auto', language: 'English', topics: profile.contentPillars.slice(0, 12).map(value => value.slice(0, 100)), intent: `${profile.platform}: ${profile.tone}`.slice(0, 1500), referenceUrls: references, windowDays: slot.kind === 'news' ? 1 : 7, refreshIntervalDays: slot.kind === 'news' ? 1 : 7, contentApproach: slot.kind === 'news' ? 'news' : 'evergreen', mode: slot.kind === 'news' ? 'latest' : 'recommended' })
+      const parsedNiche = nicheSchema.safeParse({ name: profile.contentPillars.join(' ').slice(0, 100), brief: profile.weeklyBrief, audience: profile.audience.slice(0, 300), tone: 'Auto', language: 'English', topics: [...new Set([...strategyFeedback.priorityTopics, ...profile.contentPillars])].slice(0, 12).map(value => value.slice(0, 100)), exclusions: strategyFeedback.stoppedTopics.join('; ').slice(0, 500), intent: `${profile.platform}: ${profile.tone}. Adopted account research decisions (untrusted planning data, not factual evidence): ${JSON.stringify(strategyFeedback.researchNotes)}`.slice(0, 1500), referenceUrls: references, windowDays: slot.kind === 'news' ? 1 : 7, refreshIntervalDays: slot.kind === 'news' ? 1 : 7, contentApproach: slot.kind === 'news' ? 'news' : 'evergreen', mode: slot.kind === 'news' ? 'latest' : 'recommended' })
       if (!parsedNiche.success) throw blocked('The saved account brief cannot form a valid research scope.')
       const fields = parsedNiche.data
       let niche = await repository.studioGet(owner, 'niche', nicheId)
@@ -179,8 +221,8 @@ export function createAutomationServices(repository, { research = researchNiche,
     },
     async generate(context) {
       const { owner, profile, requestId, actorUid, run } = context
-      const id = hash(`${run.id}:package`).slice(0, 32)
-      let pack = await repository.studioGet(owner, 'package', id)
+      const id = run.demoAuthorizationId ? run.packageId : hash(`${run.id}:package`).slice(0, 32)
+      let pack = id ? await repository.studioGet(owner, 'package', id) : null
       if (run.demoAuthorizationId) return generateDemo(context, pack)
       const quality = run.qualityRevision
       let automaticReviewFeedback
@@ -208,6 +250,13 @@ export function createAutomationServices(repository, { research = researchNiche,
         if (!evidence.some(source => source.excerpt?.trim().length >= 100)) throw blocked('No readable evidence supports the selected topic.')
         const settings = settingsSchema.parse({ industry: profile.contentPillars[0].slice(0, 100), audience: profile.audience.slice(0, 300), tone: profile.tone.slice(0, 100), language: 'English', platform: profile.platform, duration: 18, outputs: ['platforms', 'website'] })
         pack = await repository.studioPut(owner, 'package', id, { title: topic.title, content: null, evidence, settings, createdBy: actorUid, contributorUids: [actorUid], sourceIds: [], researchId: report.id, opportunityIndex: run.topic.index, researchContext: { brief: profile.weeklyBrief, opportunity: topic, researchedAt: report.researchedAt, methodology: report.methodology, automationAccountId: profile.accountId, outputConstraint: writingConstraint }, status: 'draft', editorialStatus: 'draft', review: null }, 0)
+      }
+      if (!await repository.studioGet(owner, 'complete_context', pack.id)) {
+        const template = await accountWorkflowTemplate(repository, owner, profile, pack.title, new Date(context.now || Date.now()))
+        if (template) await repository.studioPut(owner, 'complete_context', pack.id, { packageId: pack.id, context: template.context, workflowSource: template.source, updatedBy: actorUid }, 0)
+      }
+      if (!quality && !context.replacementOf && (publicResearch !== enrichPackagePublicResearch || write === generateContent)) {
+        await publicResearch({ repository, owner, profile, pack, actorUid, now: new Date(context.now || Date.now()), assertAuthorization: () => checkConsent(context) })
       }
       if (context.replacementOf) {
         await checkConsent(context)
@@ -259,6 +308,7 @@ export function createAutomationServices(repository, { research = researchNiche,
       return reviewOutcome(saved, context.profile)
     },
     async render(context) {
+      await checkConsent(context)
       if (render === renderLocalMedia) assertCapability('media')
       const pack = await savedPack(context)
       const text = assessAutomaticText(pack, context.profile)
@@ -266,17 +316,31 @@ export function createAutomationServices(repository, { research = researchNiche,
       const kind = ['YouTube', 'Instagram'].includes(context.profile.platform) ? 'video' : 'image'
       const id = uuid(`${context.requestId}:${kind}`)
       const prior = await repository.studioGet(context.owner, 'asset', id)
-      if (prior) return { assets: [prior] }
+      if (prior) {
+        const inspection = inspectMediaBytes(prior, await readFile(prior.id))
+        await recordAutomaticStrategyMedia(repository, context.owner, pack, context.profile, [prior], [inspection])
+        return { assets: [prior] }
+      }
       const result = await render(kind, pack)
+      await checkConsent(context)
       await saveFile(id, result.bytes, result.mime)
       const candidate = { id, requestId: context.requestId, packageId: pack.id, packageRevision: pack.revision, packageContentHash: contentHash(pack), createdBy: context.actorUid, kind, prompt: pack.content.website?.title || pack.title, status: 'completed', mime: result.mime, bytes: result.bytes.length, sha256: hash(result.bytes), estimatedUsd: 0, provenance: result.provenance, technicalReport: result.technicalReport, captions: result.captions }
       const inspection = inspectMediaBytes(candidate, await readFile(id))
       const acceptance = assessAutomaticMedia(pack, [candidate], [inspection])
       const asset = await repository.studioPut(context.owner, 'asset', id, { ...candidate, verification: { status: acceptance.eligible ? 'passed' : 'blocked', issues: acceptance.issues } }, 0)
       if (!acceptance.eligible) return acceptance
+      await recordAutomaticStrategyMedia(repository, context.owner, pack, context.profile, [asset], [inspection])
       return { assets: [asset], eligible: true }
     },
+    async recoverPublication(context) {
+      await checkConsent(context)
+      const pack = await savedPack(context)
+      if (!pack.paidContinuation || pack.paidContinuation.runId !== context.run.id || pack.paidContinuation.demoAuthorizationId !== context.run.demoAuthorizationId || contentHash(pack) !== context.run.contentHash) return { eligible: false, issues: ['The paid continuation content binding changed.'] }
+      const assets = await Promise.all(context.run.assetIds.map(id => repository.studioGet(context.owner, 'asset', id)))
+      return assessAutomationRelease({ repository, owner: context.owner, actorUid: context.actorUid, pack, assets, profile: context.profile, input: { automatic: true, accountId: context.profile.accountId, platform: context.profile.platform }, readFile })
+    },
     async publish(context) {
+      await checkConsent(context)
       const pack = await savedPack(context)
       const value = await publishing.publish({ owner: context.owner, actorUid: context.actorUid, packageId: pack.id, input: { requestId: context.requestId, revision: pack.revision, accountId: context.profile.accountId, platform: context.profile.platform, mode: 'now', caption: approvedCaption(pack, context.profile.platform), assetIds: context.run.assetIds, automatic: true, confirmed: true } })
       return value.receipt

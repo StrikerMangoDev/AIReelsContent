@@ -81,7 +81,9 @@ test('generation prompt treats misleading research summaries as leads and preser
     assert.match(request.system, /This request writes one saved source-backed topic, not a research briefing/)
     assert.match(request.system, /Do not create a ten-topic collection or apply research-only topic-count targets/)
     assert.match(request.system, /Do not infer publisher categories, mechanisms, consensus or causal explanations/)
-    assert.deepEqual(request.input.evidence, evidence)
+    assert.equal(request.input.evidence[0].excerpt, undefined, 'Only eligible passages supply claim text; source metadata remains separate')
+    assert.equal(request.input.evidence[0].id, evidence[0].id)
+    assert.equal(request.input.passages[0].quote, evidence[0].excerpt)
     assert.equal(request.input.context.opportunity.whatChanged, context.opportunity.whatChanged)
     return { hooks: ['A daily horoscope [C1]'], script: 'USA Today lists a daily horoscope for October 25, 2026. [C1]', claims: [{ id: 'C1', text: 'USA Today daily horoscope for October 25, 2026.', evidenceId: 'E1', quote: evidence[0].excerpt, status: 'attributed' }] }
   })

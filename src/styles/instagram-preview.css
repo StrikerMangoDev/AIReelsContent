@@ -35,3 +35,54 @@
 .instagram-visual-direction h3 { font-size:12px; margin:0 0 8px; }
 .instagram-visual-direction p { font-size:12px; line-height:1.7; color:#667085; margin:0; overflow-wrap:anywhere; }
 @media(max-width:480px) { .instagram-slide { padding:44px 22px 28px; } .instagram-slide h3 { font-size:25px; } }
+/* Platform surfaces stay neutral and separate from the Studio brand controls. */
+.platform-preview { min-width:0; width:100%; }
+.platform-preview-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.platform-preview-heading>span { font-size:12px; color:var(--brand-muted); padding:4px 8px; border:1px solid var(--brand-line); border-radius:999px; }
+.workspace-shell .studio-desk .platform-preview>p { margin:8px 0 16px; font-size:14px; line-height:1.5; }
+.platform-post { background:#fff; color:#171717; border:1px solid #dce2eb; border-radius:10px; overflow:hidden; font:400 15px/1.5 Arial,sans-serif; }
+.platform-post-author { display:flex; align-items:center; gap:10px; padding:14px; }
+.platform-post-avatar { display:grid; place-items:center; flex:none; width:38px; height:38px; border-radius:50%; background:#e8edf1; color:#354553; font-weight:600; }
+.platform-post-author>div { flex:1; min-width:0; }
+.platform-post-author strong { display:block; font-size:14px; }
+.platform-post-author>div>span { display:block; color:#68717d; font-size:12px; margin-top:2px; }
+.platform-post-author>svg { flex:none; color:#68717d; }
+.platform-post-media { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; width:100%; min-width:0; min-height:220px; aspect-ratio:1; padding:24px; background:#f3f5f7; border-block:1px solid #e5e7eb; text-align:center; color:#68717d; }
+.platform-post-media strong { font-size:14px; font-weight:500; }
+.platform-post-media>span { font-size:12px; }
+.platform-post-media[data-video=true] { aspect-ratio:16/9; min-height:150px; color:#d1d5db; background:#171717; }
+.platform-post-caption { padding:0 14px 14px; }
+.platform-caption-handle { display:block; font-size:14px; margin-bottom:4px; }
+.platform-post .editor-exact-post { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden; border:0; padding:0; margin:0; font:400 15px/1.55 Arial,sans-serif; white-space:pre-wrap; overflow-wrap:anywhere; }
+.platform-post .editor-exact-post[data-expanded=true] { display:block; overflow:visible; -webkit-line-clamp:unset; }
+.workspace-shell .studio-desk .platform-post .platform-caption-expand { min-height:44px; padding:4px 0; margin:0; border:0; background:transparent; color:#566176; font:400 14px/1.4 Arial,sans-serif; }
+.platform-post-actions { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-top:1px solid #e5e7eb; color:#566176; }
+.platform-post-actions>span { display:flex; align-items:center; justify-content:center; gap:5px; font-size:12px; }
+.platform-post-actions svg { flex:none; }
+.platform-post[data-platform=Instagram] .platform-post-actions { justify-content:flex-start; border-top:0; color:#171717; }
+.platform-post[data-platform=Instagram] .platform-action-end { margin-left:auto; }
+.platform-post[data-platform=X] { border-radius:0; }
+.platform-post[data-platform=X] .platform-post-avatar { border-radius:50%; }
+.platform-post[data-platform=X] .platform-post-caption { padding-left:62px; }
+.platform-post[data-platform=X] .platform-post-actions { padding-left:62px; border-top:0; }
+.platform-post[data-platform=LinkedIn] .platform-post-avatar { border-radius:4px; }
+.workspace-shell .studio-desk .platform-post .platform-video-title { margin:12px 14px 0; font:600 17px/1.4 Arial,sans-serif; overflow-wrap:anywhere; }
+.platform-post[data-platform=YouTube] .platform-post-actions { justify-content:flex-start; gap:24px; border-top:0; }
+.platform-video-description { padding:0 12px 12px; }
+.platform-video-description .platform-post-caption { padding:12px; background:#f3f5f7; border-radius:8px; }
+.workspace-shell .studio-desk .platform-preview .platform-preview-note { margin:12px 0 0; font-size:14px; }
+@media(max-width:600px) { .platform-post-actions { gap:6px; padding-inline:10px; } .platform-post-actions>span { flex:1; flex-direction:column; min-width:0; font-size:11px; gap:3px; } }
+
+/* Connected assets retain their original proportions; platform crops remain illustrative. */
+.platform-post-rendered-media { margin:0; min-width:0; border-block:1px solid #e5e7eb; background:#f3f5f7; }
+.platform-post-rendered-media img,.platform-post-rendered-media video { display:block; width:100%; max-height:480px; object-fit:contain; }
+.connected-post-preview { min-width:0; }
+.post-preview-connections { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px; align-items:end; gap:12px; padding:20px; border-bottom:1px solid var(--line,#dbe2ea); }
+.post-preview-connections label { display:grid; gap:6px; min-width:0; font-size:14px; font-weight:600; }
+.workspace-shell .studio-desk .post-preview-connections label { margin:0; }
+.post-preview-connections select { width:100%; min-width:0; min-height:44px; padding:8px; border:1px solid #a4afbf; border-radius:8px; background:white; color:#142C38; font:inherit; }
+.connected-post-preview>p { margin:12px 20px; font-size:14px; line-height:1.5; }
+.connected-post-preview>[role=alert] { color:#a12723; }
+.connected-post-preview>.platform-preview { margin:0; padding:20px; }
+.connected-post-preview .post-preview-selection-note { margin-top:0; color:#566176; }
+@media(max-width:400px) { .post-preview-connections { grid-template-columns:minmax(0,1fr) 44px; } .post-preview-connections label { grid-column:1; } .post-preview-connections>.studio-icon-action { grid-column:2; grid-row:2; } }

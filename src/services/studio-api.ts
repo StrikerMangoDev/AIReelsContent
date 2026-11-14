@@ -21,8 +21,26 @@ export async function studioRequest<T>(path: string, body?: unknown, method = 'G
   signal?.throwIfAborted()
   const response = await fetch(`/api/studio${path}`, { method, signal, headers: { Accept: 'application/json', ...headers, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) }, ...(body !==undefined ? { body: JSON.stringify(body) } : {}) })
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw Object.assign(new Error(typeof data.error === 'string' ? data.error : typeof data.message === 'string' ? data.message : `Request failed (${response.status}). Please retry.`), { status: response.status })
+  if (!response.ok) {
+    const message = typeof data.error === 'string' ? data.error : typeof data.message === 'string' ? data.message : `Request failed (${response.status}). Please retry.`
+    const details = Array.isArray(data.issues) ? data.issues : Array.isArray(data.details) ? data.details : []
+    const issues = details.slice(0, 5).flatMap((issue: { message?: unknown }) => typeof issue?.message === 'string' ? [issue.message] : [])
+    throw Object.assign(new Error([message, ...new Set(issues)].join('. ')), { status: response.status })
+  }
   return data as T
+}
+
+export async function studioAssetBlob(id: string, signal?: AbortSignal): Promise<Blob> {
+  const actor = workspaceIdentity(); const workspace = activeWorkspace()
+  const headers = await studioAuthHeaders()
+  signal?.throwIfAborted()
+  if (actor !== workspaceIdentity() || workspace !== activeWorkspace()) throw new Error('Workspace changed. Try again in your current workspace.')
+  const response = await fetch(`/api/studio/assets/${encodeURIComponent(id)}/file`, { headers, signal })
+  if (!response.ok) throw new Error('Could not load this generated asset. Check access and try again.')
+  const blob = await response.blob()
+  signal?.throwIfAborted()
+  if (actor !== workspaceIdentity() || workspace !== activeWorkspace()) throw new Error('Workspace changed. Try again in your current workspace.')
+  return blob
 }
 
 // Only saved-data reads retry; mutations may already have been accepted by the server.

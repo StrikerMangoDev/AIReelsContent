@@ -30,14 +30,24 @@ export function ContentPreview({ content }: { content: StudioContent }) {
   </div>
 }
 
-export function contentMarkdown(title: string, content: StudioContent, evidence: { id: string; title: string; url: string; limitations: string[] }[]) {
+export function contentMarkdown(title: string, content: StudioContent, evidence: { id: string; title: string; url: string; limitations: string[] }[], sections: readonly string[] = ['main', 'brief', 'keywords', 'alternatives', 'production']) {
   const strategy = content.strategy
-  return [`# ${title}`, ...(content.script ? ['## Narration', cleanCopy(content.script), '## Hooks', ...(content.hooks || []).map(cleanCopy)] : []), ...(content.captions ? ['## Reel caption', cleanCopy(content.captions.reel), '## LinkedIn caption', cleanCopy(content.captions.linkedin)] : []), ...(content.website ? ['## Website draft', cleanCopy(content.website.title), cleanCopy(content.website.body)] : []),
-    ...(strategy ? ['## Creative direction', strategy.angle, strategy.whyNow, `Audience: ${strategy.audience}`, `Language: ${strategy.language} — ${strategy.languageReason}`, `Voice: ${strategy.voice} — ${strategy.delivery}`, strategy.voiceReason,
-      ...(strategy.platforms || []).flatMap(item => [`## ${item.platform}`, `### ${cleanCopy(item.headline)}`, `Hook: ${cleanCopy(item.hook)}`, cleanCopy(item.body), cleanCopy(item.cta), item.hashtags.join(' '), `Alternative hook: ${cleanCopy(item.alternativeHook)}`, `Retention: ${item.retentionPlan}`, `Thumbnail: ${item.thumbnail}`, `Test: ${item.testPlan}`]),
-      '## Suggested keywords (not measured search volume)', strategy.keywords.join(', '), ...(strategy.production ? ['## Production prompts', ...Object.entries(strategy.production).map(([key, value]) => `### ${key}\n${cleanCopy(value)}`)] : []),
-      '## Experiments', ...(strategy.experiments || []).map(item => `${item.variable}\nA: ${item.variantA}\nB: ${item.variantB}\nMetric: ${item.metric}\n${item.decisionRule}`), '## Source notes — check before publishing', strategy.factCheck] : []),
-    ...(content.scenes ? ['## Scene plan', ...content.scenes.map((scene, index) => `### Scene ${index + 1}: ${scene.timing}\n${cleanCopy(scene.narration)}\nOn screen: ${scene.onScreen}\nVisual: ${scene.visualPrompt}\nDelivery: ${scene.voiceDirection}`)] : []),
+  const has = (id: string) => sections.includes(id)
+  return [`# ${title}`, ...(has('main') && content.script ? ['## Narration', cleanCopy(content.script)] : []), ...(has('alternatives') && content.hooks?.length ? ['## Hooks', ...content.hooks.map(cleanCopy)] : []), ...(has('main') && content.captions ? ['## Reel caption', cleanCopy(content.captions.reel), '## LinkedIn caption', cleanCopy(content.captions.linkedin)] : []), ...(has('main') && content.website ? ['## Website draft', cleanCopy(content.website.title), cleanCopy(content.website.body)] : []),
+    ...(strategy ? [
+      ...(has('brief') ? ['## Creative direction', strategy.angle, strategy.whyNow, `Audience: ${strategy.audience}`, `Language: ${strategy.language} — ${strategy.languageReason}`, `Voice: ${strategy.voice} — ${strategy.delivery}`, strategy.voiceReason] : []),
+      ...(strategy.platforms || []).flatMap(item => [
+        ...(has('main') || has('keywords') || has('alternatives') || has('production') ? [`## ${item.platform}`] : []),
+        ...(has('main') ? [`### ${cleanCopy(item.headline)}`, `Hook: ${cleanCopy(item.hook)}`, cleanCopy(item.body), cleanCopy(item.cta)] : []),
+        ...(has('keywords') ? [(item.hashtags || []).join(' ')] : []),
+        ...(has('alternatives') ? [`Alternative hook: ${cleanCopy(item.alternativeHook)}`, `Retention: ${item.retentionPlan}`, `Test: ${item.testPlan}`] : []),
+        ...(has('production') ? [`Thumbnail: ${item.thumbnail}`] : []),
+      ]),
+      ...(has('keywords') && strategy.keywords?.length ? ['## Suggested keywords (not measured search volume)', strategy.keywords.join(', ')] : []),
+      ...(has('production') && strategy.production ? ['## Production prompts', ...Object.entries(strategy.production).map(([key, value]) => `### ${key}\n${cleanCopy(value)}`)] : []),
+      ...(has('alternatives') && strategy.experiments?.length ? ['## Experiments', ...strategy.experiments.map(item => `${item.variable}\nA: ${item.variantA}\nB: ${item.variantB}\nMetric: ${item.metric}\n${item.decisionRule}`)] : []),
+      '## Source notes — check before publishing', strategy.factCheck] : []),
+    ...((has('main') || has('production')) && content.scenes?.length ? ['## Scene plan', ...content.scenes.map((scene, index) => [`### Scene ${index + 1}: ${scene.timing}`, ...(has('main') ? [cleanCopy(scene.narration), `On screen: ${scene.onScreen}`] : []), ...(has('production') ? [`Visual: ${scene.visualPrompt}`, `Delivery: ${scene.voiceDirection}`] : [])].join('\n'))] : []),
     '## Claims and evidence', ...content.claims.map(claim => `${claim.id}: ${claim.text}\n${claim.evidenceId}: ${claim.quote}`),
     '## Sources', ...evidence.map(item => `[${item.id}] ${item.title}: ${item.url}\n${item.limitations.join(' ')}`),
   ].join('\n\n')

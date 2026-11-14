@@ -9,11 +9,18 @@ export function evidencePassages(evidence) {
     const ranges = []
     for (const match of excerpt.slice(0, 7200).matchAll(/https?:\/\/\S+/gi)) { ranges.push([offset, match.index]); offset = match.index + match[0].length }
     ranges.push([offset, Math.min(excerpt.length, 7200)])
-    for (const [begin, end] of ranges) for (let start = begin; start < end && passages.length < 12; start += 600) {
-      const quote = excerpt.slice(start, Math.min(start + 600, end))
-      if (quote.trim().length < 12) continue
-      const id = `P${createHash('sha256').update(JSON.stringify([source.id, start, quote])).digest('hex').slice(0, 24)}`
-      passages.push({ id, evidenceId: source.id, quote })
+    for (const [begin, end] of ranges) {
+      const boundaries = [...new Intl.Segmenter('en', { granularity: 'sentence' }).segment(excerpt.slice(begin, end))].map(part => begin + part.index + part.segment.length)
+      for (let start = begin; start < end && passages.length < 12;) {
+        const limit = Math.min(start + 600, end)
+        const stop = boundaries.findLast(boundary => boundary > start && boundary <= limit) || limit
+        const quote = excerpt.slice(start, stop)
+        const quoteStart = start
+        start = stop
+        if (quote.trim().length < 12) continue
+        const id = `P${createHash('sha256').update(JSON.stringify([source.id, quoteStart, quote])).digest('hex').slice(0, 24)}`
+        passages.push({ id, evidenceId: source.id, quote })
+      }
     }
     return passages
   })
