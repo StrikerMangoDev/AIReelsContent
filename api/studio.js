@@ -10,8 +10,8 @@ export function studioRequestUrl(request) {
     url.pathname = `/api/studio/${path}`
   }
   url.searchParams.delete('__studioPath')
-  // Vercel also caches rewrite parameters on request.query; strict endpoint schemas must see only public filters.
-  if (request.query && Object.hasOwn(request.query, '__studioPath')) delete request.query.__studioPath
+  // Remove Vercel's cached query/getter so Express parses the cleaned URL rather than the internal rewrite metadata.
+  if (Object.hasOwn(request, 'query')) delete request.query
   return url.pathname + url.search
 }
 
