@@ -73,8 +73,8 @@ test('nested auth routes return configuration JSON and enforce authentication', 
   }
 })
 
- test('catch-all routing metadata is removed only for the exact request path', () => {
+ test('reserved catch-all routing metadata never becomes an application filter', () => {
   assert.equal(apiRequestUrl('/api/studio/packages/abc/social-preview?path=studio%2Fpackages%2Fabc%2Fsocial-preview&platform=Instagram'), '/api/studio/packages/abc/social-preview?platform=Instagram')
-  assert.equal(apiRequestUrl('/api/studio/config?path=unrelated'), '/api/studio/config?path=unrelated')
-  assert.equal(apiRequestUrl('/api/studio/config?path=studio%2Fconfig&path=studio%2Fconfig'), '/api/studio/config?path=studio%2Fconfig&path=studio%2Fconfig')
+  assert.equal(apiRequestUrl('/api/studio/config?path=unrelated'), '/api/studio/config')
+  assert.equal(apiRequestUrl('/api/studio/config?path=studio%2Fconfig&path=studio%2Fconfig'), '/api/studio/config')
  })
