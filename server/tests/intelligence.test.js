@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import express from 'express'
 import { randomUUID } from 'node:crypto'
 import { createRepository } from '../storage/repository.js'
-import { groundedSources, groundedResearchOpeners, intelligenceRouter, validateIntelligence, refreshNextNiche, researchNiche, createResearch, refreshAvailableAt, nicheSchema } from '../studio/intelligence.js'
+import { groundedSources, groundedResearchOpeners, intelligenceRouter, validateIntelligence, refreshNextNiche, researchNiche, createResearch, refreshAvailableAt, nicheSchema, researchCollections } from '../studio/intelligence.js'
 import { studioRouter } from '../studio/routes.js'
 import { reviewContent } from '../studio/content.js'
 import { env } from '../config/env.js'
@@ -12,6 +12,24 @@ import { env } from '../config/env.js'
 const source = { id: 'E1', url: 'https://example.com/release', title: 'Announcement', publisher: 'example.com', excerpt: 'The publisher announced a model preview with limited availability. Independent capability testing has not yet been published.', hash: 'test', limitations: ['Publisher claim only'], type: 'retrieved-source', retrievedAt: new Date().toISOString() }
 const topic = { title: 'A model preview', whatChanged: 'A preview was announced.', eventDate: null, verification: 'reported', whyItMatters: 'Developers can evaluate availability.', evidenceIds: ['E1'], positive: [{ text: 'Preview access', evidenceIds: ['E1'] }], negative: [], audienceReaction: { status: 'insufficient-evidence', summary: 'No audience sample.', evidenceIds: [], limitations: 'No representative discussion data.' }, angle: 'Explain what preview means.', hook: 'Preview does not mean proven.', counterpoint: 'Independent testing is missing.', opportunityReason: 'Useful context, not measured popularity.', keywords: ['model preview'] }
 const briefing = { summary: 'A supported announcement.', opportunities: [topic], unknowns: ['Independent results'], evidence: [source], researchedAt: new Date(Date.now() - 86400000).toISOString(), searchQueries: ['model preview'], searchEntryPoint: '', methodology: 'Qualitative research' }
+
+test('library batches only current reports with bounded reads and reuses current category metadata', async () => {
+  let active = 0, peak = 0, reads = 0
+  const states = Array.from({ length: 9 }, (_, i) => ({ id: `n${i}`, ...(i < 8 ? { reportId: `r${i}` } : {}) }))
+  const niches = states.map(state => ({ id: state.id, name: `Current ${state.id}`, refreshIntervalDays: 7 }))
+  const repository = {
+    studioList: async () => { throw new Error('The route already loaded these records') },
+    studioGet: async (uid, kind, id) => {
+      assert.equal(uid, 'alice'); assert.equal(kind, 'research'); reads++; peak = Math.max(peak, ++active)
+      await new Promise(resolve => setImmediate(resolve)); active--
+      return { ...briefing, id, niche: { name: 'Old name' } }
+    },
+  }
+  const result = await researchCollections(repository, 'alice', states, niches)
+  assert.equal(result.length, 8); assert.equal(reads, 8); assert.equal(peak, 4)
+  assert.equal(result[0].niche.name, 'Current n0'); assert.equal(result[0].topicCount, 1)
+  assert.equal(result[0].refreshAvailableAt, new Date(Date.parse(briefing.researchedAt) + 7 * 86400000).toISOString())
+})
 
 test('persisted opaque category GUIDs support settings, image lookup and refresh while request UUIDs and owner scope remain strict', async () => {
   const repository = createRepository(':memory:'); const app = express(); app.use(express.json())

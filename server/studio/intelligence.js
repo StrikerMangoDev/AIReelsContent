@@ -74,15 +74,21 @@ export function researchScopeKey(niche) {
   return digest(JSON.stringify(fields))
 }
 
-export async function researchCollections(repository, uid) {
+export async function researchCollections(repository, uid, states, niches) {
+  states ??= await repository.studioList(uid, 'research_state')
+  niches ??= await repository.studioList(uid, 'niche')
+  const currentNiches = new Map(niches.map(niche => [niche.id, niche]))
   const collections = []
   // Read only each collection's latest snapshot, never its full research history.
-  for (const state of await repository.studioList(uid, 'research_state')) {
-    if (!state.reportId) continue
-    const report = await repository.studioGet(uid, 'research', state.reportId)
-    if (!report?.niche) continue
-    const currentNiche = await repository.studioGet(uid, 'niche', state.id) || report.niche
-    collections.push({ niche: currentNiche, reportId: report.id, researchedAt: report.researchedAt, topicCount: report.opportunities.length, summary: report.summary, refreshAvailableAt: refreshAvailableAt(report, currentNiche) })
+  for (let offset = 0; offset < states.length; offset += 4) {
+    const batch = await Promise.all(states.slice(offset, offset + 4).map(async state => {
+      if (!state.reportId) return null
+      const report = await repository.studioGet(uid, 'research', state.reportId)
+      if (!report?.niche) return null
+      const currentNiche = currentNiches.get(state.id) || report.niche
+      return { niche: currentNiche, reportId: report.id, researchedAt: report.researchedAt, topicCount: report.opportunities.length, summary: report.summary, refreshAvailableAt: refreshAvailableAt(report, currentNiche) }
+    }))
+    collections.push(...batch.filter(Boolean))
   }
   return collections.sort((a, b) => String(b.researchedAt).localeCompare(String(a.researchedAt)))
 }
@@ -322,7 +328,11 @@ export function intelligenceRouter({ repository, auth, research = researchNiche,
     const reports = rows.slice(0, 20); const last = reports.at(-1)
     return { reports, nextCursor: rows.length > 20 ? { before: last.createdAt, beforeId: last.id } : null }
   }
-  router.get('/', async (req, res) => res.json({ workspace: req.workspace, collections: await researchCollections(repository, ownerScope(req)), niches: await repository.studioList(ownerScope(req), 'niche'), ...await history(req), schedules: await repository.studioList(ownerScope(req), 'research_schedule'), states: await repository.studioList(ownerScope(req), 'research_state') }))
+  router.get('/', async (req, res) => {
+    const uid = ownerScope(req)
+    const [niches, schedules, states, page] = await Promise.all([repository.studioList(uid, 'niche'), repository.studioList(uid, 'research_schedule'), repository.studioList(uid, 'research_state'), history(req)])
+    res.json({ workspace: req.workspace, collections: await researchCollections(repository, uid, states, niches), niches, ...page, schedules, states })
+  })
   router.get('/top-ideas', async (req, res) => {
     const uid = ownerScope(req)
     const reports = []
