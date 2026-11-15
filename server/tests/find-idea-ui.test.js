@@ -7,7 +7,8 @@ import ts from 'typescript'
 const flatten = node => !node ? [] : Array.isArray(node) ? node.flatMap(flatten) : typeof node === 'object' ? [node, ...flatten(node.props?.children)] : []
 const text = node => node == null ? '' : Array.isArray(node) ? node.map(text).join('') : typeof node === 'object' ? text(node.props?.children) : String(node)
 const button = (tree, label) => flatten(tree).find(node => node.type === 'button' && text(node).trim() === label)
-const topic = tree => flatten(tree).find(node => node.type === 'input' && node.props.id === 'simple-topic')
+const topic = tree => flatten(tree).find(node => node.type === 'textarea' && node.props.id === 'simple-topic')
+const field = (tree, name) => flatten(tree).find(node => node.props?.name === name)
 const description = tree => flatten(tree).find(node => node.type === 'textarea' && node.props.maxLength === 4000)
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const deferred = () => { let resolve; let reject; const promise = new Promise((done, fail) => { resolve = done; reject = fail }); return { promise, resolve, reject } }
@@ -25,15 +26,14 @@ async function harness({ enabled = false, respond = async () => { throw new Erro
     },
     'react/jsx-runtime': { jsx: element, jsxs: element },
     'react-router-dom': { Link: 'a', useNavigate: () => path => navigations.push(path) },
-    'lucide-react': { ArrowRight: 'svg', Sparkles: 'svg' },
+    'lucide-react': Object.fromEntries(['ArrowRight', 'Sparkles', 'Zap', 'BookOpen', 'Search', 'SlidersHorizontal', 'Globe2', 'Check', 'ChevronDown'].map(name => [name, 'svg'])),
     '@/context/auth-state': { useAuth: () => ({ identity: { uid: 'alice' }, loading: false }) },
     '@/services/studio-api': { studioRequest: async (path, body, method) => {
       if (path === '/config') return { capabilities: { generation: enabled, research: enabled } }
       requests.push({ path, body, method }); return respond(path, body)
     } },
-    './CategorySetupFields': { CategorySetupFields: 'category-settings' },
     '@/services/category-setup': { categoryDefaults: { coverage: 'international', country: '', topics: [], intent: '', exclusions: '', refreshIntervalDays: 7, autoRefresh: false, language: 'Auto', windowDays: 7 } },
-    './IdeaLibrary': { CategoryCover: 'cover' }, '@/styles/studio.css': {}, '@/styles/discovery.css': {},
+    '@/styles/studio.css': {}, '@/styles/discovery.css': {}, '@/styles/idea-discovery.css': {},
   }
   const exports = {}
   runInNewContext(code, { exports, require: name => { assert.ok(name in modules, name); return modules[name] }, crypto: { randomUUID: () => `request-${++id}` } })
@@ -46,9 +46,9 @@ async function harness({ enabled = false, respond = async () => { throw new Erro
 test('Find ideas checks saved matches with providers off; examples only edit text and reuse navigates without research', async () => {
   const h = await harness({ respond: async path => { assert.equal(path, '/intelligence/ideas/check'); return { action: 'reuse', matchedId: 'ai-category', requestedTrending: true } } })
   let tree = h.tree
-  assert.equal(button(tree, 'Help me describe it').props.disabled, true)
-  button(tree, 'AI').props.onClick(); tree = h.render()
-  assert.equal(topic(tree).props.value, 'AI'); assert.equal(h.requests.length, 0)
+  assert.equal(button(tree, 'Refine topic').props.disabled, true)
+  button(tree, 'AI & Tech').props.onClick(); tree = h.render()
+  assert.equal(topic(tree).props.value, 'AI and technology'); assert.equal(h.requests.length, 0)
   topic(tree).props.onChange({ target: { value: 'trending AI content' } }); tree = h.render()
   assert.equal(button(tree, 'Find ideas').props.disabled, false)
   h.submit(tree); h.submit(tree); await tick()
@@ -56,19 +56,16 @@ test('Find ideas checks saved matches with providers off; examples only edit tex
   assert.deepEqual(h.navigations, ['/ideas/ai-category?reused=1&trending=1'])
 })
 
-test('preferences stay optional and missing national country opens the fields without dispatch', async () => {
+test('main preferences are visible and national coverage requires a visible country without dispatch', async () => {
   const h = await harness()
   let tree = h.tree
-  const settings = value => flatten(value).find(node => node.type === 'category-settings')
-  assert.equal(settings(tree).props.disabled, true, 'collapsed native required controls cannot block the main form')
+  assert.equal(field(tree, 'coverage').props.value, 'international')
+  assert.equal(field(tree, 'country'), undefined)
   assert.equal(flatten(tree).some(node => node.type === 'aside'), false)
   button(tree, 'News').props.onClick(); tree = h.render()
-  button(tree, 'Change preferences').props.onClick(); tree = h.render()
-  assert.equal(settings(tree).props.disabled, false)
-  settings(tree).props.onChange({ coverage: 'national', country: '' }); tree = h.render()
-  button(tree, 'Close preferences').props.onClick(); tree = h.render()
+  field(tree, 'coverage').props.onChange({ target: { value: 'national' } }); tree = h.render()
+  assert.equal(field(tree, 'country').props.required, true)
   h.submit(tree); await tick(); tree = h.render()
-  assert.equal(settings(tree).props.disabled, false)
   assert.ok(flatten(tree).some(node => node.props?.role === 'alert' && text(node).includes('Choose a country')))
   assert.equal(h.requests.length, 0)
 })
@@ -79,16 +76,41 @@ test('AI help remains editable, starts no research and ignores replies for an ed
     assert.equal(path, '/intelligence/ideas/help'); helpCalls++
     return helpCalls === 1 ? pending.promise : { brief: 'Explore Vastu traditions with clearly attributed sources.' }
   } })
-  let tree = h.tree; button(tree, 'AI').props.onClick(); tree = h.render()
-  button(tree, 'Help me describe it').props.onClick(); tree = h.render()
+  let tree = h.tree; button(tree, 'AI & Tech').props.onClick(); tree = h.render()
+  button(tree, 'Refine topic').props.onClick(); tree = h.render()
   topic(tree).props.onChange({ target: { value: 'Vastu' } }); pending.resolve({ brief: 'Old AI request description.' }); await tick(); tree = h.render()
   assert.equal(description(tree), undefined); assert.equal(topic(tree).props.value, 'Vastu')
-  button(tree, 'Help me describe it').props.onClick(); await tick(); tree = h.render()
+  button(tree, 'Refine topic').props.onClick(); await tick(); tree = h.render()
   assert.match(description(tree).props.value, /Vastu traditions/)
   description(tree).props.onChange({ target: { value: 'My own narrower description.' } }); tree = h.render()
   assert.equal(description(tree).props.value, 'My own narrower description.')
   assert.equal(h.requests.length, 2); assert.equal(h.navigations.length, 0)
   assert.notEqual(h.requests[0].body.requestId, h.requests[1].body.requestId)
+})
+
+test('research choices reach the existing intake contract and quick topics clear topic-specific refinements', async () => {
+  const h = await harness({ respond: async () => ({ action: 'clarify', reason: 'Add a specific angle.' }) })
+  let tree = h.tree
+  button(tree, 'News').props.onClick(); tree = h.render()
+  const change = (name, value) => { field(tree, name).props.onChange({ target: { value } }); tree = h.render() }
+  change('coverage', 'both'); change('country', 'India'); change('freshness', '30'); change('language', 'Hindi')
+  flatten(tree).find(node => node.type === 'input' && node.props.value === 'deep').props.onChange(); tree = h.render()
+  const multiline = flatten(tree).filter(node => node.type === 'textarea' && node.props.placeholder?.startsWith('One '))
+  multiline[0].props.onChange({ target: { value: 'Space policy\nSatellite launches' } })
+  multiline[1].props.onChange({ target: { value: 'https://example.com/a\nhttps://example.com/b' } }); tree = h.render()
+  const automatic = flatten(tree).find(node => node.type === 'input' && node.props.name === 'discovery-refresh' && node.props.disabled)
+  assert.equal(automatic.props.disabled, true)
+  h.submit(tree); await tick(); tree = h.render()
+  const input = h.requests[0].body.input
+  assert.equal(input.coverage, 'both'); assert.equal(input.country, 'India'); assert.equal(input.language, 'Hindi')
+  assert.equal(input.windowDays, 30); assert.equal(input.autoRefresh, false); assert.match(input.intent, /in depth/)
+  assert.deepEqual([...input.topics], ['Space policy', 'Satellite launches'])
+  assert.deepEqual([...input.referenceUrls], ['https://example.com/a', 'https://example.com/b'])
+  description(tree).props.onChange({ target: { value: 'A topic-specific angle' } }); tree = h.render()
+  button(tree, 'Vastu').props.onClick(); tree = h.render()
+  assert.equal(description(tree).props.value, '')
+  h.submit(tree); await tick()
+  assert.equal(h.requests[1].body.input.topics.length, 0)
 })
 
 test('new-category audit requires explicit creation and editing invalidates the decision', async () => {
@@ -109,14 +131,14 @@ test('new-category audit requires explicit creation and editing invalidates the 
 
 test('stale duplicate check cannot redirect an edited request', async () => {
   const pending = deferred(); const h = await harness({ respond: async () => pending.promise })
-  let tree = h.tree; button(tree, 'AI').props.onClick(); tree = h.render(); h.submit(tree)
+  let tree = h.tree; button(tree, 'AI & Tech').props.onClick(); tree = h.render(); h.submit(tree)
   topic(tree).props.onChange({ target: { value: 'Comedy' } }); pending.resolve({ action: 'reuse', matchedId: 'ai-category' }); await tick()
   assert.equal(h.navigations.length, 0); assert.equal(topic(h.render()).props.value, 'Comedy')
 })
 
 test('unmount during a duplicate check cannot redirect the next account or workspace', async () => {
   const pending = deferred(); const h = await harness({ respond: async () => pending.promise })
-  let tree = h.tree; button(tree, 'AI').props.onClick(); tree = h.render(); h.submit(tree)
+  let tree = h.tree; button(tree, 'AI & Tech').props.onClick(); tree = h.render(); h.submit(tree)
   h.unmount(); pending.resolve({ action: 'reuse', matchedId: 'previous-workspace-category' }); await tick()
   assert.equal(h.navigations.length, 0)
 })
@@ -170,7 +192,7 @@ test('expired creation audit clears the decision and checks again with a fresh r
 
 test('failed response for an edited topic cannot display an obsolete error', async () => {
   const pending = deferred(); const h = await harness({ respond: async () => pending.promise })
-  let tree = h.tree; button(tree, 'AI').props.onClick(); tree = h.render(); h.submit(tree)
+  let tree = h.tree; button(tree, 'AI & Tech').props.onClick(); tree = h.render(); h.submit(tree)
   topic(tree).props.onChange({ target: { value: 'Comedy' } }); pending.reject(new Error('Old request failed')); await tick(); tree = h.render()
   assert.equal(flatten(tree).some(node => node.props?.role === 'alert'), false)
   assert.equal(topic(tree).props.value, 'Comedy'); assert.equal(button(tree, 'Find ideas').props.disabled, false)

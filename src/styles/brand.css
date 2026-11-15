@@ -118,33 +118,6 @@ h1,h2,h3,.logo{font-family:'Plus Jakarta Sans',Arial,sans-serif}
 .workspace-shell .studio-composer .instagram-preview{max-width:380px}
 @media(max-width:1000px){.workspace-shell .studio-composer .studio-compose-grid{grid-template-columns:minmax(0,1fr)}.workspace-shell .studio-composer .studio-preview-column{position:static}.workspace-shell .studio-composer .composer-navigation{align-items:stretch;flex-direction:column;gap:8px}.workspace-shell .studio-composer .composer-tools{margin:0;justify-content:flex-start}.workspace-shell .studio-composer .composer-tools select{width:100%;max-width:none}}
 @media(max-width:760px){.workspace-shell .studio-composer>.studio-heading h1{font-size:26px}.workspace-shell .studio-composer .studio-toolbar-actions{gap:8px}.workspace-shell .studio-composer .composer-editor-heading{padding:16px}.workspace-shell .studio-composer .draft-text-editor{padding:0 16px}.workspace-shell .studio-composer .composer-content-nav{gap:4px;margin-bottom:16px;padding-bottom:12px}.workspace-shell .studio-composer .composer-content-nav button{padding:8px 12px}.workspace-shell .studio-composer .composer-readable-copy{font-size:17px}.workspace-shell .studio-composer .studio-save-row{padding:16px}.workspace-shell .studio-composer .composer-navigation .studio-section-nav button{font-size:14px;padding:8px}.workspace-shell .studio-composer .studio-preview-column{width:100%}}
-.workspace-shell .simple-find{max-width:780px}
-.workspace-shell .simple-find .discovery-hero{padding:0;margin-bottom:24px}
-.workspace-shell .simple-find .discovery-hero h1{margin:0 0 12px;font-size:32px;line-height:1.2;letter-spacing:-.02em}
-.workspace-shell .simple-find .discovery-hero p{margin:0;max-width:560px;font-size:16px;line-height:1.6}
-.workspace-shell .simple-find-layout{display:block;max-width:none}
-.workspace-shell .simple-find .simple-idea-form{padding:28px;gap:16px}
-.workspace-shell .simple-find #simple-topic{font-size:18px;min-height:52px;border-radius:8px;padding:12px 14px}
-.workspace-shell .simple-find #topic-hint{font-size:14px;margin-top:-8px;color:var(--brand-muted)}
-.workspace-shell .simple-find .idea-examples button{min-height:44px;padding:8px 14px;border-color:var(--brand-line);font-size:15px;border-radius:8px}
-.workspace-shell .simple-find .idea-examples button:hover{border-color:var(--brand-primary);background:var(--brand-soft);color:var(--brand-primary)}
-.workspace-shell .simple-find .idea-writing-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px}
-.workspace-shell .simple-find .idea-help{background:var(--brand-soft);color:var(--brand-primary);border-color:var(--brand-line);margin:0;font-size:15px}
-.workspace-shell .simple-find .idea-text-button{padding:8px 0;margin:0;color:var(--brand-primary);font-size:15px}
-.workspace-shell .simple-find .idea-help-note{font-size:14px;color:var(--brand-muted);margin:-8px 0 0}
-.workspace-shell .simple-find .primary-action{margin-top:4px;font-size:16px;min-height:48px}
-.workspace-shell .simple-find .idea-settings-block{border-top:1px solid var(--brand-line);margin-top:8px;padding-top:20px}
-.workspace-shell .simple-find .idea-scope-summary{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:0;border:0;background:none;margin:0}
-.workspace-shell .simple-find .idea-scope-summary strong{font-size:15px;font-weight:600}
-.workspace-shell .simple-find .idea-scope-summary p{margin:4px 0 0;font-size:14px;color:var(--brand-muted)}
-.workspace-shell .simple-find .idea-scope-summary button{flex-shrink:0;min-height:44px;padding:8px 12px;border-color:var(--brand-line)}
-.workspace-shell .simple-find .idea-extra-details{border-top:1px solid var(--brand-line);padding-top:12px}
-.workspace-shell .simple-find .idea-extra-details summary{font-size:15px}
-.workspace-shell .simple-find .idea-extra-details summary span{display:inline;font-size:14px;margin-left:8px}
-.workspace-shell .simple-find .idea-decision{background:var(--brand-soft);border-color:#b5c3f3;padding:20px}
-.workspace-shell .simple-find .idea-decision h2{font-size:22px;margin:0 0 12px}
-.workspace-shell .simple-find .idea-progress{display:flex;align-items:center;gap:10px;color:var(--brand-muted)}
-@media(max-width:760px){.workspace-shell .simple-find .discovery-hero h1{font-size:26px}.workspace-shell .simple-find .simple-idea-form{padding:20px 16px}.workspace-shell .simple-find .idea-scope-summary{align-items:flex-start;flex-direction:column;gap:12px}.workspace-shell .simple-find .idea-writing-tools{gap:4px 16px}.workspace-shell .simple-find #simple-topic{font-size:16px}.workspace-shell .simple-find .idea-extra-details summary span{display:block;margin-left:0}}
 .workspace-shell .library-page{max-width:1200px}
 .workspace-shell .library-page .idea-library-heading{padding:0;margin-bottom:24px;align-items:center}
 .workspace-shell .library-page .idea-library-heading h1{margin:0 0 8px}

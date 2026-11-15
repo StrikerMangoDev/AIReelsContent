@@ -234,35 +234,6 @@
 @media(max-width:760px) { .discovery-page .journey-form { grid-template-columns:1fr; gap:24px; } .idea-library-heading,.library-tools { align-items:flex-start; flex-direction:column; gap:12px; } .category-grid,.journey-topics .discovery-cards { grid-template-columns:1fr; } .find-ideas-guide { display:none; } .category-add { min-height:220px; } }
 @media(prefers-reduced-motion:reduce) { .category-tile { transition:none; } .category-tile:hover { transform:none; } }
 
-/* Keep the first decision simple; supporting details open only when requested. */
-.simple-find-layout { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(240px,.75fr); gap:48px; align-items:start; }
-.discovery-page .simple-idea-form { display:flex; flex-direction:column; gap:16px; min-width:0; padding:28px; }
-.simple-idea-form>label,.simple-idea-form details>label { display:grid; gap:8px; margin:0; }
-.simple-idea-form #simple-topic { min-height:56px; font-size:16px; }
-.simple-idea-form textarea { min-height:108px; resize:vertical; }
-.simple-idea-form>.studio-muted { margin:0; }
-.idea-examples { display:flex; flex-wrap:wrap; gap:8px; }
-.discovery-page .idea-examples button { min-height:40px; padding:8px 14px; border-radius:24px; font-size:13px; }
-.discovery-page .idea-examples button:hover { background:#f0efff; border-color:#c7c3ff; color:var(--brand-hover); }
-.discovery-page .idea-help { display:inline-flex; align-items:center; justify-content:center; gap:8px; align-self:flex-start; min-height:44px; padding:10px 14px; background:#f1f0ff; border-color:#dedbff; color:var(--brand-hover); font-weight:600; }
-.discovery-page .idea-text-button { align-self:flex-start; min-height:44px; padding:8px 0; background:transparent; border:0; color:var(--brand-hover); text-align:left; }
-.simple-idea-form details { margin:0; padding-top:16px; }
-.simple-idea-form details summary { line-height:1.6; min-height:44px; }
-.simple-idea-form details summary span { display:block; font-weight:400; }
-.simple-idea-form details>label { margin-top:16px; }
-.simple-idea-form>.primary-action,.simple-idea-form .idea-decision>.primary-action { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:48px; }
-.simple-idea-form>[role=status] { margin:0; font-size:14px; line-height:1.6; }
-.simple-idea-form .idea-decision { padding:20px; border:1px solid #ddd9fb; border-radius:12px; background:#f7f6ff; overflow-wrap:anywhere; }
-.simple-idea-form .idea-decision h2 { margin:10px 0; }
-.simple-idea-form .idea-decision p { margin:12px 0; line-height:1.65; }
-.simple-find-aside { min-width:0; padding-top:8px; }
-.simple-find-aside .category-cover { border-radius:24px; }
-.simple-find-aside h2 { margin:24px 0 16px; color:#344054; font-size:29px; line-height:1.3; letter-spacing:-.7px; }
-.simple-find-aside p { color:var(--brand-muted); font-size:14px; line-height:1.75; }
-.simple-find-aside>a { display:inline-block; padding:12px 0; font-size:14px; }
-@media(max-width:900px) { .simple-find-layout { grid-template-columns:1fr; gap:24px; max-width:680px; } .simple-find-aside { display:none; } }
-@media(max-width:480px) { .discovery-page .simple-idea-form { padding:20px; } .simple-find .discovery-hero h1 br { display:none; } .simple-idea-form .idea-decision { padding:16px; } }
-
 .discovery-page .discovery-card h3 { margin:0; width:100%; }
 .discovery-page .idea-title-action { padding:0; background:none; border:0; color:var(--brand-ink); text-align:left; font-size:19px; line-height:1.4; font-weight:650; }
 .discovery-page .idea-card-actions { display:flex; flex-wrap:wrap; gap:8px; width:100%; }
