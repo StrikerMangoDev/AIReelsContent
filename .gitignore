@@ -9,6 +9,7 @@ vertex.json
 firebase-admin*.json
 *-service-account.json
 .vercel/
+supabase/.temp/
 server/data/
 coverage/
 validation/

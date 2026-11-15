@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@/context/auth-state'
-import { authHeaders } from '@/services/firebase'
+import { authHeaders } from '@/services/auth'
 type Overview = { sessions: number; articleCount: number; events: { type: string; total: number }[]; users: { uid: string; email: string; name: string; role: string; lastSeen: string }[]; recent: { id: string; type: string; path: string; userId: string | null; createdAt: string; payload: { articleId?: string; value?: string } }[]; daily: { day: string; total: number }[]; ingestion: { status: string; finishedAt: string | null } | null }
 export function AdminPage() {
   const { identity, loading } = useAuth()

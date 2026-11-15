@@ -1,4 +1,4 @@
-import { authHeaders } from '@/services/firebase'
+import { authHeaders } from '@/services/auth'
 import { activeWorkspace, workspaceIdentity } from './workspace-session'
 export type OutputFormat = 'script' | 'captions' | 'website' | 'platforms' | 'production'
 export type StudioProfile = { industry: string; audience: string; language: string; tone: string; platform: string; duration: number; voice?: 'Auto' | 'Female' | 'Male'; outputs?: OutputFormat[] }

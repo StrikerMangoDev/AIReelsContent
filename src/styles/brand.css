@@ -58,7 +58,7 @@ h1,h2,h3,.logo{font-family:'Plus Jakarta Sans',Arial,sans-serif}
 .auth-screen .auth-submit{border-radius:8px;background:var(--brand-primary);border-color:var(--brand-primary);font-size:16px;min-height:44px}
 .auth-screen .auth-submit:hover:not(:disabled){background:var(--brand-hover)}
 .auth-screen input{font-size:16px;border-color:var(--brand-control)}
-.auth-screen :is(.auth-switch a,.auth-forgot){color:var(--brand-primary)}
+
 .app-loading{font-family:'Source Sans 3',Arial,sans-serif;background:var(--brand-canvas);color:var(--brand-ink)}
 .workspace-shell .studio-composer{max-width:1360px;margin-top:0}
 .workspace-shell .studio-composer .studio-editorial-header{margin:0 0 16px}
@@ -608,3 +608,7 @@ h1,h2,h3,.logo{font-family:'Plus Jakarta Sans',Arial,sans-serif}
 .workspace-shell .category-page .idea-card-actions .idea-details-action{padding:10px 4px;border-color:transparent;background:transparent;color:var(--brand-primary)}
 .workspace-shell .category-page .idea-card-actions .idea-details-action:hover{background:var(--brand-soft)}
 @media(max-width:600px){.workspace-shell .category-page .discovery-card{padding:20px}}
+
+.auth-help{margin-top:16px;font-size:16px;line-height:1.5}
+.auth-screen .auth-panel label{color:var(--brand-ink);font-size:16px;line-height:1.5}
+.auth-screen .auth-panel>p{font-size:16px;line-height:1.5}

@@ -1,6 +1,6 @@
 # Signal AI
 
-Research and content desk for any niche, with a public AI/technology feed. Prompt-led web research produces major updates, sourced audience observations and platform-specific production briefs for LinkedIn, Instagram and YouTube. React/TypeScript frontend, Node.js API, SQLite or Supabase, Firebase and Vertex Gemini.
+Internal research and content desk for any niche. Prompt-led web research produces major updates, sourced audience observations and platform-specific production briefs for LinkedIn, Instagram and YouTube. React/TypeScript frontend, Node.js API, SQLite or Supabase, backend-managed login and Vertex Gemini.
 
 See [the product workflow, agent contracts, setup and limitations](docs/CONTENT_PRODUCT.md). The research desk is `/`, the existing AI feed is `/dashboard`, and saved content is `/studio`.
 
@@ -25,7 +25,7 @@ npm run lint
 npm run build
 ```
 
-Article cards open a source summary with a creation action; original-source links redirect to publishers. Country/topic/search filters use the API; map activity counts unique monitored articles. Private research/content workspaces require configured Firebase authentication. Website publication is administrator-only.
+Article cards open a source summary with a creation action; original-source links redirect to publishers. Country/topic/search filters use the API; map activity counts unique monitored articles. Portal access requires a backend-provisioned account with one active browser session. See [internal account operations](docs/internal-login.md) for creation, password replacement and session release. Website publication is administrator-only.
 
 See [engine architecture and operations](docs/ENGINE.md) for folder ownership, prompt behavior, source configuration, cost controls, API/deployment boundaries, and migration guidance.
 

@@ -4,7 +4,6 @@ import { createRepository } from '../storage/repository.js'
 import { vertexGoogleAuthOptions, vertexProductionProject, vertexWifAudience, vertexWifServiceAccount, generateVertexJson, vertexDemoCallUpperBoundMicros } from '../providers/vertex-fallback.js'
 import { createDemoFixture } from './fixtures/demo.js'
 import { demoAuthorizationActive } from '../automation/demo.js'
-import { firebaseCredentials } from '../auth/firebase.js'
 
 const config = { CONTENT_VERTEX_FALLBACK: 'true', VERTEX_FALLBACK_PROJECT: vertexProductionProject, VERTEX_FALLBACK_MODEL: 'gemini-3.8-flash', VERTEX_FALLBACK_APPROVED_UNTIL: new Date(Date.now() + 3600000).toISOString(), VERTEX_WIF_AUDIENCE: vertexWifAudience, VERTEX_WIF_SERVICE_ACCOUNT: vertexWifServiceAccount }
 
@@ -13,7 +12,6 @@ test('dedicated Vertex JSON does not replace Firebase credentials and rejects a 
   const firebase = { type: 'service_account', project_id: 'existing-auth-project', client_email: 'auth@existing-auth-project.iam.gserviceaccount.com', private_key: 'existing-auth-key' }
   const settings = { VERTEX_FALLBACK_PROJECT: vertex.project_id, VERTEX_FALLBACK_SERVICE_ACCOUNT_JSON: JSON.stringify(vertex), GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify(firebase) }
   assert.deepEqual((await vertexGoogleAuthOptions(settings)).credentials, vertex)
-  assert.deepEqual(firebaseCredentials(settings), firebase)
   await assert.rejects(vertexGoogleAuthOptions({ ...settings, VERTEX_FALLBACK_PROJECT: 'wrong-project' }), error => error.configurationFailure && error.preDispatch)
 })
 test('installed federation libraries construct and retrieve the supplied subject without network', async () => {
@@ -53,7 +51,6 @@ test('production WIF authenticates exact audience and target before inference wi
   assert.equal(settings.token_url, 'https://sts.googleapis.com/v1/token')
   assert.equal(settings.service_account_impersonation_url, `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${vertexWifServiceAccount}:generateAccessToken`)
   const legacy = { type: 'service_account', project_id: 'ai-vertical-495712', client_email: 'controlled-source@example.com', private_key: 'controlled-fake-key' }
-  assert.deepEqual(firebaseCredentials({ GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify(legacy) }), legacy)
 })
 
 test('provider descriptions become fixed diagnostic reasons without retaining raw private descriptions', async () => {

@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto'
 import { categories, regions } from '../domain/article.js'
 import { listNews, worldActivity, feedTopics } from '../services/news.js'
 import { env } from '../config/env.js'
-import { createAuthMiddleware, requireAdmin, publicAuthConfig } from '../auth/index.js'
+import { createAuthMiddleware, requireAdmin, mountAuthRoutes } from '../auth/index.js'
 import { eventSchema } from '../services/analytics.js'
 import { createMediaRouter } from '../media/router.js'
 import { studioRouter } from '../studio/routes.js'
@@ -20,18 +20,16 @@ import { prepareAutomaticCompletePackage } from '../studio/complete-package-auto
 const querySchema = z.object({ region: z.enum(['Global', ...regions]).optional(), category: z.enum(['All signals', ...categories]).optional(), q: z.string().max(200).optional(), page: z.coerce.number().int().min(1).max(200).default(1), limit: z.coerce.number().int().min(1).max(60).default(24), timezone: z.string().max(100).default('UTC') })
 export function createApp({ repository, sources, verifyIdentity, onResearchAdmitted, onGenerationAdmitted, onAutomationAdmitted }) {
   const app = express()
-  const auth = createAuthMiddleware(verifyIdentity)
+  const auth = createAuthMiddleware(repository, verifyIdentity)
   app.disable('x-powered-by'); app.use(helmet()); app.use(express.json({ limit: '128kb' }))
   app.use((_request, response, next) => { response.setHeader('X-Request-Id', randomUUID()); next() })
   app.use('/api', rateLimit({ windowMs: 60000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }))
   app.get('/api/health', async (_request, response) => { await repository.ping(); response.json({ status: 'ok', storage: env.STORAGE_PROVIDER }) })
   app.get('/api/status', async (_request, response) => response.json({ lastRun: await repository.lastRun(), lastSuccessfulRun: await repository.lastSuccessfulRun() }))
-  app.get('/api/auth/config', (_request, response) => {
-    response.json(publicAuthConfig())
-  })
+  mountAuthRoutes(app, repository)
   app.get('/api/auth/me', auth, async (request, response) => { await repository.upsertUser(request.identity); response.setHeader('Cache-Control', 'no-store'); response.json(request.identity) })
   app.get('/api/admin/overview', auth, requireAdmin, async (_request, response) => { response.setHeader('Cache-Control', 'no-store'); response.json({ ...await repository.adminOverview(), ingestion: await repository.lastRun(), articleCount: (await repository.queryArticles({ page: 1, limit: 1 })).total }) })
-  app.post('/api/events', rateLimit({ windowMs: 60000, limit: 40 }), (request, response, next) => request.headers.authorization ? auth(request, response, next) : next(), async (request, response) => {
+  app.post('/api/events', rateLimit({ windowMs: 60000, limit: 40 }), (request, response, next) => (request.headers.authorization || request.headers.cookie) ? auth(request, response, next) : next(), async (request, response) => {
     const event = eventSchema.safeParse(request.body)
     if (!event.success) return response.status(400).json({ error: 'Invalid event or missing consent' })
     await repository.recordEvent(event.data, request.identity?.uid || null)

@@ -16,8 +16,10 @@ const FindIdeaPage = lazy(() => import('@/pages/app/FindIdeaPage').then(module =
 const ArticlePage = lazy(() => import('@/pages/app/StudioPage').then(module => ({ default: module.ArticlePage })))
 const PublicationPage = lazy(() => import('@/pages/app/PublicationPage').then(module => ({ default: module.PublicationPage })))
 import { AnalyticsConsent } from '@/components/common/AnalyticsConsent'
+import { useAuth } from '@/context/auth-state'
 
 export default function App() {
+  const { identity } = useAuth()
   return (
     <Suspense fallback={<div className="app-loading" role="status"><span className="app-loading-spinner" aria-hidden="true" /><strong>Opening your workspace</strong><span>Getting things ready…</span></div>}><Routes>
       <Route element={<AppLayout />}>
@@ -40,7 +42,7 @@ export default function App() {
       </Route>
       <Route path="*" element={<NotFoundPage />} />
       <Route path="/login" element={<AuthPage />} />
-      <Route path="/signup" element={<AuthPage signup />} />
-    </Routes><AnalyticsConsent /></Suspense>
+      <Route path="/signup" element={<Navigate replace to="/login" />} />
+    </Routes>{identity && <AnalyticsConsent />}</Suspense>
   )
 }

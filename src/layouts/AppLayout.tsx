@@ -1,10 +1,10 @@
 import { Plus, LayoutGrid, FolderOpen, CalendarDays, Menu, X, ChevronDown, ArrowUpRight, Users, Gauge } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { Logo } from '@/components/common/Logo'
 import { useAuth } from '@/context/auth-state'
 import { activeWorkspace, subscribeWorkspace } from '@/services/workspace-session'
-import { signOutCurrentUser } from '@/services/firebase'
+import { signOutCurrentUser } from '@/services/auth'
 import '@/styles/workspace.css'
 
 const navigation = [
@@ -14,7 +14,7 @@ const navigation = [
 ]
 
 export function AppLayout() {
-  const { identity } = useAuth()
+  const { identity, loading } = useAuth()
   const workspace = useSyncExternalStore(subscribeWorkspace, activeWorkspace, () => 'personal')
   const { pathname } = useLocation()
   useEffect(() => { window.scrollTo(0, 0) }, [pathname])
@@ -23,6 +23,8 @@ export function AppLayout() {
   const [error, setError] = useState('')
   const title = pathname.startsWith('/ideas') ? 'Topic Library' : pathname.startsWith('/studio-review') ? 'Review content' : pathname.startsWith('/studio') ? 'Content Studio' : pathname.startsWith('/planning') ? 'Content Planner' : pathname.startsWith('/workspaces') ? 'Team & access' : pathname.startsWith('/usage') ? 'Usage & limits' : pathname.startsWith('/dashboard') ? 'Top ideas' : pathname.startsWith('/insights') ? 'Website insights' : pathname.startsWith('/admin') ? 'Administration' : 'Find new ideas'
   const closeMenu = () => setMenuOpen(false)
+  if (loading) return <main className="app-loading" role="status">Checking session…</main>
+  if (!identity) return <Navigate replace to={`/login?next=${encodeURIComponent(pathname)}`} />
   return <div className="workspace-shell">
     <a className="skip-link" href="#main-content">Skip to content</a>
     <header className="workspace-mobile-header"><Logo /><button ref={menuButton} aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="workspace-navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X aria-hidden="true" size={22} /> : <Menu aria-hidden="true" size={22} />}</button></header>

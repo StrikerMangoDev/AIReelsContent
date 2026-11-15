@@ -1,54 +1,72 @@
-import { createHash } from 'node:crypto'
-import { env } from '../config/env.js'
-import { createAuthMiddleware as firebaseMiddleware, requireAdmin } from './firebase.js'
+import { createHash, randomBytes } from 'node:crypto'
+import { z } from 'zod'
+import { verifyPassword } from './password.js'
 
-export { requireAdmin }
-
-function identityMap(config) {
-  const map = JSON.parse(config.HEXCLAVE_IDENTITY_MAP_JSON || '{}')
-  if (!map || typeof map !== 'object' || Array.isArray(map) || Object.values(map).some(uid => typeof uid !== 'string' || !uid || uid.length > 128) || new Set(Object.values(map)).size !== Object.values(map).length) throw new Error('Invalid identity migration map')
-  return map
+const cookieName = process.env.NODE_ENV === 'production' ? '__Host-studio_session' : 'studio_session'
+const digest = value => createHash('sha256').update(value).digest('hex')
+const identity = account => ({ uid: account.uid, email: account.email, name: account.name, role: account.role, emailVerified: true })
+function sessionHash(request) {
+  const token = (request.headers.cookie || '').split(';').map(part => part.trim()).find(part => part.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1)
+  return /^[a-f0-9]{64}$/.test(token || '') ? digest(token) : ''
+}
+function cookie(response, token = '') {
+  response.cookie(cookieName, token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: token ? 43200000 : 0 })
+}
+export function sameOriginRequest(request, response, next) {
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) && (request.headers['x-studio-request'] !== '1' || request.headers['sec-fetch-site'] === 'cross-site')) return response.status(403).json({ error: 'Open the portal and try again.' })
+  next()
 }
 
-export function publicAuthConfig(config = env) {
-  if (config.AUTH_PROVIDER === 'hexclave') {
-    let configured = Boolean(config.HEXCLAVE_PROJECT_ID && config.HEXCLAVE_SECRET_SERVER_KEY && config.HEXCLAVE_MIGRATION_READY === 'true')
-    try { identityMap(config) } catch { configured = false }
-    return { provider: 'hexclave', configured, config: configured ? { projectId: config.HEXCLAVE_PROJECT_ID } : null }
-  }
-  let result = null
-  try {
-    const raw = JSON.parse(config.FIREBASE_WEB_CONFIG || 'null')
-    if (raw?.apiKey && raw?.authDomain && raw?.projectId === config.FIREBASE_PROJECT_ID) result = { apiKey: raw.apiKey, authDomain: raw.authDomain, projectId: raw.projectId, appId: raw.appId }
-  } catch { /* Missing configuration keeps sign-in disabled. */ }
-  return { provider: 'firebase', configured: Boolean(result), config: result }
-}
-
-export function createHexclaveMiddleware({ config = env, loadApp = async options => {
-  const { HexclaveServerApp } = await import('@hexclave/js')
-  return new HexclaveServerApp(options)
-} } = {}) {
-  let app
+export function createAuthMiddleware(repository, verifyIdentity) {
   return async (request, response, next) => {
     response.setHeader('Cache-Control', 'private, no-store')
-    if (!publicAuthConfig({ ...config, AUTH_PROVIDER: 'hexclave' }).configured) return response.status(503).json({ error: 'Hexclave configuration and identity migration must be verified before sign-in is enabled.' })
-    if (typeof request.headers.authorization !== 'string' || !request.headers.authorization || request.headers.authorization.length > 16384) return response.status(401).json({ error: 'Sign in required' })
-    try {
-      app ??= await loadApp({ projectId: config.HEXCLAVE_PROJECT_ID, secretServerKey: config.HEXCLAVE_SECRET_SERVER_KEY, tokenStore: null })
-      // The project-bound SDK validates the session; never decode a JWT or trust client profile fields here.
-      const user = await app.getUser({ tokenStore: { headers: { authorization: request.headers.authorization } } })
-      if (!user || typeof user.id !== 'string' || !user.id || user.isAnonymous === true || user.isRestricted === true) return response.status(401).json({ error: 'Authentication could not be verified' })
-      const mapping = identityMap(config)
-      const uid = Object.hasOwn(mapping, user.id) ? mapping[user.id] : `hexclave:${createHash('sha256').update(JSON.stringify([config.HEXCLAVE_PROJECT_ID, user.id])).digest('hex')}`
-      request.identity = { uid, email: typeof user.primaryEmail === 'string' ? user.primaryEmail : '', emailVerified: user.primaryEmailVerified === true, name: typeof user.displayName === 'string' ? user.displayName : '', role: 'user' }
-      next()
-    } catch {
-      response.status(401).json({ error: 'Authentication could not be verified' })
+    // Explicit injection keeps existing route tests independent of session storage.
+    if (verifyIdentity && process.env.NODE_ENV !== 'production') {
+      const token = /^Bearer (\S+)$/.exec(request.headers.authorization || '')?.[1]
+      if (!token) return response.status(401).json({ error: 'Sign in required' })
+      try {
+        const value = await verifyIdentity(token)
+        const admins = (process.env.ADMIN_EMAILS || 'yeshaswi3@gmail.com').split(',').map(email => email.trim().toLowerCase())
+        request.identity = { uid: value.uid, email: value.email || '', name: value.name || '', emailVerified: value.email_verified === true, role: value.email_verified && (value.admin || admins.includes(value.email?.toLowerCase())) ? 'admin' : 'user' }
+      } catch { return response.status(401).json({ error: 'Authentication could not be verified' }) }
+      return next()
     }
+    const hash = sessionHash(request)
+    const account = hash ? await repository.authSession(hash) : null
+    if (!account) return response.status(401).json({ error: 'Sign in required. Your session may have expired.' })
+    request.identity = identity(account)
+    sameOriginRequest(request, response, next)
   }
 }
 
-export function createAuthMiddleware(verifyIdentity) {
-  if (verifyIdentity || env.AUTH_PROVIDER !== 'hexclave') return firebaseMiddleware(verifyIdentity)
-  return createHexclaveMiddleware()
+export function mountAuthRoutes(app, repository) {
+  app.use('/api/auth', (_request, response, next) => { response.setHeader('Cache-Control', 'private, no-store'); next() })
+  app.get('/api/auth/config', (_request, response) => response.json({ configured: true, config: null }))
+  app.post('/api/auth/login', sameOriginRequest, async (request, response) => {
+    const parsed = z.object({ email: z.string().trim().toLowerCase().email().max(254), password: z.string().min(1).max(256) }).strict().safeParse(request.body)
+    if (!parsed.success) return response.status(400).json({ error: 'Enter a valid email and password.' })
+    const { email, password } = parsed.data
+    // Vercel overwrites this header; other hosts use the socket address, not client forwarding headers.
+    const ip = process.env.VERCEL ? request.headers['x-vercel-forwarded-for'] || request.ip : request.ip
+    const limits = await Promise.all([repository.authAttempt(digest(`email:${email}`), 10), repository.authAttempt(digest(`ip:${ip}`), 60)])
+    if (limits.includes(false)) return response.status(429).json({ error: 'Too many sign-in attempts. Try again in 15 minutes.' })
+    const account = await repository.authAccount(email)
+    if (!await verifyPassword(password, account?.password_hash) || account?.disabled) return response.status(401).json({ error: 'Email or password is incorrect.' })
+    const token = randomBytes(32).toString('hex')
+    const claimed = await repository.authClaim(account.uid, account.password_hash, digest(token), sessionHash(request))
+    if (!claimed) return response.status(409).json({ error: 'Already logged in on another browser. Sign out there, or ask your administrator to release the session.' })
+    cookie(response, token)
+    response.json(identity(claimed))
+  })
+  app.post('/api/auth/logout', sameOriginRequest, async (request, response) => {
+    const hash = sessionHash(request)
+    if (hash) await repository.authLogout(hash)
+    cookie(response)
+    response.json({ signedOut: true })
+  })
+}
+
+export function requireAdmin(request, response, next) {
+  if (request.identity?.role !== 'admin') return response.status(403).json({ error: 'Administrator access required' })
+  next()
 }

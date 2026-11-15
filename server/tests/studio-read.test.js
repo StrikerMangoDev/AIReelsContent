@@ -10,7 +10,7 @@ async function harness(fetch, authHeaders = async () => ({})) {
   runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, {
     exports, fetch, AbortController, clearTimeout,
     setTimeout: (fn, ms) => setTimeout(fn, ms === 12000 ? 15 : 1),
-    require: name => name.includes('firebase') ? { authHeaders } : { activeWorkspace: () => scope.workspace, workspaceIdentity: () => scope.actor },
+    require: name => name.includes('/auth') ? { authHeaders } : { activeWorkspace: () => scope.workspace, workspaceIdentity: () => scope.actor },
   })
   return { ...exports, scope }
 }

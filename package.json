@@ -7,12 +7,10 @@
     "node": "24.x"
   },
   "overrides": {
-    "jwks-rsa": "4.1.0",
-    "@grpc/grpc-js": "^1.14.5",
     "uuid": "^11.1.1"
   },
   "scripts": {
-    "postinstall": "patch-package --error-on-fail && node node_modules/ffmpeg-static/install.js",
+    "postinstall": "node node_modules/ffmpeg-static/install.js",
     "dev": "concurrently -k -n api,web \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite",
     "dev:api": "node --watch server/index.js",
@@ -27,12 +25,11 @@
     "test": "node --test server/tests/*.test.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "user:manage": "node server/auth/manage-user.js"
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
-    "@hexclave/js": "1.0.133",
-    "@hexclave/react": "1.0.133",
     "@resvg/resvg-js": "^2.6.2",
     "@supabase/supabase-js": "^2.117.2",
     "@vercel/functions": "3.11.0",
@@ -45,8 +42,6 @@
     "express-rate-limit": "^8.7.0",
     "fflate": "0.4.9",
     "ffmpeg-static": "^5.3.0",
-    "firebase": "^12.19.0",
-    "firebase-admin": "^14.5.0",
     "helmet": "^8.3.0",
     "lucide-react": "latest",
     "react": "latest",
@@ -56,7 +51,8 @@
     "rss-parser": "^3.13.0",
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "google-auth-library": "10.9.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -72,7 +68,6 @@
     "eslint-plugin-react-hooks": "latest",
     "eslint-plugin-react-refresh": "latest",
     "globals": "latest",
-    "patch-package": "^8.0.1",
     "typescript": "latest",
     "typescript-eslint": "latest",
     "vite": "latest"

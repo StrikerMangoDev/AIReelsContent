@@ -1,3 +1,4 @@
+import { sqliteAuth } from '../auth/sqlite.js'
 import { DatabaseSync } from 'node:sqlite'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -44,6 +45,7 @@ export function createRepository(filename) {
 
   const insert = db.prepare("INSERT INTO articles VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload WHERE json_extract(articles.payload, '$.summaryBasis')='publisher-excerpt' AND coalesce(json_extract(excluded.payload, '$.summaryBasis'),'curated') != 'publisher-excerpt'")
   return {
+    ...sqliteAuth(db),
     budgetConfigure(currency, owner, globalLimitMicros, ownerLimitMicros) {
       validateBudgetOwner(owner, currency); validateAmount(globalLimitMicros); validateAmount(ownerLimitMicros)
       db.exec('BEGIN IMMEDIATE')

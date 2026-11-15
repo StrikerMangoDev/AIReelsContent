@@ -18,10 +18,10 @@ test('workspace navigation closes on selection and Escape, restores focus and pr
     },
     'react/jsx-runtime': { jsx: element, jsxs: element },
     'lucide-react': {},
-    'react-router-dom': { Link: 'Link', NavLink: 'NavLink', Outlet: 'Outlet', useLocation: () => ({ pathname: '/ideas/topic' }), useSearchParams: () => [new URLSearchParams(), () => {}] },
+    'react-router-dom': { Navigate: 'Navigate', Link: 'Link', NavLink: 'NavLink', Outlet: 'Outlet', useLocation: () => ({ pathname: '/ideas/topic' }), useSearchParams: () => [new URLSearchParams(), () => {}] },
     '@/context/auth-state': { useAuth: () => ({ identity }) },
     '@/services/workspace-session': { subscribeWorkspace() {}, activeWorkspace: () => scope },
-    '@/services/firebase': {}, '@/components/common/Logo': {}, '@/components/ui/RegionPicker': {}, '@/styles/workspace.css': {},
+    '@/services/auth': {}, '@/components/common/Logo': {}, '@/components/ui/RegionPicker': {}, '@/styles/workspace.css': {},
   }
   const exports = {}
   runInNewContext(code, { exports, require: name => { assert.ok(name in modules, name); return modules[name] }, URLSearchParams })
@@ -47,4 +47,5 @@ test('workspace navigation closes on selection and Escape, restores focus and pr
   identity = { uid: 'admin', role: 'admin' }; tree = render()
   assert.ok(find(tree, n => n.type === 'NavLink' && n.props.to === '/admin'))
   assert.equal(find(tree, n => n.type === 'Outlet').key, 'admin:ws:team')
+  identity=null; tree=render(); assert.equal(tree.type,'Navigate'); assert.equal(tree.props.to,'/login?next=%2Fideas%2Ftopic')
 })

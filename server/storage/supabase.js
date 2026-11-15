@@ -16,6 +16,13 @@ export function createSupabaseRepository(config) {
     return data
   }
   return {
+    authAccount: email => call('account', { email }, 'signal_internal_auth'),
+    authAttempt: (key, limit) => call('attempt', { key, limit }, 'signal_internal_auth'),
+    authClaim: (uid, passwordHash, tokenHash, currentHash) => call('claim', { uid, passwordHash, tokenHash, currentHash }, 'signal_internal_auth'),
+    authSession: tokenHash => call('session', { tokenHash }, 'signal_internal_auth'),
+    authLogout: tokenHash => call('logout', { tokenHash }, 'signal_internal_auth'),
+    authProvision: account => call('provision', account, 'signal_internal_auth'),
+    authRevoke: uid => call('revoke', { uid }, 'signal_internal_auth'),
     budgetConfigure: (currency, owner, globalLimitMicros, ownerLimitMicros) => call('configure', { currency, owner, globalLimitMicros, ownerLimitMicros }, 'signal_budget'),
     budgetGet: (owner, requestId) => call('get', { owner, requestId }, 'signal_budget'),
     budgetSummary: (owner, currency = 'USD') => call('summary', { owner, currency }, 'signal_budget'),

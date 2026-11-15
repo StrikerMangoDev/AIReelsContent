@@ -28,14 +28,6 @@ const schema = z.object({
   STORAGE_PROVIDER: z.enum(['sqlite', 'supabase']).default('sqlite'),
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SECRET_KEY: z.string().optional(),
-  AUTH_PROVIDER: z.enum(['firebase', 'hexclave']).default('firebase'),
-  HEXCLAVE_PROJECT_ID: z.string().optional(),
-  HEXCLAVE_SECRET_SERVER_KEY: z.string().optional(),
-  HEXCLAVE_MIGRATION_READY: z.enum(['true', 'false']).default('false'),
-  HEXCLAVE_IDENTITY_MAP_JSON: z.string().optional(),
-  FIREBASE_PROJECT_ID: z.string().optional(),
-  FIREBASE_WEB_CONFIG: z.string().optional(),
-  FIREBASE_ADMIN_CREDENTIALS: z.string().optional(),
   ADMIN_EMAILS: z.string().default('yeshaswi3@gmail.com'),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   VERTEX_WIF_AUDIENCE: z.string().optional(),
@@ -46,7 +38,6 @@ const schema = z.object({
   VERTEX_FALLBACK_SERVICE_ACCOUNT_JSON: z.string().optional(),
   VERTEX_FALLBACK_MODEL: z.string().default('gemini-3.8-flash'),
   VERTEX_FALLBACK_APPROVED_UNTIL: z.string().optional(),
-  FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON: z.string().optional(),
   CRON_SECRET: z.string().min(32).optional(),
 })
 
