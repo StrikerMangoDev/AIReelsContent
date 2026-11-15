@@ -49,18 +49,32 @@ test('automatic account templates preserve strategy inputs but never reuse old a
   const repository = createRepository(':memory:')
   try {
     const dest = destination('Instagram')
+    const oldQuestion = { id: 'old-question', question: 'How does the old Claude announcement work?', source: 'community', occurrences: 1, audience: 'Public readers', observedAt: at(-1), sourceUrl: 'https://example.com/old', anonymized: true }
+    dest.audienceQuestions = [oldQuestion]
+    dest.researchLog = [{ id: 'old-research', type: 'fact', url: 'https://example.com/old', observedAt: at(-1), observation: 'Old Claude source captured.', interpretation: 'Publisher claim only.', response: 'Explain the old topic.', confidence: 'medium', hypothesis: false, questionIds: [oldQuestion.id] }]
+    dest.candidates = [{ id: 'old-candidate', topic: 'Claude announcement', angle: 'Explain Claude.', rationale: 'An old topic selection.', selected: true, researchIds: ['old-research'], questionIds: [oldQuestion.id], scores: { topicFit: 4, audienceUsefulness: 3, brandFit: 4, evidence: 3, timing: 3, effort: 1, risk: 2 } }]
+    dest.keywords = [{ phrase: 'Claude', placements: ['caption'], rationale: 'Old topic keyword.', researchIds: ['old-research'] }]
+    dest.trendDecision = { mode: 'not_relevant', reason: 'The old announcement is evergreen.' }
     dest.goal.reviewDueAt = at(24)
     dest.expertReview = { required: true, status: 'approved', reviewer: 'Subject reviewer', reviewedAt: at(-1), contentHash: 'a'.repeat(64) }
     dest.checklist = { contentHash: 'a'.repeat(64), originalityChecked: true, hookFulfilled: true, phonePreviewChecked: true, soundOffChecked: true, linksChecked: true, livePostInspected: true }
     dest.learnings = [learning('Instagram', 'Prior topic', 'repeat')]
     dest.community = { owner: 'Community desk', responseGuidance: 'Use cited resources', escalationOwner: 'Subject desk', escalationRules: 'Escalate sensitive questions', cases: [{ id: 'case', kind: 'question', summary: 'A recurring question', note: 'Answered', owner: 'Desk', status: 'answered', anonymized: true }] }
-    repository.studioPut('alice', 'complete_context', 'prior', { packageId: 'prior', context: { brand: 'Approved brand', workflow: { version: 'strategy-workflow-v1', destinations: [dest] } } }, 0)
-    const template = await accountWorkflowTemplate(repository, 'alice', { accountId: account('Instagram'), platform: 'Instagram' }, 'A new topic', now)
+    repository.studioPut('alice', 'complete_context', 'prior', { packageId: 'prior', context: { objective: 'Explain the old Claude announcement.', brand: 'Approved brand', workflow: { version: 'strategy-workflow-v1', destinations: [dest] } } }, 0)
+    const template = await accountWorkflowTemplate(repository, 'alice', { accountId: account('Instagram'), platform: 'Instagram', weeklyBrief: 'Source-backed explanations for creators.' }, 'LangChain funding', now)
     const fresh = strategyWorkflowSchema.parse(template.context.workflow).destinations[0]
     assert.equal(fresh.expertReview.status, 'pending'); assert.equal(fresh.expertReview.reviewer, undefined)
     assert.equal(fresh.checklist.contentHash, undefined); assert.equal(fresh.checklist.hookFulfilled, false)
     assert.deepEqual(fresh.learnings, []); assert.deepEqual(fresh.community.cases, [])
     assert.equal(fresh.goal.reviewDueAt, undefined); assert.equal(template.source.packageId, 'prior')
+    for (const key of ['candidates', 'audienceQuestions', 'researchLog', 'keywords']) assert.deepEqual(fresh[key], [], key)
+    assert.equal(fresh.trendDecision, undefined)
+    assert.equal(fresh.goal.primary, 'reach'); assert.equal(fresh.goal.kpi, 'reach')
+    assert.equal(template.context.brand, 'Approved brand')
+    assert.match(template.context.objective, /LangChain funding/)
+    assert.match(template.context.objective, /Source-backed explanations for creators/)
+    assert.doesNotMatch(JSON.stringify(template.context), /Claude|old-question|old-research/)
+    assert.deepEqual(repository.studioGet('alice', 'complete_context', 'prior').context.workflow.destinations[0], dest, 'Copying does not mutate the original topic strategy')
     assert.equal(await accountWorkflowTemplate(repository, 'outsider', { accountId: account('Instagram'), platform: 'Instagram' }, 'New', now), null)
   } finally { repository.close() }
 })

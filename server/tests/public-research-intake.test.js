@@ -158,20 +158,26 @@ test('revoked campaign authorization is rechecked within public intake before la
   } finally { repository.close() }
 })
 
-test('actual automatic generation consumes public intake in its saved workflow before invoking the model adapter', async () => {
+test('automatic generation replaces inherited topic research with current-topic intake before invoking the writer', async () => {
   const { repository, profile, pack } = fixture(); const calls = []
   try {
     const id = createHash('sha256').update('run:package').digest('hex').slice(0, 32)
     const source = pack.evidence[0]
     repository.studioPut('alice', 'package', id, { ...pack, settings: settingsSchema.parse({ platform: profile.platform, outputs: ['script'] }), status: 'draft' }, 0)
     const context = repository.studioGet('alice', 'complete_context', pack.id)
-    repository.studioPut('alice', 'complete_context', id, { packageId: id, context: context.context }, 0)
+    context.context.objective = 'Explain an unrelated old subject.'
+    const old = context.context.workflow.destinations[0]
+    old.audienceQuestions = [{ id: 'old-question', question: 'What happened with the unrelated old subject?', source: 'community', occurrences: 1, audience: 'Readers', observedAt: iso(-1), anonymized: true }]
+    old.candidates = [{ id: 'old-idea', topic: 'Unrelated old subject', angle: 'Old angle', rationale: 'Old rationale', selected: true, questionIds: ['old-question'], researchIds: [], scores: { topicFit: 4, audienceUsefulness: 3, brandFit: 3, evidence: 3, timing: 3, effort: 1, risk: 2 } }]
+    repository.studioPut('alice', 'complete_context', pack.id, context, context.revision)
     let writes = 0
     const services = createAutomationServices(repository, {
       publicResearch: options => enrichPackagePublicResearch({ ...options, requestJson: requests(calls), generate: async request => ratings(request), config: scoringConfig }),
       write: async (_evidence, _settings, details) => {
         writes++
         assert.equal(details.strategyWorkflow.destinations[0].audienceQuestions[0].question, comment)
+        assert.equal(details.strategyWorkflow.destinations[0].selectedIdea.topic, pack.title)
+        assert.doesNotMatch(JSON.stringify(details.strategyWorkflow), /old-question|old-idea|unrelated old subject/i)
         const quote = source.excerpt.split('. ')[0] + '.'
         return { hooks: ['The release has limitations [C1]'], script: 'A captured publisher statement explains the actual release and its limitations [C1].', claims: [{ id: 'C1', text: 'A captured publisher statement explains the actual release and its limitations', evidenceId: 'E1', quote, status: 'attributed' }] }
       },
