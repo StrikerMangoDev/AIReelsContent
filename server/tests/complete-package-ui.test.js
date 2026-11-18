@@ -162,20 +162,20 @@ test('an uncertain AI outcome disables a new analysis request', async () => {
   await analyze.props.onClick(); await h.flush(); assert.equal(h.analyses, 0)
 })
 
-test('analysis recovery checks first and requires an explicit retained-cost acknowledgment before preparing a separate free attempt', async () => {
+test('analysis recovery checks first and requires an explicit retained-cost acknowledgment before preparing a separate attempt', async () => {
   const data = fixture(); data.analysis = { status: 'dispatch_unknown', stale: false, requestId: 'de614d52-381a-4fef-b0d2-4257a0bb8c33' }
   const h = await harness(data); const recoveries = []
   h.api.recoverCompleteAnalysis = async (...args) => { recoveries.push(args); if (!args[4]) throw new Error('The provider has not confirmed the previous attempt.'); return { ...data, analysis: { ...data.analysis, status: 'failed', error: null } } }
   let tree = h.render({ requestedView: 'decisions' })
-  assert.equal(h.button(tree, 'Prepare a new free-only attempt').props.disabled, true)
+  assert.equal(h.button(tree, 'Prepare a new attempt').props.disabled, true)
   await h.button(tree, 'Check previous analysis').props.onClick(); await h.flush()
   tree = h.render({ requestedView: 'decisions' })
   assert.equal(recoveries[0][4], false); assert.equal(h.analyses, 0)
   assert.equal(h.button(tree, 'Analyze saved package with AI').props.disabled, true)
   const acknowledgment = flatten(tree).find(node => node.type === 'input' && node.props.type === 'checkbox')
   acknowledgment.props.onChange({ target: { checked: true } }); tree = h.render({ requestedView: 'decisions' })
-  assert.equal(h.button(tree, 'Prepare a new free-only attempt').props.disabled, false)
-  await h.button(tree, 'Prepare a new free-only attempt').props.onClick(); await h.flush()
+  assert.equal(h.button(tree, 'Prepare a new attempt').props.disabled, false)
+  await h.button(tree, 'Prepare a new attempt').props.onClick(); await h.flush()
   tree = h.render({ requestedView: 'decisions' })
   assert.deepEqual(recoveries[1], ['one', data.analysis.requestId, data.contentHash, data.contextRevision, true])
   assert.equal(h.button(tree, 'Analyze saved package with AI').props.disabled, false)

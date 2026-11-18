@@ -5,6 +5,7 @@ export const openRouterDemoModel = 'google/gemini-3.8-flash'
 export const openRouterDemoCallUpperBoundMicros = Math.ceil(1048576 * 0.825 + 65536 * 2 * 4.125)
 
 export async function generateOpenRouterDemoJson(input, { repository, owner, requestId, beforeAttempt, priceExpiresAt, config = env, request = fetch }) {
+  if (config.CONTENT_TEXT_PROVIDER === 'openai') throw Object.assign(budgetError('Legacy Gemini demonstrations are disabled while OpenAI is selected'), { preDispatch: true })
   if (!config.OPENROUTER_API_KEY) throw Object.assign(budgetError('The approved OpenRouter demonstration key is unavailable.'), { preDispatch: true, configurationFailure: true })
   const maxTokens = Math.min(input.maxTokens || 6000, 8000)
   if (!Number.isInteger(maxTokens) || maxTokens < 1 || Buffer.byteLength(JSON.stringify(input)) > 200000) throw Object.assign(budgetError('The OpenRouter demonstration request exceeds its bounded scope.'), { preDispatch: true })

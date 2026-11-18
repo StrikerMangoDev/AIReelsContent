@@ -9,6 +9,11 @@ const schema = z.object({
   GOOGLE_APPLICATION_CREDENTIALS: z.string().default('./vertex.json'),
   GOOGLE_CLOUD_PROJECT: z.string().optional(),
   GOOGLE_CLOUD_LOCATION: z.string().default('global'),
+  CONTENT_TEXT_PROVIDER: z.enum(['openrouter', 'openai']).default('openrouter'),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.literal('gpt-6-luna').default('gpt-6-luna'),
+  OPENAI_ORGANIZATION_ID: z.string().optional(),
+  OPENAI_PROJECT_ID: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   LLM_MODEL: z.string().default('nvidia/nemotron-3-ultra-550b-a55b:free'),
   DATABASE_PATH: z.string().default('./server/data/signal.sqlite'),
@@ -42,6 +47,7 @@ const schema = z.object({
 })
 
 export const env = schema.parse(process.env)
+if (env.CONTENT_TEXT_PROVIDER === 'openai') env.LLM_MODEL = env.OPENAI_MODEL
 env.GOOGLE_APPLICATION_CREDENTIALS = resolve(env.GOOGLE_APPLICATION_CREDENTIALS)
 // Only the backend reads credentials; never export their contents or log them.
 if (!env.GOOGLE_CLOUD_PROJECT) {

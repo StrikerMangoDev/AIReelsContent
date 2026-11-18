@@ -50,7 +50,6 @@ test('production WIF authenticates exact audience and target before inference wi
   assert.deepEqual(settings.scopes, ['https://www.googleapis.com/auth/cloud-platform'])
   assert.equal(settings.token_url, 'https://sts.googleapis.com/v1/token')
   assert.equal(settings.service_account_impersonation_url, `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${vertexWifServiceAccount}:generateAccessToken`)
-  const legacy = { type: 'service_account', project_id: 'ai-vertical-495712', client_email: 'controlled-source@example.com', private_key: 'controlled-fake-key' }
 })
 
 test('provider descriptions become fixed diagnostic reasons without retaining raw private descriptions', async () => {

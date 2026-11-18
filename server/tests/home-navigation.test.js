@@ -14,6 +14,7 @@ test('default login and home open the library while new-idea entry stays separat
     if (name === 'react/jsx-runtime') return { jsx: element, jsxs: element }
     if (name === 'react-router-dom') return { Route: 'Route', Routes: 'Routes', Navigate: 'Navigate' }
     if (name === 'react') return { Suspense: 'Suspense', lazy: () => 'LazyPage' }
+    if (name === '@/context/auth-state') return { useAuth: () => ({ identity: null }) }
     return {}
   } })
   const flatten = node => !node ? [] : Array.isArray(node) ? node.flatMap(flatten) : typeof node === 'object' ? [node, ...flatten(node.props?.children)] : []

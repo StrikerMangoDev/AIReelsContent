@@ -1,3 +1,4 @@
+import { openaiConfigured } from '../providers/openai.js'
 import { selectTopIdeas } from './top-ideas.js'
 import { categorySetupFields, validCountry } from './category-setup.js'
 import { runContentJob } from './job-worker.js'
@@ -216,7 +217,7 @@ export async function freeTextReplacementJob(repository, uid, id, operation, act
 
 export async function createResearch({ repository, uid, niche, requestId, actorUid = uid, refresh = false, automatic = false, research = researchNiche, dispatchMode = 'queue', onResearchAdmitted, replacementOf }) {
   const parsed = nicheSchema.parse(Object.fromEntries(Object.keys(nicheSchema.shape).map(key => [key, niche[key]])))
-  const scope = { operation: 'research', freeOnly: automatic || !vertexFallbackAllowed(), automatic, nicheId: niche.id, revision: niche.revision, niche: parsed, actorUid, llmModel: env.LLM_MODEL, ...(replacementOf ? { replacementOf } : {}), ...(refresh ? { refresh: true } : {}) }
+  const scope = { operation: 'research', freeOnly: automatic || !(openaiConfigured() || vertexFallbackAllowed()), automatic, nicheId: niche.id, revision: niche.revision, niche: parsed, actorUid, llmModel: env.LLM_MODEL, ...(replacementOf ? { replacementOf } : {}), ...(refresh ? { refresh: true } : {}) }
   const scopeHash = digest(JSON.stringify(scope))
   const conflict = message => Object.assign(new Error(message), { status: 409, preDispatch: true })
   const previous = await repository.studioJobGet(uid, requestId)

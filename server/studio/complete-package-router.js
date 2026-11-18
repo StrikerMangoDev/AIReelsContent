@@ -1,3 +1,4 @@
+import { openaiConfigured } from '../providers/openai.js'
 import { policyReferenceOwner } from './package-rules.js'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -76,7 +77,7 @@ export async function analyzeCompletePackage({ repository, owner, actor, pack, i
     if (input.contentHash !== complete.contentHash || input.contextRevision !== complete.contextRevision) throw fail(409, 'Content or context changed. Reload before analyzing.')
     if (generate === generateJson) {
       assertCapability('generation', config)
-      if (!config.OPENROUTER_API_KEY || !/^nvidia\/[a-z0-9.-]+:free$/.test(config.LLM_MODEL || '')) throw fail(503, 'Configure an allowed free AI provider before analysis')
+      if (!openaiConfigured(config) && (!config.OPENROUTER_API_KEY || !/^nvidia\/[a-z0-9.-]+:free$/.test(config.LLM_MODEL || ''))) throw fail(503, 'Configure an allowed AI provider before analysis')
     }
     const requestId = `complete-analysis:${input.requestId}`
     const scope = { operation: 'generation', purpose: 'complete-package-analysis', packageId: pack.id, actorUid: actor, contentHash: complete.contentHash, inputHash: complete.inputHash, contextRevision: complete.contextRevision, model: config.LLM_MODEL }

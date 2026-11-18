@@ -1,3 +1,4 @@
+import { generateOpenAIJson } from './openai.js'
 import { env } from '../config/env.js'
 import { assertCapability } from '../policy.js'
 import { z } from 'zod'
@@ -51,9 +52,10 @@ export async function readFreeGenerationReceipt(id, { config = env, request = fe
   return { generationId: id, actualMicros: 0, finishReason: data.native_finish_reason || data.finish_reason, checkedAt: new Date().toISOString() }
 }
 
-// This free adapter never routes to paid models; separately approved Vertex calls use the monetary ledger.
+// OpenAI dispatch is budget-scoped; the retained OpenRouter adapter enforces a zero price ceiling.
 export async function generateJson({ system, input, schema, maxTokens = 8000 }, { config = env, request = fetch, acceptCompleteJsonAtLength = false, preferTools = false } = {}) {
   assertCapability('generation', config)
+  if (config.CONTENT_TEXT_PROVIDER === 'openai') return generateOpenAIJson({ system, input, schema, maxTokens }, { config, request })
   if (!config.OPENROUTER_API_KEY) throw new Error('Free generation provider is not configured')
   if (!/^nvidia\/[a-z0-9.-]+:free$/.test(config.LLM_MODEL)) throw new Error('Only free NVIDIA models are allowed')
   const nativeJson = config.LLM_MODEL === 'nvidia/nemotron-3.5-super-vl:free' && preferTools !== true

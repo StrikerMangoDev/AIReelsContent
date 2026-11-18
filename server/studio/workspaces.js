@@ -1,3 +1,4 @@
+import { withModelBudget } from '../providers/openai.js'
 import { Router } from 'express'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
@@ -36,7 +37,7 @@ export function workspaceAuth(repository, auth) {
         req.workspace = { id, role: membership.role, personal: false }
       }
       res.setHeader('Cache-Control', 'no-store')
-      next()
+      withModelBudget({ repository, owner: ownerScope(req), requestId: req.body?.requestId || randomUUID(), allowPaid: true }, next)
     } catch (error) { next(error) }
   }]
 }

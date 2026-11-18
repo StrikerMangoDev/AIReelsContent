@@ -1,3 +1,4 @@
+import { withModelBudget } from '../providers/openai.js'
 import { researchChanges } from './research-changes.js'
 import { env } from '../config/env.js'
 import { prepareAutomaticCompletePackage } from './complete-package-automation.js'
@@ -52,7 +53,12 @@ export function safeJobFailure(error) {
   }
 }
 
-export async function runContentJob({ repository, uid, requestId, generate = generateContent, research, prepareCompletePackage = prepareAutomaticCompletePackage }) {
+export async function runContentJob(args) {
+  const job = await args.repository.studioJobGet(args.uid, args.requestId)
+  return withModelBudget({ repository: args.repository, owner: args.uid, requestId: args.requestId, kind: job?.scope?.operation || 'generation', allowPaid: job?.scope?.automatic !== true && job?.scope?.freeOnly !== true }, () => runScopedContentJob(args))
+}
+
+async function runScopedContentJob({ repository, uid, requestId, generate = generateContent, research, prepareCompletePackage = prepareAutomaticCompletePackage }) {
   let job = await repository.studioJobGet(uid, requestId)
   if (!job || job.status !== 'reserved' || job.ready !== true) return { status: 'skipped', jobId: requestId }
   const scope = job.scope
@@ -124,7 +130,7 @@ export async function runContentJob({ repository, uid, requestId, generate = gen
     const rejected = accessRejected || scope.operation === 'generation' && rejectedGeneration(error)
     const status = dispatched && !rejected ? 'dispatch_unknown' : 'failed'
     const diagnostics = safeJobFailure(error)
-    const message = `${accessRejected ? 'The free AI provider rejected the server API key or its access. Update the provider key before trying again. Your saved category and content are preserved.' : rejected ? 'The generated draft did not pass validation. Your saved content is preserved. Review the sources and request a new attempt when ready.' : dispatched ? 'Provider outcome needs reconciliation. Existing content is preserved; no automatic retry is permitted.' : 'Queued work was blocked before provider dispatch. Review scope, membership and budget.'} Diagnostics: ${JSON.stringify(diagnostics)}`
+    const message = `${accessRejected ? 'The configured AI provider rejected the server API key or its access. Update the provider key before trying again. Your saved category and content are preserved.' : rejected ? 'The generated draft did not pass validation. Your saved content is preserved. Review the sources and request a new attempt when ready.' : dispatched ? 'Provider outcome needs reconciliation. Existing content is preserved; no automatic retry is permitted.' : 'Queued work was blocked before provider dispatch. Review scope, membership and budget.'} Diagnostics: ${JSON.stringify(diagnostics)}`
     const currentJob = await repository.studioJobGet(uid, requestId)
     if (currentJob?.status === 'completed') return { status: 'completed', jobId: job.id, result: currentJob.result }
     // Reload the budget because cancellation may have changed its revision during an attempt.

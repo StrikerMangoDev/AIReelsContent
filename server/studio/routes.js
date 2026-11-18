@@ -1,3 +1,4 @@
+import { openaiConfigured } from '../providers/openai.js'
 import { runContentJob, cancelContentJob, recoverRejectedGeneration } from './job-worker.js'
 import { reserveFreeOperation } from '../budget/free-operation.js'
 import { Router } from 'express'
@@ -51,7 +52,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
   router.use('/library', createLibraryRouter({ repository, auth, fetchSource }))
   router.use('/planning', planningRouter({ repository, auth }))
   router.use('/intelligence', intelligenceRouter({ repository, auth, onResearchAdmitted }))
-  router.get('/config', (_req, res) => res.json({ downloadPolicy: 'owner-download-v1', finalizationPolicy, assurancePolicyVersion, industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: capabilityAllowed('generation') && Boolean(env.OPENROUTER_API_KEY), research: capabilityAllowed('research') && Boolean(env.OPENROUTER_API_KEY), media: capabilityAllowed('media'), publishing: capabilityAllowed('publishing', config), accountAutomation: env.CONTENT_ACCOUNT_AUTOMATION === 'true', researchScheduling: false, vertexFallback: vertexFallbackAllowed() }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS, websiteDestination: nativeWebsiteDestination(config), creditCoverage: 'unconfirmed', paidBudget: vertexFallbackAllowed() ? null : 0 }))
+  router.get('/config', (_req, res) => res.json({ downloadPolicy: 'owner-download-v1', finalizationPolicy, assurancePolicyVersion, industries: ['AI', 'Technology', 'Finance', 'Healthcare', 'Education', 'Custom'], capabilities: { generation: capabilityAllowed('generation') && (openaiConfigured() || Boolean(env.CONTENT_TEXT_PROVIDER !== 'openai' && env.OPENROUTER_API_KEY)), research: capabilityAllowed('research') && (openaiConfigured() || Boolean(env.CONTENT_TEXT_PROVIDER !== 'openai' && env.OPENROUTER_API_KEY)), media: capabilityAllowed('media'), publishing: capabilityAllowed('publishing', config), accountAutomation: env.CONTENT_ACCOUNT_AUTOMATION === 'true', researchScheduling: false, vertexFallback: vertexFallbackAllowed() }, dailyGenerationLimit: env.STUDIO_DAILY_GENERATIONS, websiteDestination: nativeWebsiteDestination(config), creditCoverage: 'unconfirmed', textProvider: env.CONTENT_TEXT_PROVIDER, textModel: openaiConfigured() ? env.OPENAI_MODEL : env.LLM_MODEL, paidBudget: openaiConfigured() || vertexFallbackAllowed() ? null : 0 }))
   router.get('/publications', async (_req, res) => res.json({ publications: await Promise.all((await repository.studioList('public', 'publication')).map(publicationStatus)) }))
   router.get('/publications/:publicationId', async (req, res) => {
     const publication = await repository.studioGet('public', 'publication', req.params.publicationId)
@@ -102,7 +103,7 @@ export function studioRouter({ repository, auth, generate = generateContent, fet
     const [budget, packages, researchStates] = await Promise.all([repository.budgetSummary(uid, 'USD'), repository.studioList(uid, 'package'), repository.studioList(uid, 'research_state')])
     const ids = [...new Set([...packages, ...researchStates].map(item => item.jobId).filter(Boolean))].slice(0, 100)
     const jobs = (await Promise.all(ids.map(id => repository.studioJobGet(uid, id)))).filter(Boolean).map(job => ({ id: job.id, operation: job.scope.operation, status: job.status, createdAt: job.createdAt, error: job.error }))
-    res.json({ budget, capabilities: { generation: capabilityAllowed('generation') && Boolean(env.OPENROUTER_API_KEY), research: capabilityAllowed('research') && Boolean(env.OPENROUTER_API_KEY), paid: vertexFallbackAllowed() && budget.limitMicros > 0 }, jobs })
+    res.json({ budget, capabilities: { generation: capabilityAllowed('generation') && (openaiConfigured() || Boolean(env.CONTENT_TEXT_PROVIDER !== 'openai' && env.OPENROUTER_API_KEY)), research: capabilityAllowed('research') && (openaiConfigured() || Boolean(env.CONTENT_TEXT_PROVIDER !== 'openai' && env.OPENROUTER_API_KEY)), paid: (openaiConfigured() || vertexFallbackAllowed()) && budget.limitMicros > 0 }, jobs })
   })
   router.get('/profile', async (req, res) => res.json(await repository.studioGet(ownerScope(req), 'profile', 'default') || settingsSchema.parse({})))
   router.put('/profile', async (req, res) => res.json(await repository.studioPut(ownerScope(req), 'profile', 'default', settingsSchema.parse(req.body))))

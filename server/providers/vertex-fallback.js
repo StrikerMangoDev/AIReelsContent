@@ -14,7 +14,7 @@ const vertexPrices = {
 }
 
 export function vertexFallbackAllowed(config = env) {
-  return config.CONTENT_VERTEX_FALLBACK === 'true' && Object.hasOwn(vertexPrices, config.VERTEX_FALLBACK_MODEL) && Boolean(config.VERTEX_FALLBACK_PROJECT === vertexProductionProject ? wifConfigured(config) : config.VERTEX_FALLBACK_PROJECT && (config.VERTEX_FALLBACK_CREDENTIALS || config.VERTEX_FALLBACK_SERVICE_ACCOUNT_JSON || config.GOOGLE_SERVICE_ACCOUNT_JSON)) && Date.parse(config.VERTEX_FALLBACK_APPROVED_UNTIL || '') > Date.now() && Date.now() < Date.parse('2027-01-01T00:00:00Z')
+  return config.CONTENT_TEXT_PROVIDER !== 'openai' && config.CONTENT_VERTEX_FALLBACK === 'true' && Object.hasOwn(vertexPrices, config.VERTEX_FALLBACK_MODEL) && Boolean(config.VERTEX_FALLBACK_PROJECT === vertexProductionProject ? wifConfigured(config) : config.VERTEX_FALLBACK_PROJECT && (config.VERTEX_FALLBACK_CREDENTIALS || config.VERTEX_FALLBACK_SERVICE_ACCOUNT_JSON || config.GOOGLE_SERVICE_ACCOUNT_JSON)) && Date.parse(config.VERTEX_FALLBACK_APPROVED_UNTIL || '') > Date.now() && Date.now() < Date.parse('2027-01-01T00:00:00Z')
 }
 
 export function vertexSchema(schema) {

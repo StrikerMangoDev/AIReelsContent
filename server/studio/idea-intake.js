@@ -1,3 +1,4 @@
+import { openaiConfigured } from '../providers/openai.js'
 import { categorySetupFields, validCountry } from './category-setup.js'
 import { Router } from 'express'
 import { createHash, randomUUID } from 'node:crypto'
@@ -29,7 +30,7 @@ const helpSchema = z.object({ brief: z.string().trim().min(15).max(1500), topics
 
 async function assist(repository, uid, actorUid, requestId, input, schema, system, generate) {
   if (generate === generateJson) assertCapability('generation')
-  const scope = { operation: 'research', purpose: 'idea-assistance', freeOnly: true, actorUid, input, system }
+  const scope = { operation: 'research', purpose: 'idea-assistance', freeOnly: !openaiConfigured(), actorUid, input, system }
   const scopeHash = hash(scope)
   const previous = await repository.studioJobGet(uid, requestId)
   if (previous) {
